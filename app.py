@@ -1,117 +1,195 @@
 import streamlit as st
-import pandas as pd
 from supabase import create_client, Client
+import pandas as pd
+import re
 
-# 1. Page Configuration
-st.set_config(page_title="Opporta | Dual-Engine", layout="wide")
+# =====================================================================
+# 1. PREMIUM PRODUCTION PAGE SETUP & EXECUTIVE THEME
+# =====================================================================
+st.set_page_config(
+    page_title="Opporta Engine | B2B Market Intelligence Hub",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# 2. Premium CSS
+# Custom premium CSS injection for ultra-clean corporate aesthetics
 st.markdown("""
     <style>
-    .stApp { background-color: #ffffff; color: #0f172a; font-family: 'Inter', sans-serif; }
-    [data-testid="stSidebar"] { background-color: #0f172a !important; }
-    .req-box { background-color: #f8fafc; border-left: 4px solid #10b981; padding: 20px; border-radius: 8px; margin: 15px 0; }
-    .job-box { background-color: #f8fafc; border-left: 4px solid #3b82f6; padding: 20px; border-radius: 8px; margin: 15px 0; }
+        .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
+        .stTabs [data-baseweb="tab-list"] { gap: 12px; }
+        .stTabs [data-baseweb="tab"] {
+            padding: 10px 20px;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-weight: 600;
+            color: #475569;
+            transition: all 0.2s ease-in-out;
+        }
+        .stTabs [data-baseweb="tab"]:hover {
+            border-color: #cbd5e1;
+            background-color: #f1f5f9;
+        }
+        .stTabs [aria-selected="true"] { 
+            background-color: #ff4b4b !important;
+            color: white !important;
+            border-color: #ff4b4b !important;
+            box-shadow: 0 4px 6px -1px rgba(255, 75, 75, 0.2);
+        }
+        div[data-testid="metric-container"] {
+            background-color: #ffffff;
+            border: 1px solid #e2e8f0;
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Database Connection
-@st.cache_resource
+# =====================================================================
+# 2. SECURE DATABASE TUNNEL (SUPABASE)
+# =====================================================================
+@st.cache_resource(show_spinner="Establishing Secure Pipeline Link...")
 def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
+    except Exception as e:
+        return None
 
 supabase = init_connection()
 
-# Fetch Data from Cloud
-@st.cache_data(ttl=300)
-def fetch_data(table_name):
-    response = supabase.table(table_name).select("*").order('scraped_at', desc=True).execute()
-    return pd.DataFrame(response.data)
+if supabase is None:
+    st.error("🚨 Cloud Database Connection Offline.")
+    st.info("Verify that your `.streamlit/secrets.toml` config contains valid active credentials.")
+    st.stop()
 
-# 4. Auth State
-if 'logged_in' not in st.session_state: st.session_state.logged_in = False
+# =====================================================================
+# 3. HIGH-PERFORMANCE DATA INGESTION ENGINE
+# =====================================================================
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_cloud_tenders():
+    try:
+        response = supabase.table("opporta_tenders").select("*").order("scraped_at", desc=True).execute()
+        return pd.DataFrame(response.data)
+    except Exception as e:
+        st.error(f"Error fetching tenders table: {e}")
+        return pd.DataFrame()
 
-# Sidebar
+@st.cache_data(ttl=60, show_spinner=False)
+def fetch_cloud_jobs():
+    try:
+        response = supabase.table("opporta_jobs").select("*").order("scraped_at", desc=True).execute()
+        return pd.DataFrame(response.data)
+    except Exception as e:
+        st.error(f"Error fetching jobs table: {e}")
+        return pd.DataFrame()
+
+def parse_financial_value(val_str):
+    if pd.isna(val_str) or not isinstance(val_str, str):
+        return 0.0
+    cleaned = re.sub(r'[^\d.]', '', val_str)
+    try:
+        return float(cleaned) if cleaned else 0.0
+    except ValueError:
+        return 0.0
+
+# Initialize live system data matrices
+df_tenders_raw = fetch_cloud_tenders()
+df_jobs_raw = fetch_cloud_jobs()
+
+if not df_tenders_raw.empty and 'value' in df_tenders_raw.columns:
+    df_tenders_raw['parsed_value'] = df_tenders_raw['value'].apply(parse_financial_value)
+else:
+    if not df_tenders_raw.empty:
+        df_tenders_raw['parsed_value'] = 0.0
+
+# =====================================================================
+# 4. SIDEBAR GLOBAL FILTER ARCHITECTURE
+# =====================================================================
 with st.sidebar:
-    st.markdown("### OPPORTA.")
-    if not st.session_state.logged_in:
-        with st.form("login"):
-            if st.text_input("Email") == "admin@opporta.in" and st.text_input("Password", type="password") == "admin123":
-                if st.form_submit_button("Sign In"): 
-                    st.session_state.logged_in = True
-                    st.rerun()
+    st.title("🎛️ Control Center")
+    st.markdown("Isolate active channels across regional boundaries.")
+    st.write("---")
+    
+    selected_state = st.selectbox("📍 Target Jurisdiction", ["All Regions", "Chhattisgarh", "Uttar Pradesh"])
+    search_query = st.text_input("🔍 Semantic Key Search", placeholder="e.g., Infrastructure, Medical, Rail")
+    min_value = st.number_input("💵 Min Value Filter (INR)", min_value=0, value=0, step=50000)
+    
+    st.write("---")
+    st.markdown("##### 🛠️ Cache Management")
+    if st.button("🔄 Clear Cache & Force Update", use_container_width=True):
+        st.cache_data.clear()
+        st.success("Internal pipeline state refreshed!")
+        st.rerun()
+        
+    st.write("---")
+    st.caption("Core Infrastructure: Supabase Cloud")
+    st.caption("Engine Health: 🟢 Optimal")
+
+# Execute runtime filtering processes for Tenders
+df_tenders = df_tenders_raw.copy()
+if not df_tenders.empty:
+    if selected_state != "All Regions":
+        df_tenders = df_tenders[df_tenders['state'].str.contains(selected_state, case=False, na=False)]
+    if search_query:
+        df_tenders = df_tenders[
+            df_tenders['title'].str.contains(search_query, case=False, na=False) |
+            df_tenders['department'].str.contains(search_query, case=False, na=False)
+        ]
+    if min_value > 0 and 'parsed_value' in df_tenders.columns:
+        df_tenders = df_tenders[df_tenders['parsed_value'] >= min_value]
+
+# Execute runtime filtering processes for Jobs
+df_jobs = df_jobs_raw.copy()
+if not df_jobs.empty:
+    if selected_state != "All Regions":
+        df_jobs = df_jobs[df_jobs['state'].str.contains(selected_state, case=False, na=False)]
+    if search_query:
+        df_jobs = df_jobs[
+            df_jobs['job_title'].str.contains(search_query, case=False, na=False) |
+            df_jobs['board'].str.contains(search_query, case=False, na=False)
+        ]
+
+# =====================================================================
+# 5. MAIN EXECUTIVE DASHBOARD VIEWPORT
+# =====================================================================
+st.title("⚡ Opporta Intelligence Suite")
+st.markdown("Automated B2B Lead Aggregation Engine & Public Procurement Tracker.")
+
+# Executive Summary Metrics Layout
+col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+with col_m1:
+    st.metric(label="Active High-Value Tenders", value=len(df_tenders))
+with col_m2:
+    st.metric(label="Open Public Vacancies", value=len(df_jobs))
+with col_m3:
+    total_est_pipeline = df_tenders['parsed_value'].sum() if not df_tenders.empty and 'parsed_value' in df_tenders.columns else 0.0
+    if total_est_pipeline >= 10000000:
+        pipeline_display = f"₹ {total_est_pipeline / 10000000:.2f} Cr"
+    elif total_est_pipeline >= 100000:
+        pipeline_display = f"₹ {total_est_pipeline / 100000:.2f} Lakh"
     else:
-        st.success("👑 Premium Active")
-        if st.button("Logout"): 
-            st.session_state.logged_in = False
-            st.rerun()
-
-# 5. UI Master Toggle
-st.title("Good Morning, Akash! 👋")
-st.write("---")
-
-engine_mode = st.radio("Select Intelligence Module:", ["🏢 Government Tenders (B2B)", "🎓 Government Jobs (B2C)"], horizontal=True)
+        pipeline_display = f"₹ {total_est_pipeline:,.2f}"
+    st.metric(label="Est. Monitored Pipeline Value", value=pipeline_display)
+with col_m4:
+    unique_depts = df_tenders['department'].nunique() if not df_tenders.empty and 'department' in df_tenders.columns else 0
+    st.metric(label="Tracked State Agencies", value=unique_depts)
 
 st.write("---")
 
-# =====================================================================
-# MODULE 1: TENDERS
-# =====================================================================
-if engine_mode == "🏢 Government Tenders (B2B)":
-    try:
-        df_tenders = fetch_data("opporta_tenders")
-        if not df_tenders.empty:
-            col1, col2 = st.columns([1, 2])
-            selected_state = col1.selectbox("📍 State Jurisdiction", ["All"] + list(df_tenders['state'].unique()))
-            selected_cat = col2.selectbox("🏗️ Sector", ["All"] + list(df_tenders['sector'].unique()))
+# Tabbed Interface Layout
+tab_tenders, tab_jobs, tab_analytics, tab_telemetry = st.tabs([
+    "🏛️ Enterprise Tender Vault", 
+    "💼 Public Recruitment Hub", 
+    "📊 Predictive Data Analytics",
+    "⚙️ Operational Telemetry"
+])
 
-            view_df = df_tenders if selected_state == "All" else df_tenders[df_tenders['state'] == selected_state]
-            if selected_cat != "All": view_df = view_df[view_df['sector'] == selected_cat]
-
-            for i, row in view_df.iterrows():
-                with st.container():
-                    st.subheader(row['title'])
-                    st.write(f"🏢 **{row['department']}** | 💰 **{row['value']}** | ⏳ Deadline: {row['deadline']}")
-                    
-                    if st.session_state.logged_in:
-                        st.markdown(f"<div class='req-box'><b>Sector:</b> {row['sector']}<br><b>State:</b> {row['state']}</div>", unsafe_allow_html=True)
-                        st.link_button("Access Portal", str(row['source_url']))
-                    else:
-                        st.warning("🔒 Login to view portal links and automated bid drafting features.")
-                    st.write("---")
-        else:
-            st.info("No tender data available yet. Waiting for pipeline execution.")
-    except Exception as e:
-        st.error("Database connection pending. Please configure Supabase.")
-
-# =====================================================================
-# MODULE 2: JOBS
-# =====================================================================
-elif engine_mode == "🎓 Government Jobs (B2C)":
-    try:
-        df_jobs = fetch_data("opporta_jobs")
-        if not df_jobs.empty:
-            col1, col2 = st.columns([1, 2])
-            selected_state = col1.selectbox("📍 State", ["All"] + list(df_jobs['state'].unique()))
-            selected_board = col2.selectbox("🏛️ Recruitment Board", ["All"] + list(df_jobs['board'].unique()))
-
-            view_df = df_jobs if selected_state == "All" else df_jobs[df_jobs['state'] == selected_state]
-            if selected_board != "All": view_df = view_df[view_df['board'] == selected_board]
-
-            for i, row in view_df.iterrows():
-                with st.container():
-                    st.subheader(row['job_title'])
-                    st.write(f"🏛️ **{row['board']}** | 👥 Vacancies: **{row['vacancy_count']}**")
-                    
-                    if st.session_state.logged_in:
-                        st.markdown(f"<div class='job-box'><b>Qualification Required:</b> {row['qualification']}</div>", unsafe_allow_html=True)
-                        st.link_button("1-Click Apply (RPA)", str(row['apply_url']), type="primary")
-                    else:
-                        st.warning("🔒 Login to view qualifications and unlock 1-Click Apply.")
-                    st.write("---")
-        else:
-            st.info("No job data available yet. Waiting for pipeline execution.")
-    except Exception as e:
-        st.error("Database connection pending. Please configure Supabase.")
+# ---- TAB 1: TENDER GRID ----
+with tab_tenders:
+    st.subheader("Interstate Procurement Ingestion Feed")
+    if df_tenders.empty:
+        st.info("No active tenders found matching current filter matrix constraints.")

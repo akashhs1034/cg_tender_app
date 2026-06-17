@@ -1,5 +1,7 @@
 streamlit
 pandas
-plotly
 requests
-feedparser
+beautifulsoup4
+google-genai
+pydantic
+supabase

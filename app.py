@@ -1,213 +1,138 @@
 import streamlit as st
 import pandas as pd
-import os
-from datetime import datetime
 
-# ==========================================
-# 1. VISUAL INTERFACE THEME CONFIGURATION
-# ==========================================
+# Page Configuration
 st.set_page_config(
-    page_title="Interstate B2B & Jobs Intelligence Portal", 
+    page_title="Enterprise B2B Lead Hub", 
+    page_icon="🏛️", 
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom High-Contrast Styling Matrices
+# Custom Premium Styling (Dark Slate Background with neon cyber-blue highlights)
 st.markdown("""
     <style>
-    .main { background-color: #fcfcfc; }
-    div[data-testid="stMetricValue"] { font-size: 2.2rem; font-weight: 700; color: #0f172a; }
-    .stTabs [data-baseweb="tab"] { font-size: 1.1rem; font-weight: 600; padding: 14px 28px; }
-    .stTabs [aria-selected="true"] { border-bottom-color: #0284c7 !important; color: #0284c7 !important; }
-    .stAlert { border-radius: 8px; }
+    .stApp { background-color: #0f172a; color: #f8fafc; }
+    .stMetric { background-color: #1e293b; padding: 18px; border-radius: 12px; border: 1px solid #334155; }
+    div[data-testid="stContainer"] { background-color: #1e293b; border: 1px solid #475569 !important; border-radius: 14px; padding: 24px; margin-bottom: 18px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    h1, h2, h3 { color: #38bdf8 !important; font-family: 'Inter', sans-serif; }
+    .badge { background-color: #0284c7; color: white; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; }
     </style>
 """, unsafe_allow_html=True)
 
-def calculate_days_left(deadline_str):
-    try:
-        current_date = datetime.now().date()
-        deadline_date = datetime.strptime(str(deadline_str).strip(), '%Y-%m-%d').date()
-        delta = (deadline_date - current_date).days
-        if delta < 0: return "❌ Expired"
-        elif delta == 0: return "🚨 Closing TODAY"
-        elif delta == 1: return "⏳ 1 Day Left"
-        else: return f"📅 {delta} Days Left"
-    except Exception:
-        return "⏱️ Active Notification"
+# Main Navigation Hub Header
+st.title("🏛️ Enterprise B2B Intelligence Hub")
+st.caption("Real-Time Hyper-Local Tenders, Sourcing Logistics, Municipal Leases & Employment Streams")
+st.write("---")
 
-# ==========================================
-# 2. CACHED PRODUCTION DATA PIPELINE OPERATORS
-# ==========================================
-@st.cache_data(ttl=60)
-def load_clean_tender_data():
-    if os.path.exists("master_tenders.csv") and os.path.getsize("master_tenders.csv") > 10:
-        df = pd.read_csv("master_tenders.csv")
-    else:
-        df = pd.DataFrame({
-            'tender_id': ['NIT-SECL-2026-889', 'UP-PWD-2026-E09'],
-            'state': ['Chhattisgarh', 'Uttar Pradesh'],
-            'department': ['SECL (Govt PSU)', 'UP PWD (Govt)'],
-            'location_district': ['Korba', 'Lucknow'],
-            'work_category': ['Mining', 'Civil'],
-            'estimated_value_lakhs': [450.00, 1450.00],
-            'closing_deadline': ['2026-07-10', '2026-07-25']
-        })
-        
-    df['state'] = df['state'].fillna('Not Specified').astype(str).str.strip()
-    df = df.dropna(subset=['tender_id'])
-    df['estimated_value_lakhs'] = pd.to_numeric(df['estimated_value_lakhs'], errors='coerce').fillna(0.0)
-    df['Status / Deadline'] = df['closing_deadline'].apply(calculate_days_left)
+# State Switch Segments
+selected_state = st.segmented_control(
+    "Active Administrative Territory:", 
+    ["Chhattisgarh", "Uttar Pradesh"], 
+    default="Chhattisgarh"
+)
 
-    # Core Segment Parsing Logic
-    df['is_coal'] = df['work_category'].str.contains('Coal|Mining|Mines|Evacuation', case=False, na=False) | df['department'].str.contains('SECL|NMDC', case=False, na=False)
-    df['is_supply'] = df['work_category'].str.contains('Supply|Material|Equipment|Purchase|Goods', case=False, na=False)
-    df['is_private'] = df['department'].str.contains('Jindal|JSP|Balco|Adani|Tata|Private|Ltd', case=False, na=False)
-    df['is_civil'] = df['work_category'].str.contains('Civil|Road|Bridge|Building|Construction|Highway', case=False, na=False)
-    return df
+# Sidebar Deep-Filtering Control Panels
+st.sidebar.header("🎯 Deep Filtering Matrix")
+st.sidebar.write("Configure parameters to target winnable leads instantly.")
 
-@st.cache_data(ttl=60)
-def load_clean_job_data():
-    if os.path.exists("master_jobs.csv") and os.path.getsize("master_jobs.csv") > 10:
-        df = pd.read_csv("master_jobs.csv")
-    else:
-        df = pd.DataFrame({
-            'job_title': ['Assistant Professor', 'UP Subordinate Services Recruitment'],
-            'state': ['Chhattisgarh', 'Uttar Pradesh'],
-            'department': ['CGPSC (Govt)', 'UPPSC (Govt)'],
-            'vacancies': [140, 450],
-            'qualification': ['Post Graduate', 'Graduate Degree'],
-            'deadline': ['2026-07-10', '2026-07-18']
-        })
-    df['state'] = df['state'].fillna('Not Specified').astype(str).str.strip()
-    df['vacancies'] = pd.to_numeric(df['vacancies'], errors='coerce').fillna(0).astype(int)
-    df['Status / Urgency'] = df['deadline'].apply(calculate_days_left)
-    return df
+selected_tiers = st.sidebar.multiselect(
+    "Administrative Tiers:",
+    ["State e-Tenders", "Nagar Palika (Municipal)", "Gramin Yojna (Rural)", "Employment Portal"],
+    default=["State e-Tenders", "Nagar Palika (Municipal)", "Gramin Yojna (Rural)", "Employment Portal"]
+)
 
-df_tenders = load_clean_tender_data()
-df_jobs = load_clean_job_data()
+selected_sectors = st.sidebar.multiselect(
+    "Industry Verticals & Niches:",
+    ["Civil Construction", "Medical Supply", "Coal Logistics", "Material Supply", "Government Job", "Private Job"],
+    default=["Civil Construction", "Medical Supply", "Coal Logistics", "Material Supply", "Government Job", "Private Job"]
+)
 
-# ==========================================
-# 3. CONTROL FILTER PANEL MATRIX (SIDEBAR)
-# ==========================================
-st.sidebar.header("🌍 Central Navigation Engine")
+st.sidebar.write("---")
+st.sidebar.subheader("🔑 Your Credentials Check")
 
-# Master Regional Intersection Logic
-all_available_states = sorted(list(set(df_tenders['state'].unique()).union(set(df_jobs['state'].unique()))))
-selected_state = st.sidebar.selectbox("Target Regional Feed:", ["All Regions"] + all_available_states)
+selected_classes = st.sidebar.multiselect(
+    "Your Contractor License Class:",
+    ["Class A", "Class B", "Class C", "Class D", "Open / Corporate", "Not Applicable"],
+    default=["Class A", "Class B", "Class C", "Class D", "Open / Corporate", "Not Applicable"]
+)
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("🔍 Advanced Core Text Filtering")
-search_query = st.sidebar.text_input("Search Across Records:", "", placeholder="Type keywords (e.g. Civil, Korba)")
+selected_experience = st.sidebar.multiselect(
+    "Your Verified Experience Level:",
+    ["No Experience", "1-3 Years", "3+ Years"],
+    default=["No Experience", "1-3 Years", "3+ Years"]
+)
 
-# Apply Regional Intersections Instantly
-if selected_state != "All Regions":
-    df_tenders = df_tenders[df_tenders['state'] == selected_state]
-    df_jobs = df_jobs[df_jobs['state'] == selected_state]
+search_query = st.sidebar.text_input("🔍 Direct Keyword Search:", placeholder="e.g., Road, SECL, Hospital...")
 
-# Apply Real-Time Text Query Intersections Instantly
-if search_query:
-    q = search_query.lower()
-    df_tenders = df_tenders[
-        df_tenders['tender_id'].str.lower().str.contains(q) | 
-        df_tenders['department'].str.lower().str.contains(q) | 
-        df_tenders['work_category'].str.lower().str.contains(q)
+# Core Query Filtering Logic Layer
+try:
+    df = pd.read_csv("master_leads.csv")
+    
+    # Process inputs against data columns
+    filtered_df = df[
+        (df['state'] == selected_state) & 
+        (df['tier'].isin(selected_tiers)) & 
+        (df['sector'].isin(selected_sectors)) &
+        (df['license_class'].isin(selected_classes)) &
+        (df['experience_tier'].isin(selected_experience))
     ]
-    df_jobs = df_jobs[
-        df_jobs['job_title'].str.lower().str.contains(q) | 
-        df_jobs['department'].str.lower().str.contains(q)
-    ]
-
-# ==========================================
-# 4. BUSINESS INTELLIGENCE INTERFACE LAYOUT
-# ==========================================
-st.title("💼 B2B Interstate Intelligence & Career Portal")
-st.caption("Production Data Viewport | Automated Multi-State Aggregator System Node")
-st.markdown("---")
-
-tab_tenders, tab_jobs, tab_charts = st.tabs(["📈 Commercial Procurement Leases", "🎓 Corporate & Civil Careers", "📊 Analytical Market Overviews"])
-
-# ==========================================
-# 5. TAB 1: B2B TENDERS DATA LEDGER
-# ==========================================
-with tab_tenders:
-    st.markdown("### 🔍 Target Segment Screening Matrix")
-    c1, c2 = st.columns([1, 2])
     
-    with c1:
-        sector_filter = st.selectbox(
-            "Filter Sector Profiles:",
-            ["Show All Active Industries", "Coal & Mineral Ingestion Only", "Material Logistics & Supply Only", "Private Enterprise Pipeline", "Infrastructure & Civil Works Only"]
-        )
-    with c2:
-        max_val = float(df_tenders['estimated_value_lakhs'].max()) if not df_tenders.empty else 100.0
-        min_slider = st.slider("Filter Minimum Contract Volume Allocation (In Lakhs):", 0.0, max_val, 0.0, step=5.0)
+    # Apply keyword filtering if active
+    if search_query:
+        filtered_df = filtered_df[filtered_df['title'].str.contains(search_query, case=False, na=False) | 
+                                  filtered_df['location'].str.contains(search_query, case=False, na=False)]
 
-    filtered_tenders = df_tenders[df_tenders['estimated_value_lakhs'] >= min_slider]
+    # Calculate Summary KPI Metrics Safely
+    total_leads = len(filtered_df)
     
-    if sector_filter == "Coal & Mineral Ingestion Only":
-        filtered_tenders = filtered_tenders[filtered_tenders['is_coal'] == True]
-    elif sector_filter == "Material Logistics & Supply Only":
-        filtered_tenders = filtered_tenders[filtered_tenders['is_supply'] == True]
-    elif sector_filter == "Private Enterprise Pipeline":
-        filtered_tenders = filtered_tenders[filtered_tenders['is_private'] == True]
-    elif sector_filter == "Infrastructure & Civil Works Only":
-        filtered_tenders = filtered_tenders[filtered_tenders['is_civil'] == True]
-
-    # Render Macro Analytical Operational Summary Metric Rows
-    m1, m2, m3, m4 = st.columns(4)
-    with m1: st.metric("Selected B2B Records", f"{len(filtered_tenders)} Contracts")
-    with m2: st.metric("Heavy Energy/Coal Pipeline", f"{df_tenders['is_coal'].sum()} Leads")
-    with m3: st.metric("Corporate Private Activity", f"{df_tenders['is_private'].sum()} Portals")
-    with m4: st.metric("Gross Pipeline Value Pool", f"₹ {filtered_tenders['estimated_value_lakhs'].sum():,.2f} L")
-
-    st.markdown("### 📊 Verified Operational Business Transaction Leads Ledger")
-    if filtered_tenders.empty:
-        st.info("No corporate asset descriptions currently match the configured filtering criteria.")
-    else:
-        display_tenders = filtered_tenders[['tender_id', 'state', 'department', 'work_category', 'estimated_value_lakhs', 'Status / Deadline']].copy()
-        display_tenders.columns = ['Tender Contract Reference ID', 'Target State Domain', 'Issuing Authority / Enterprise', 'Industrial Domain Profile', 'Estimated CapEx Volume (Lakhs)', 'Temporal Operational Status']
-        st.dataframe(display_tenders, use_container_width=True, hide_index=True)
+    def clean_val(val):
+        try:
+            return float(str(val).replace(',', '').strip())
+        except ValueError:
+            return 0.0
+            
+    total_val = filtered_df['estimated_value'].apply(clean_val).sum()
+    
+    # Render Top Analytics Row
+    m_col1, m_col2, m_col3 = st.columns(3)
+    with m_col1:
+        st.metric(label=f"Active Filtered Matches ({selected_state})", value=f"{total_leads} Leads Ready")
+    with m_col2:
+        st.metric(label="Tracked Capital Pool", value=f"₹{total_val/100000:.2f} Lakhs" if total_val > 0 else "Varies by Project")
+    with m_col3:
+        st.metric(label="Cloud Automation Engine", value="Sync Active", delta="🔄 2 Hour Intervals")
         
-        # Download Button Element
-        csv_data = display_tenders.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Export Selected Commercial Leads Dataset (.CSV)", data=csv_data, file_name="Filtered_Commercial_Tenders.csv", mime="text/csv")
+    st.write("---")
 
-# ==========================================
-# 6. TAB 2: LIVE CAREER OPENINGS MATRIX
-# ==========================================
-with tab_jobs:
-    st.markdown("### 🎓 State-Level Strategic Employment Systems Viewport")
-    
-    j1, j2 = st.columns(2)
-    with j1: st.metric("Active Corporate & Civil Employment Records", f"{len(df_jobs)} Postings")
-    with j2: st.metric("Aggregated Human Resource Gross Capacities", f"{df_jobs['vacancies'].sum()} Listed Seats")
-        
-    st.markdown("### 📄 Operational Carrier Structural Position Ledger")
-    if df_jobs.empty:
-        st.info("No strategic vocational data segments found matching the input matrix coordinates.")
+    # Render Lead Opportunities Flow
+    if filtered_df.empty:
+        st.warning("⚠️ No records match your active filtering configuration. Broaden your sidebar criteria to reveal hidden entries.")
     else:
-        display_jobs = df_jobs[['job_title', 'state', 'department', 'vacancies', 'qualification', 'Status / Urgency']].copy()
-        display_jobs.columns = ['Vocation System Title Designation', 'Target State Domain', 'Deploying Department Board', 'Human Capacity Seats', 'Prerequisite Qualifications', 'Temporal Horizon Status']
-        st.dataframe(display_jobs, use_container_width=True, hide_index=True)
-        
-        csv_job_data = display_jobs.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Export Selected Human Resource Capacities Dataset (.CSV)", data=csv_job_data, file_name="Filtered_Human_Resource_Vacancies.csv", mime="text/csv")
+        for index, row in filtered_df.iterrows():
+            with st.container():
+                col_left, col_right = st.columns([3, 1])
+                
+                with col_left:
+                    st.subheader(f"🏢 {row['title']}")
+                    st.markdown(f"📍 **Issuing Authority:** `{row['location']}` | 📁 **Sector Sector:** `{row['sector']}`")
+                    
+                    # Custom Badges indicators for scannability
+                    st.markdown(f"<span class='badge'>{row['tier']}</span> &nbsp; <span class='badge' style='background-color:#10b981;'>License: {row['license_class']}</span> &nbsp; <span class='badge' style='background-color:#f59e0b;'>Experience: {row['experience_tier']}</span>", unsafe_allow_html=True)
+                    
+                    # Core Competitive Advantage Feature: Deep AI Eligibility Box
+                    st.markdown("<div style='margin-top:15px;'></div>", unsafe_allow_html=True)
+                    st.markdown("##### 📋 Extracted AI Eligibility Snapshot")
+                    st.info(f"💡 **Detailed Criteria:** {row['qualification_class']}")
+                
+                with col_right:
+                    st.write("### 💎 Financial Overview")
+                    st.metric("Estimated Cost", f"₹{row['estimated_value']}")
+                    st.metric("EMD Deposit Lock", f"₹{row['emd']}")
+                    st.error(f"⏳ Deadline: {row['closing_date']}")
+                    
+                    # Direct Deep-Link Call to Action Button
+                    st.link_button("🚀 Apply / View Notice", row['direct_url'], use_container_width=True)
 
-# ==========================================
-# 7. TAB 3: EXECUTIVE MARKET ANALYTICS VIEW
-# ==========================================
-with tab_charts:
-    st.markdown("### 📊 Automated Multi-State Market Intelligence Insights")
-    
-    if not df_tenders.empty:
-        col_c1, col_c2 = st.columns(2)
-        with col_c1:
-            st.markdown("**CapEx Distribution Breakdown Across Target Regions (Lakhs)**")
-            state_spending = df_tenders.groupby('state')['estimated_value_lakhs'].sum()
-            st.bar_chart(state_spending)
-        with col_c2:
-            st.markdown("**Procurement Transaction Count Density Map Across Sectors**")
-            sector_counts = df_tenders.groupby('work_category').size()
-            st.bar_chart(sector_counts)
-    else:
-        st.warning("Insufficient multi-state statistical transactional arrays to compute layout visual metrics.")
+except FileNotFoundError:
+    st.error("⚠️ Database Initializing: `master_leads.csv` missing from repository storage nodes.")

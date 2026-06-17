@@ -19,24 +19,42 @@ st.markdown("""
     [data-testid="stSidebar"] * { color: #f8fafc !important; }
     [data-testid="stSidebar"] hr { border-color: #1e293b; }
     .st-emotion-cache-18ni7ap { display: none; }
+    
     div[data-testid="stContainer"] {
-        background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px;
-        margin-bottom: 16px; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05); transition: transform 0.2s ease, box-shadow 0.2s ease;
+        background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px;
+        margin-bottom: 20px; box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05); transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     div[data-testid="stContainer"]:hover { transform: translateY(-2px); box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08); border-color: #cbd5e1; }
+    
     div[data-testid="stMetric"] { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
     div[data-testid="stMetricLabel"] p { color: #64748b !important; font-size: 13px !important; font-weight: 500; }
     div[data-testid="stMetricValue"] div { color: #0f172a !important; font-weight: 700 !important; font-size: 28px !important; }
-    div[data-testid="stTextInput"] input { border-radius: 8px; border: 1px solid #cbd5e1; background-color: #f8fafc; color: #0f172a !important; font-weight: 500; }
+    
     h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; letter-spacing: -0.5px; }
     .brand-title { color: #0f172a; font-size: 24px; font-weight: 800; letter-spacing: -1px; margin-bottom: 2px;}
     .brand-dot { color: #10b981; }
+    
     .opp-title { font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
     .opp-org { font-size: 14px; color: #64748b; font-weight: 500; margin-bottom: 16px; }
     .opp-label { font-size: 12px; color: #64748b; margin-bottom: 2px; }
     .opp-value { font-size: 16px; font-weight: 700; color: #0f172a; }
+    
     .badge-eligible { background-color: #ecfdf5; color: #10b981; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; border: 1px solid #a7f3d0;}
     .badge-review { background-color: #fffbeb; color: #d97706; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; border: 1px solid #fde68a;}
+    
+    /* NEW: Detailed Requirements Box Styling */
+    .req-box {
+        background-color: #f8fafc;
+        border-left: 3px solid #10b981;
+        padding: 14px 16px;
+        margin-top: 16px;
+        margin-bottom: 16px;
+        border-radius: 4px 8px 8px 4px;
+        font-size: 13px;
+        color: #334155;
+    }
+    .req-title { font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+    
     .side-panel { background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; }
     .notify-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; }
     </style>
@@ -45,7 +63,6 @@ st.markdown("""
 # 3. Load Data & Safety Checks
 try:
     df = pd.read_csv("master_leads.csv")
-    # Bulletproof data parse for AI score
     safe_ai_scores = pd.to_numeric(df['ai_score'].astype(str).str.replace('%', '', regex=False), errors='coerce').fillna(0)
 except FileNotFoundError:
     st.error("Database missing.")
@@ -61,7 +78,6 @@ with st.sidebar:
     st.caption("Every Opportunity. One Platform.")
     st.write("---")
     
-    # Navigation state
     nav_selection = st.radio("Navigation", ["🏠 Dashboard", "🔍 Opportunities", "🤖 AI Eligibility Check", "🔔 Alerts", "❤️ Saved", "💼 Government Jobs", "📊 Reports"], label_visibility="collapsed")
     
     st.write("---")
@@ -91,9 +107,9 @@ if nav_selection == "🏠 Dashboard":
 
     # --- METRICS ---
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Opportunities Found", f"{len(df.dropna(subset=['id']))}", "🟢 +12 new this week")
+    m1.metric("Opportunities Found", f"{len(df.dropna(subset=['id']))}", "🟢 Active Database")
     m2.metric("Matching Your Profile", len(df[safe_ai_scores > 90]), "🎯 High match index")
-    m3.metric("Closing Soon", "4", "⏳ Within next 7 days")
+    m3.metric("Closing Soon", len(df[df['deadline'].str.contains('Jul 2026')]), "⏳ Due this month")
     m4.metric("Saved Opportunities", "12", "❤️ Saved by you")
     st.write("")
 
@@ -122,9 +138,9 @@ if nav_selection == "🏠 Dashboard":
         if view_df.empty:
             st.info("No opportunities match this specific filter right now.")
         else:
-            # Enumerate fixes the duplicate key error
             for loop_index, (idx, row) in enumerate(view_df.iterrows()):
                 with st.container():
+                    # Top Row: Title and Core Metrics
                     c1, c2, c3, c4 = st.columns([3, 1.2, 1.2, 1.5])
                     with c1:
                         st.markdown(f"<div class='opp-title'>{row['title']}</div>", unsafe_allow_html=True)
@@ -140,10 +156,24 @@ if nav_selection == "🏠 Dashboard":
                         status_class = "badge-eligible" if row['eligibility'] == "Eligible" else "badge-review"
                         st.markdown(f"<div style='text-align:right;'><span class='{status_class}'>✓ {row['eligibility']}</span></div>", unsafe_allow_html=True)
                         st.markdown(f"<div style='text-align:right; font-size:12px; font-weight:700; color:#10b981; margin-top:4px;'>🤖 {row['ai_score']} Match</div>", unsafe_allow_html=True)
-                        st.write("")
-                        c4_1, c4_2 = st.columns(2)
-                        c4_1.button("❤️ Save", key=f"save_btn_{loop_index}", use_container_width=True)
-                        c4_2.link_button("View Details", str(row['direct_url']), use_container_width=True)
+                    
+                    # NEW Middle Row: The Scope and Requirements Block
+                    st.markdown(f"""
+                        <div class='req-box'>
+                            <div class='req-title'>📋 Project Scope</div>
+                            <div style='margin-bottom: 8px;'>{row['description']}</div>
+                            <div class='req-title'>⚠️ Key Requirements & Eligibility</div>
+                            <div>{row['detailed_requirements']}</div>
+                            <hr style='margin: 10px 0; border-color: #cbd5e1;'>
+                            <div><strong>Required Tier:</strong> `{row['contractor_class']}` &nbsp;|&nbsp; <strong>Experience Required:</strong> `{row['experience']}` &nbsp;|&nbsp; <strong>EMD:</strong> `{row['emd']}`</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Bottom Row: Action Buttons
+                    c4_1, c4_2, c4_3 = st.columns([1, 1, 2])
+                    c4_1.button("❤️ Save", key=f"save_btn_{loop_index}", use_container_width=True)
+                    c4_2.button("📤 Share", key=f"share_btn_{loop_index}", use_container_width=True)
+                    c4_3.link_button("🚀 View Official Notice & Apply", str(row['direct_url']), use_container_width=True)
 
     with right_col:
         st.markdown("### AI Eligibility Check")
@@ -167,9 +197,6 @@ if nav_selection == "🏠 Dashboard":
             st.markdown("<div style='font-size:13px; color:#0284c7;'>Medical Equipment Supply - GMCH</div>", unsafe_allow_html=True)
             st.caption("1 hour ago")
 
-# =====================================================================
-# ALERTS PAGE LOGIC
-# =====================================================================
 elif nav_selection == "🔔 Alerts":
     st.markdown("<h2>🔔 Notification Control Center</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color: #64748b;'>Configure your automated push alerts. Never miss an opportunity.</p>", unsafe_allow_html=True)
@@ -198,7 +225,7 @@ elif nav_selection == "🔔 Alerts":
         st.write("")
         if st.button("Save & Send Test Alert", type="primary"):
             with st.spinner("Connecting to WhatsApp & SMTP Servers..."):
-                time.sleep(1.5) # Simulating server connection
+                time.sleep(1.5)
                 st.toast("🟢 Configuration Saved Successfully!")
                 time.sleep(0.5)
                 st.toast(f"📱 Test WhatsApp sent to {wa_number}!")
@@ -223,7 +250,6 @@ elif nav_selection == "🔔 Alerts":
         </div>
         """, unsafe_allow_html=True)
 
-# Placeholder for other pages to avoid blank screens
 else:
     st.markdown(f"<h2>{nav_selection} Module</h2>", unsafe_allow_html=True)
     st.info("Module under active development. Check back soon!")

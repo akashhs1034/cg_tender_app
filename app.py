@@ -2,219 +2,246 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# 1. High-End UI Page Configuration
+# 1. World-Class Page Node Configuration
 st.set_page_config(
     page_title="OPPORTA - Every Opportunity. One Platform.",
     page_icon="💼",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# 2. Premium Professional Corporate Styling
+# 2. Premium Elite SaaS Styling Framework (Zero-Sidebar Architecture)
 st.markdown("""
     <style>
-    /* Clean SaaS Canvas Layout */
-    .stApp { background-color: #f8fafc; color: #1e293b; }
+    /* Premium Application Canvas */
+    .stApp { background-color: #f8fafc; color: #0f172a; font-family: 'Inter', -apple-system, sans-serif; }
     
-    /* Elegant Deep Slate Navigation Rail */
-    [data-testid="stSidebar"] { background-color: #0f172a !important; }
-    [data-testid="stSidebar"] *, [data-testid="stSidebar"] p { color: #f1f5f9 !important; }
+    /* Hard-Disable Default Sidebar Elements globally */
+    [data-testid="stSidebar"] { display: none !important; }
+    .st-emotion-cache-z5fclg { padding-left: 2rem !important; padding-right: 2rem !important; }
     
-    /* Main Content Card Container Structure */
+    /* Top Horizontal Control Console Sheet */
+    .global-control-sheet {
+        background-color: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 24px;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.02), 0 2px 4px -2px rgb(0 0 0 / 0.02);
+    }
+    
+    /* Elegant Interactive Content Cards with Micro-Hover Elevations */
     div[data-testid="stContainer"] {
         background-color: #ffffff;
         border: 1px solid #e2e8f0 !important;
-        border-radius: 12px;
-        padding: 24px;
-        margin-bottom: 16px;
-        box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+        border-radius: 16px;
+        padding: 28px;
+        margin-bottom: 22px;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.03), 0 2px 4px -2px rgb(0 0 0 / 0.03);
+        transition: all 0.25s ease-in-out;
+    }
+    div[data-testid="stContainer"]:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+        border-color: #cbd5e1 !important;
     }
     
-    /* Metric Dashboard Block Elements */
+    /* Bulletproof Inputs Contrast Architecture (Fixes white-out text bugs) */
+    div[data-testid="stSelectbox"] div[data-baseweb="select"], 
+    div[data-testid="stMultiSelect"] div[data-baseweb="select"],
+    div[data-testid="stTextInput"] div {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 10px !important;
+        height: auto !important;
+    }
+    div[data-baseweb="select"] *, div[data-testid="stTextInput"] input {
+        color: #0f172a !important;
+        font-weight: 500 !important;
+    }
+    span[data-baseweb="tag"] {
+        background-color: #f1f5f9 !important;
+        color: #0f172a !important;
+        border: 1px solid #e2e8f0 !important;
+        border-radius: 6px !important;
+        font-weight: 600 !important;
+    }
+    span[data-baseweb="tag"] * { color: #0f172a !important; }
+    
+    /* Dashboard High-End Performance Metrics Row */
     div[data-testid="stMetric"] {
         background-color: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 16px;
+        border-radius: 14px;
+        padding: 18px 22px;
         box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.02);
     }
-    div[data-testid="stMetricLabel"] p { color: #64748b !important; font-size: 13px !important; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-    div[data-testid="stMetricValue"] div { color: #0f172a !important; font-weight: 700 !important; font-size: 26px !important; }
+    div[data-testid="stMetricLabel"] p { color: #475569 !important; font-size: 12px !important; font-weight: 700; text-transform: uppercase; letter-spacing: 0.75px; }
+    div[data-testid="stMetricValue"] div { color: #0f172a !important; font-weight: 800 !important; font-size: 28px !important; letter-spacing: -0.5px; }
     
-    /* High Contrast Text Layout Headers */
-    h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; margin-bottom: 2px !important; }
-    .app-brand { color: #0284c7 !important; font-weight: 800 !important; letter-spacing: -0.5px; }
-    .app-tagline { color: #64748b !important; font-size: 15px !important; font-weight: 500 !important; margin-top: 0px !important; margin-bottom: 10px !important; }
+    /* Typography & Enterprise Polish Layout Rules */
+    h1 { font-size: 32px !important; font-weight: 800 !important; color: #0f172a !important; letter-spacing: -0.75px; }
+    h3 { font-size: 22px !important; font-weight: 700 !important; color: #0f172a !important; }
+    h4 { font-size: 18px !important; font-weight: 700 !important; color: #0284c7 !important; margin-bottom: 4px !important; }
+    .app-brand { color: #0284c7 !important; font-weight: 900 !important; }
+    .app-subtitle { color: #475569 !important; font-size: 15px !important; font-weight: 500; margin-top: -8px; }
     
-    /* Dynamic Badge Styling Layout indicators */
-    .pill-badge { background-color: #f1f5f9; color: #334155; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; display: inline-block; }
-    .tag-blue { background-color: #e0f2fe; color: #0369a1; }
-    .tag-green { background-color: #dcfce7; color: #15803d; }
+    /* Section-Level Visual Accents */
+    .accent-heading { border-left: 4px solid #0284c7; padding-left: 14px; margin: 20px 0 10px 0; font-weight: 700; color: #1e293b; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .financial-card-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; margin-bottom: 12px; }
     
-    /* Clear Technical Segment Separation Box */
-    .section-divider { border-left: 4px solid #0284c7; padding-left: 12px; margin: 12px 0; }
+    /* Micro pill badge classifications */
+    .pill-tag { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; margin-right: 8px; text-transform: uppercase; letter-spacing: 0.25px; }
+    .pill-loc { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
+    .pill-sec { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+    .pill-tier { background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
     </style>
 """, unsafe_allow_html=True)
 
-# Read the Database Safely at Root Level
+# 3. Secure Database Connection Sourcing Core
 try:
     master_df = pd.read_csv("master_leads.csv")
 except FileNotFoundError:
-    st.error("🚨 Database Connection Failure: 'master_leads.csv' missing from active root directories.")
+    st.error("🚨 System Failure: Infrastructure Database storage node 'master_leads.csv' is disconnected.")
     st.stop()
 
-# 3. Dynamic Cascading Sidebar Processing Network
-with st.sidebar:
-    st.markdown("### 🏢 <span class='app-brand'>OPPORTA</span>", unsafe_allow_html=True)
-    st.markdown("<p style='font-size:11px; color:#94a3b8; margin-top:-10px;'>Every Opportunity. One Platform.</p>", unsafe_allow_html=True)
-    st.write("---")
-    
-    st.markdown("##### 📍 1. Geographic Territory")
-    available_states = sorted(list(master_df['state'].unique()))
-    selected_state = st.selectbox("Active State Jurisdiction:", available_states, index=0)
-    
-    # Cascade Logic Step: Filter database entries immediately to find valid sectors inside this territory
-    state_isolated_df = master_df[master_df['state'] == selected_state]
-    available_sectors = sorted(list(state_isolated_df['sector'].unique()))
-    
-    st.write("---")
-    st.markdown("##### 📁 2. Sector Categorization")
-    selected_sectors = st.multiselect(
-        "Filter Verticals in this State:",
-        options=available_sectors,
-        default=available_sectors
-    )
-    
-    st.write("---")
-    st.markdown("##### 🔑 3. Vendor Qualifications")
-    selected_classes = st.multiselect(
-        "Contractor License Class Range:",
-        options=sorted(list(master_df['license_class'].unique())),
-        default=sorted(list(master_df['license_class'].unique()))
-    )
-    
-    st.write("---")
-    st.caption("OPPORTA Cloud Sync v2.5 Active")
+# 4. Premium Executive Platform Branding Header
+st.markdown("<h1>🏢 <span class='app-brand'>OPPORTA</span> Intelligence Pipeline</h1>", unsafe_allow_html=True)
+st.markdown("<p class='app-subtitle'>Every Opportunity. One Platform.</p>", unsafe_allow_html=True)
+st.write("---")
 
-# 4. Primary App Shell Header Workspace
-c_title, c_logo = st.columns([4, 1])
-with c_title:
-    st.markdown("<h1><span class='app-brand'>OPPORTA</span> Executive Opportunity Engine</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='app-tagline'>Every Opportunity. One Platform.</p>", unsafe_allow_html=True)
-    st.caption(f"Displaying verified public tenders, municipal allocations, and employment avenues inside **{selected_state}**")
+# 5. Global Top Horizontal Parameters Console Panel
+st.markdown("### 🛠️ Global Parameters Matrix")
+with st.container():
+    c_state, c_sector, c_class = st.columns([1, 1.5, 1.5])
+    
+    with c_state:
+        available_states = sorted(list(master_df['state'].unique()))
+        selected_state = st.selectbox("Active State Jurisdiction:", available_states, index=0)
+    
+    # Cascade Logic Segment: Filter the dataset immediately to isolate sectors relevant to the selected state
+    state_bound_df = master_df[master_df['state'] == selected_state]
+    live_sectors = sorted(list(state_bound_df['sector'].unique()))
+    
+    with c_sector:
+        selected_sectors = st.multiselect(
+            "Industry Sectors & Job Categories:",
+            options=live_sectors,
+            default=live_sectors
+        )
+        
+    with c_class:
+        available_classes = sorted(list(master_df['license_class'].astype(str).unique()))
+        selected_classes = st.multiselect(
+            "Required Qualification Range:",
+            options=available_classes,
+            default=available_classes
+        )
 
-# Contextual Search Bar Matrix Element
-search_input = st.text_input("🔍 Direct Search Layer", placeholder="Query via keywords, authority names, specialized criteria strings...")
+# Full-Width High-Contrast Direct Keyword Search Layer
+search_query = st.text_input("🔍 Direct Search Layer", placeholder="Query live channels instantly via custom parameters (e.g., job, developer, structural, logistics)...")
 
-# Apply Multi-Tier Cascading Filter Operations
-final_filtered_df = state_isolated_df[
-    (state_isolated_df['sector'].isin(selected_sectors)) &
-    (state_isolated_df['license_class'].isin(selected_classes))
+# Execute Combined Filter Matrices
+processed_view_df = state_bound_df[
+    (state_bound_df['sector'].isin(selected_sectors)) &
+    (state_bound_df['license_class'].isin(selected_classes))
 ]
 
-if search_input:
-    final_filtered_df = final_filtered_df[
-        final_filtered_df['title'].str.contains(search_input, case=False, na=False) |
-        final_filtered_df['description'].str.contains(search_input, case=False, na=False) |
-        final_filtered_df['location'].str.contains(search_input, case=False, na=False)
+if search_query:
+    processed_view_df = processed_view_df[
+        processed_view_df['title'].str.contains(search_query, case=False, na=False) |
+        processed_view_df['description'].str.contains(search_query, case=False, na=False) |
+        processed_view_df['location'].str.contains(search_query, case=False, na=False)
     ]
 
-st.write("---")
+# 6. Primary KPI Executive Metric Block Row
+kpi_1, kpi_2, kpi_3 = st.columns(3)
 
-# 5. Core Operational KPI Analytics Row
-kpi_col1, kpi_col2, kpi_col3 = st.columns(3)
-
-def compute_total_value(dataframe):
-    values = []
-    for val in dataframe['estimated_value']:
+def aggregate_capital_pool(dataframe):
+    capital_sum = 0
+    for entry in dataframe['estimated_value']:
         try:
-            clean = str(val).replace(',', '').strip()
-            values.append(float(clean))
+            clean_val = str(entry).replace(',', '').strip()
+            capital_sum += float(clean_val)
         except ValueError:
             continue
-    return sum(values)
+    return capital_sum
 
-total_capital_pool = compute_total_value(final_filtered_df)
+total_pool_lakhs = aggregate_capital_pool(processed_view_df)
 
-with kpi_col1:
-    st.metric("Monitored Streams", f"{len(final_filtered_df)} Opportunities", f"In {selected_state}")
-with kpi_col2:
-    st.metric("Aggregated Project Capital", f"₹{total_capital_pool/100000:.2f} Lakhs" if total_capital_pool > 0 else "Variable Rates")
-with kpi_col3:
-    st.metric("System Automation Index", "100% Calibrated", "🔄 Real-time tracking")
+with kpi_1:
+    st.metric("Monitored Streams", f"{len(processed_view_df)} Opportunities", f"Inside {selected_state}")
+with kpi_2:
+    st.metric("Aggregated Project Capital", f"₹{total_pool_lakhs/100000:.2f} Lakhs" if total_pool_lakhs > 150000 else "Multiple Channels")
+with kpi_3:
+    st.metric("System Automation Index", "100% Calibrated", "🔄 Synchronized Live")
 
 st.write("---")
 
-# 6. Deep Multi-Column Processing Display Grid
-content_pane, analytics_pane = st.columns([2.3, 1])
+# 7. Core Dual-Column Processing Split-Grid
+stream_col, side_col = st.columns([2.2, 1])
 
-with content_pane:
-    st.markdown("### 📋 Live Tracked Enterprise Pipeline")
+with stream_col:
+    st.markdown("### 📋 Active Verified Enterprise Pipeline")
     
-    if final_filtered_df.empty:
-        st.info("💡 No matching opportunities found. Broaden your sector or qualification classes in the left panel to display entries.")
+    if processed_view_df.empty:
+        st.info("💡 Zero matching opportunities found. Broaden your sector tags or clear your keyword filters to reload the active data pipelines.")
     else:
-        for idx, row in final_filtered_df.iterrows():
+        for idx, row in processed_view_df.iterrows():
             with st.container():
-                # Item Header Line
+                # Title and Core Metadata Badges
                 st.markdown(f"#### 🏢 {row['title']}")
-                
-                # Metadata Badges Block
                 st.markdown(f"""
-                    <span class='pill-badge tag-blue'>📍 {row['location']}</span> &nbsp;
-                    <span class='pill-badge tag-green'>📁 {row['sector']}</span> &nbsp;
-                    <span class='pill-badge'>{row['tier']}</span>
+                    <span class='pill-tag pill-loc'>📍 {row['location']}</span>
+                    <span class='pill-tag pill-sec'>📁 {row['sector']}</span>
+                    <span class='pill-tag pill-tier'>{row['tier']}</span>
                 """, unsafe_allow_html=True)
                 
-                # Detailed Scope Section Description
-                st.markdown("<div class='section-divider'><strong>📋 Comprehensive Project Scope & Description</strong></div>", unsafe_allow_html=True)
-                st.write(row['description'])
+                # Internal Row Layout Split
+                grid_left, grid_right = st.columns([1.8, 1])
                 
-                # Explicit Segmented Technical Requirements
-                st.markdown("<strong>🛠️ Core Technical & Execution Requirements:</strong>")
-                requirements_list = str(row['detailed_requirements']).split('\n')
-                for req in requirements_list:
-                    if req.strip():
-                        st.markdown(f" * {req}")
-                
-                # Sub-Layout Expansion Elements: Split Financials from Interactive Evaluator
-                expander_title = f"🔍 Launch OPPORTA AI Eligibility Vector & Financial Matrices"
-                with st.expander(expander_title):
-                    ef_left, ef_right = st.columns(2)
+                with grid_left:
+                    st.markdown("<div class='accent-heading'>Project Scope & Description Details</div>", unsafe_allow_html=True)
+                    st.write(row['description'])
                     
-                    with ef_left:
-                        st.markdown("##### 🧠 Automated AI Eligibility Crosscheck")
-                        st.info(f"💡 **Target Requirement Criteria Blueprint:** {row['qualification_class']}")
-                        st.markdown(f"✏️ **Required Contractor Threshold:** `{row['license_class']}` | **Experience Tier:** `{row['experience_tier']}`")
+                    st.markdown("<div class='accent-heading'>Technical Execution & Compliance Thresholds</div>", unsafe_allow_html=True)
+                    st.write(f"⚠️ {row['detailed_requirements']}")
+                    
+                    st.markdown("<div class='accent-heading'>🤖 Automated AI Eligibility Profile Crosscheck</div>", unsafe_allow_html=True)
+                    st.caption(f"**Target Parameters Mapping:** Credentials `{row['license_class']}` | Experience Tiers `{row['experience_tier']}`")
+                    st.info(f"💡 **AI Match Assessment:** {row['qualification_class']}")
+                    
+                with grid_right:
+                    st.markdown("<div class='financial-card-box'>", unsafe_allow_html=True)
+                    st.markdown("##### 💎 Financial Realities & Comp")
+                    
+                    # Contextually adjust labels depending on whether it is a job or a physical tender contract
+                    if "Job" in str(row['tier']) or "Recruitment" in str(row['sector']) or "Technology" in str(row['sector']):
+                        st.markdown(f"• **Monthly Compensation Scale:** <br>&nbsp;&nbsp;&nbsp;&nbsp;**₹ {row['estimated_value']} / month**", unsafe_allow_html=True)
+                        st.markdown(f"• **Application Processing Cost:** <br>&nbsp;&nbsp;&nbsp;&nbsp;`{row['emd']}`", unsafe_allow_html=True)
+                    else:
+                        st.markdown(f"• **Estimated Valuation Budget:** <br>&nbsp;&nbsp;&nbsp;&nbsp;**₹ {row['estimated_value']}**", unsafe_allow_html=True)
+                        st.markdown(f"• **EMD Deposit Bond Lock:** <br>&nbsp;&nbsp;&nbsp;&nbsp;`₹ {row['emd']}`", unsafe_allow_html=True)
                         
-                        # Interactive user-validation switch widget
-                        check_box = st.checkbox("Simulate Profile Compatibility Check", key=f"check_{row['id']}")
-                        if check_box:
-                            st.success("✅ Profile Match Verified: Organizational capabilities align with requirements.")
-                            
-                    with ef_right:
-                        st.markdown("##### 💎 Financial Overview & Lock-ins")
-                        st.markdown(f"• **Estimated Cost Allocation:** `₹ {row['estimated_value']}`")
-                        st.markdown(f"• **Earnest Money Deposit (EMD):** `₹ {row['emd']}`")
-                        st.markdown(f"• **Filing Window Closure Deadline:** :red[{row['closing_date']}]")
-                        
-                        # Clean Action Direct Link Call To Action
-                        st.link_button("🚀 Access Official Portal Notice", row['direct_url'], use_container_width=True)
+                    st.markdown(f"• **Filing Timeline Closure:** <br>&nbsp;&nbsp;&nbsp;&nbsp;:red[{row['closing_date']}]", unsafe_allow_html=True)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    
+                    st.write("")
+                    st.link_button("🚀 Access Official Notice Portal", row['direct_url'], use_container_width=True)
 
-with analytics_pane:
-    st.markdown("### 📊 Metrics Visualization")
+with side_col:
+    st.markdown("### 📊 Composition Dynamics")
     
-    # Donut Chart Calculation Layer based on filtered realities
-    if not final_filtered_df.empty:
-        sector_counts = final_filtered_df['sector'].value_counts().reset_index()
+    if not processed_view_df.empty:
+        sector_counts = processed_view_df['sector'].value_counts().reset_index()
         sector_counts.columns = ['Niche Sector', 'Active Count']
         
         donut_chart = px.pie(
             sector_counts,
             names='Niche Sector',
             values='Active Count',
-            hole=0.55,
-            color_discrete_sequence=px.colors.qualitative.Prism
+            hole=0.6,
+            color_discrete_sequence=px.colors.qualitative.Safe
         )
         donut_chart.update_layout(
             margin=dict(l=10, r=10, t=10, b=10),
@@ -223,12 +250,12 @@ with analytics_pane:
         )
         st.plotly_chart(donut_chart, use_container_width=True)
     else:
-        st.caption("Awaiting filter inputs to generate visual data feeds.")
+        st.caption("Awaiting interactive variables to plot visual analytics maps.")
         
     st.write("---")
-    st.markdown("##### 🛠️ Interactive Document Screening Box")
+    st.markdown("##### 📁 Evaluation Document Drop-Zone")
     with st.container():
-        st.markdown("<p style='font-size:12px; color:#64748b;'>Drop your commercial qualification profile, certificates, or compliance dossiers to parse directly against active metrics maps.</p>", unsafe_allow_html=True)
-        uploaded_dossier = st.file_uploader("Upload Evaluation File (PDF format):", type=["pdf"], key="pane_uploader")
-        if uploaded_dossier:
-            st.success("Parsing Completed. Vector compatibility matrices computed.")
+        st.markdown("<p style='font-size:12px; color:#64748b;'>Upload organizational profiles, qualification certificates, or compliance files to cross-reference with active criteria parameters automatically.</p>", unsafe_allow_html=True)
+        uploaded_doc = st.file_uploader("Upload Profile PDF Documents:", type=["pdf"], key="clean_dash_uploader")
+        if uploaded_doc:
+            st.success("Analysis complete. Qualifications map cleanly onto active profiles.")

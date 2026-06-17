@@ -115,8 +115,12 @@ with head_col3:
 
 # 6. Core Metrics Dashboard
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Opportunities Found", f"{len(df)}", "🟢 +12 new this week")
-m2.metric("Matching Your Profile", len(df[df['ai_score'].str.rstrip('%').astype(int) > 90]), "🎯 High match index")
+
+# Bulletproof Data Conversion: Safely remove '%', ignore text/blanks, and turn them into numbers
+safe_ai_scores = pd.to_numeric(df['ai_score'].astype(str).str.replace('%', '', regex=False), errors='coerce').fillna(0)
+
+m1.metric("Opportunities Found", f"{len(df.dropna(subset=['id']))}", "🟢 +12 new this week")
+m2.metric("Matching Your Profile", len(df[safe_ai_scores > 90]), "🎯 High match index")
 m3.metric("Closing Soon", "4", "⏳ Within next 7 days")
 m4.metric("Saved Opportunities", "12", "❤️ Saved by you")
 

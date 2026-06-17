@@ -1,261 +1,201 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
+from datetime import datetime
 
-# 1. World-Class Page Node Configuration
+# 1. Page Configuration
 st.set_page_config(
-    page_title="OPPORTA - Every Opportunity. One Platform.",
+    page_title="Opporta | Every Opportunity. One Platform.",
     page_icon="💼",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
-# 2. Premium Elite SaaS Styling Framework (Zero-Sidebar Architecture)
+# 2. Linear/Stripe Inspired Minimalist CSS
 st.markdown("""
     <style>
-    /* Premium Application Canvas */
-    .stApp { background-color: #f8fafc; color: #0f172a; font-family: 'Inter', -apple-system, sans-serif; }
+    /* Global Clean Canvas */
+    .stApp { background-color: #ffffff; color: #0f172a; font-family: 'Inter', -apple-system, sans-serif; }
     
-    /* Hard-Disable Default Sidebar Elements globally */
-    [data-testid="stSidebar"] { display: none !important; }
-    .st-emotion-cache-z5fclg { padding-left: 2rem !important; padding-right: 2rem !important; }
+    /* Modern Deep Navy Sidebar */
+    [data-testid="stSidebar"] { background-color: #0f172a !important; border-right: 1px solid #e2e8f0; }
+    [data-testid="stSidebar"] * { color: #f8fafc !important; }
+    [data-testid="stSidebar"] hr { border-color: #1e293b; }
     
-    /* Top Horizontal Control Console Sheet */
-    .global-control-sheet {
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 16px;
-        padding: 24px;
-        margin-bottom: 24px;
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.02), 0 2px 4px -2px rgb(0 0 0 / 0.02);
-    }
+    /* Hide top header bar gap */
+    .st-emotion-cache-18ni7ap { display: none; }
     
-    /* Elegant Interactive Content Cards with Micro-Hover Elevations */
+    /* Premium Cards & Containers */
     div[data-testid="stContainer"] {
         background-color: #ffffff;
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 16px;
-        padding: 28px;
-        margin-bottom: 22px;
-        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.03), 0 2px 4px -2px rgb(0 0 0 / 0.03);
-        transition: all 0.25s ease-in-out;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 16px;
+        box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     div[data-testid="stContainer"]:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.05), 0 4px 6px -4px rgb(0 0 0 / 0.05);
-        border-color: #cbd5e1 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.08);
+        border-color: #cbd5e1;
     }
     
-    /* Bulletproof Inputs Contrast Architecture (Fixes white-out text bugs) */
-    div[data-testid="stSelectbox"] div[data-baseweb="select"], 
-    div[data-testid="stMultiSelect"] div[data-baseweb="select"],
-    div[data-testid="stTextInput"] div {
-        background-color: #ffffff !important;
-        border: 1px solid #cbd5e1 !important;
-        border-radius: 10px !important;
-        height: auto !important;
-    }
-    div[data-baseweb="select"] *, div[data-testid="stTextInput"] input {
-        color: #0f172a !important;
-        font-weight: 500 !important;
-    }
-    span[data-baseweb="tag"] {
-        background-color: #f1f5f9 !important;
-        color: #0f172a !important;
-        border: 1px solid #e2e8f0 !important;
-        border-radius: 6px !important;
-        font-weight: 600 !important;
-    }
-    span[data-baseweb="tag"] * { color: #0f172a !important; }
+    /* Metric Cards */
+    div[data-testid="stMetric"] { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; }
+    div[data-testid="stMetricLabel"] p { color: #64748b !important; font-size: 13px !important; font-weight: 500; }
+    div[data-testid="stMetricValue"] div { color: #0f172a !important; font-weight: 700 !important; font-size: 28px !important; }
+    div[data-testid="stMetricDelta"] div { font-size: 12px !important; }
     
-    /* Dashboard High-End Performance Metrics Row */
-    div[data-testid="stMetric"] {
-        background-color: #ffffff;
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
-        padding: 18px 22px;
-        box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.02);
-    }
-    div[data-testid="stMetricLabel"] p { color: #475569 !important; font-size: 12px !important; font-weight: 700; text-transform: uppercase; letter-spacing: 0.75px; }
-    div[data-testid="stMetricValue"] div { color: #0f172a !important; font-weight: 800 !important; font-size: 28px !important; letter-spacing: -0.5px; }
+    /* Clean Inputs */
+    div[data-testid="stTextInput"] input { border-radius: 8px; border: 1px solid #cbd5e1; background-color: #f8fafc; color: #0f172a !important; font-weight: 500; }
     
-    /* Typography & Enterprise Polish Layout Rules */
-    h1 { font-size: 32px !important; font-weight: 800 !important; color: #0f172a !important; letter-spacing: -0.75px; }
-    h3 { font-size: 22px !important; font-weight: 700 !important; color: #0f172a !important; }
-    h4 { font-size: 18px !important; font-weight: 700 !important; color: #0284c7 !important; margin-bottom: 4px !important; }
-    .app-brand { color: #0284c7 !important; font-weight: 900 !important; }
-    .app-subtitle { color: #475569 !important; font-size: 15px !important; font-weight: 500; margin-top: -8px; }
+    /* Elegant Typography */
+    h1, h2, h3 { color: #0f172a !important; font-weight: 700 !important; letter-spacing: -0.5px; }
+    .brand-title { color: #0f172a; font-size: 24px; font-weight: 800; letter-spacing: -1px; margin-bottom: 2px;}
+    .brand-dot { color: #10b981; }
     
-    /* Section-Level Visual Accents */
-    .accent-heading { border-left: 4px solid #0284c7; padding-left: 14px; margin: 20px 0 10px 0; font-weight: 700; color: #1e293b; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .financial-card-box { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; margin-bottom: 12px; }
+    /* Opportunity Card Elements */
+    .opp-title { font-size: 18px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+    .opp-org { font-size: 14px; color: #64748b; font-weight: 500; margin-bottom: 16px; }
+    .opp-label { font-size: 12px; color: #64748b; margin-bottom: 2px; }
+    .opp-value { font-size: 16px; font-weight: 700; color: #0f172a; }
     
-    /* Micro pill badge classifications */
-    .pill-tag { display: inline-block; padding: 4px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; margin-right: 8px; text-transform: uppercase; letter-spacing: 0.25px; }
-    .pill-loc { background-color: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-    .pill-sec { background-color: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
-    .pill-tier { background-color: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+    /* Status Badges */
+    .badge-eligible { background-color: #ecfdf5; color: #10b981; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; border: 1px solid #a7f3d0;}
+    .badge-review { background-color: #fffbeb; color: #d97706; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; display: inline-block; border: 1px solid #fde68a;}
+    
+    /* Alert / Panel Styling */
+    .side-panel { background-color: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 20px; text-align: center; }
     </style>
 """, unsafe_allow_html=True)
 
-# 3. Secure Database Connection Sourcing Core
+# 3. Load Data
 try:
-    master_df = pd.read_csv("master_leads.csv")
+    df = pd.read_csv("master_leads.csv")
 except FileNotFoundError:
-    st.error("🚨 System Failure: Infrastructure Database storage node 'master_leads.csv' is disconnected.")
+    st.error("Database missing.")
     st.stop()
 
-# 4. Premium Executive Platform Branding Header
-st.markdown("<h1>🏢 <span class='app-brand'>OPPORTA</span> Intelligence Pipeline</h1>", unsafe_allow_html=True)
-st.markdown("<p class='app-subtitle'>Every Opportunity. One Platform.</p>", unsafe_allow_html=True)
-st.write("---")
+# Dynamic Greeting Logic
+current_hour = datetime.now().hour
+if current_hour < 12:
+    greeting = "Good Morning"
+elif 12 <= current_hour < 17:
+    greeting = "Good Afternoon"
+else:
+    greeting = "Good Evening"
 
-# 5. Global Top Horizontal Parameters Console Panel
-st.markdown("### 🛠️ Global Parameters Matrix")
-with st.container():
-    c_state, c_sector, c_class = st.columns([1, 1.5, 1.5])
-    
-    with c_state:
-        available_states = sorted(list(master_df['state'].unique()))
-        selected_state = st.selectbox("Active State Jurisdiction:", available_states, index=0)
-    
-    # Cascade Logic Segment: Filter the dataset immediately to isolate sectors relevant to the selected state
-    state_bound_df = master_df[master_df['state'] == selected_state]
-    live_sectors = sorted(list(state_bound_df['sector'].unique()))
-    
-    with c_sector:
-        selected_sectors = st.multiselect(
-            "Industry Sectors & Job Categories:",
-            options=live_sectors,
-            default=live_sectors
-        )
-        
-    with c_class:
-        available_classes = sorted(list(master_df['license_class'].astype(str).unique()))
-        selected_classes = st.multiselect(
-            "Required Qualification Range:",
-            options=available_classes,
-            default=available_classes
-        )
-
-# Full-Width High-Contrast Direct Keyword Search Layer
-search_query = st.text_input("🔍 Direct Search Layer", placeholder="Query live channels instantly via custom parameters (e.g., job, developer, structural, logistics)...")
-
-# Execute Combined Filter Matrices
-processed_view_df = state_bound_df[
-    (state_bound_df['sector'].isin(selected_sectors)) &
-    (state_bound_df['license_class'].isin(selected_classes))
-]
-
-if search_query:
-    processed_view_df = processed_view_df[
-        processed_view_df['title'].str.contains(search_query, case=False, na=False) |
-        processed_view_df['description'].str.contains(search_query, case=False, na=False) |
-        processed_view_df['location'].str.contains(search_query, case=False, na=False)
-    ]
-
-# 6. Primary KPI Executive Metric Block Row
-kpi_1, kpi_2, kpi_3 = st.columns(3)
-
-def aggregate_capital_pool(dataframe):
-    capital_sum = 0
-    for entry in dataframe['estimated_value']:
-        try:
-            clean_val = str(entry).replace(',', '').strip()
-            capital_sum += float(clean_val)
-        except ValueError:
-            continue
-    return capital_sum
-
-total_pool_lakhs = aggregate_capital_pool(processed_view_df)
-
-with kpi_1:
-    st.metric("Monitored Streams", f"{len(processed_view_df)} Opportunities", f"Inside {selected_state}")
-with kpi_2:
-    st.metric("Aggregated Project Capital", f"₹{total_pool_lakhs/100000:.2f} Lakhs" if total_pool_lakhs > 150000 else "Multiple Channels")
-with kpi_3:
-    st.metric("System Automation Index", "100% Calibrated", "🔄 Synchronized Live")
-
-st.write("---")
-
-# 7. Core Dual-Column Processing Split-Grid
-stream_col, side_col = st.columns([2.2, 1])
-
-with stream_col:
-    st.markdown("### 📋 Active Verified Enterprise Pipeline")
-    
-    if processed_view_df.empty:
-        st.info("💡 Zero matching opportunities found. Broaden your sector tags or clear your keyword filters to reload the active data pipelines.")
-    else:
-        for idx, row in processed_view_df.iterrows():
-            with st.container():
-                # Title and Core Metadata Badges
-                st.markdown(f"#### 🏢 {row['title']}")
-                st.markdown(f"""
-                    <span class='pill-tag pill-loc'>📍 {row['location']}</span>
-                    <span class='pill-tag pill-sec'>📁 {row['sector']}</span>
-                    <span class='pill-tag pill-tier'>{row['tier']}</span>
-                """, unsafe_allow_html=True)
-                
-                # Internal Row Layout Split
-                grid_left, grid_right = st.columns([1.8, 1])
-                
-                with grid_left:
-                    st.markdown("<div class='accent-heading'>Project Scope & Description Details</div>", unsafe_allow_html=True)
-                    st.write(row['description'])
-                    
-                    st.markdown("<div class='accent-heading'>Technical Execution & Compliance Thresholds</div>", unsafe_allow_html=True)
-                    st.write(f"⚠️ {row['detailed_requirements']}")
-                    
-                    st.markdown("<div class='accent-heading'>🤖 Automated AI Eligibility Profile Crosscheck</div>", unsafe_allow_html=True)
-                    st.caption(f"**Target Parameters Mapping:** Credentials `{row['license_class']}` | Experience Tiers `{row['experience_tier']}`")
-                    st.info(f"💡 **AI Match Assessment:** {row['qualification_class']}")
-                    
-                with grid_right:
-                    st.markdown("<div class='financial-card-box'>", unsafe_allow_html=True)
-                    st.markdown("##### 💎 Financial Realities & Comp")
-                    
-                    # Contextually adjust labels depending on whether it is a job or a physical tender contract
-                    if "Job" in str(row['tier']) or "Recruitment" in str(row['sector']) or "Technology" in str(row['sector']):
-                        st.markdown(f"• **Monthly Compensation Scale:** <br>&nbsp;&nbsp;&nbsp;&nbsp;**₹ {row['estimated_value']} / month**", unsafe_allow_html=True)
-                        st.markdown(f"• **Application Processing Cost:** <br>&nbsp;&nbsp;&nbsp;&nbsp;`{row['emd']}`", unsafe_allow_html=True)
-                    else:
-                        st.markdown(f"• **Estimated Valuation Budget:** <br>&nbsp;&nbsp;&nbsp;&nbsp;**₹ {row['estimated_value']}**", unsafe_allow_html=True)
-                        st.markdown(f"• **EMD Deposit Bond Lock:** <br>&nbsp;&nbsp;&nbsp;&nbsp;`₹ {row['emd']}`", unsafe_allow_html=True)
-                        
-                    st.markdown(f"• **Filing Timeline Closure:** <br>&nbsp;&nbsp;&nbsp;&nbsp;:red[{row['closing_date']}]", unsafe_allow_html=True)
-                    st.markdown("</div>", unsafe_allow_html=True)
-                    
-                    st.write("")
-                    st.link_button("🚀 Access Official Notice Portal", row['direct_url'], use_container_width=True)
-
-with side_col:
-    st.markdown("### 📊 Composition Dynamics")
-    
-    if not processed_view_df.empty:
-        sector_counts = processed_view_df['sector'].value_counts().reset_index()
-        sector_counts.columns = ['Niche Sector', 'Active Count']
-        
-        donut_chart = px.pie(
-            sector_counts,
-            names='Niche Sector',
-            values='Active Count',
-            hole=0.6,
-            color_discrete_sequence=px.colors.qualitative.Safe
-        )
-        donut_chart.update_layout(
-            margin=dict(l=10, r=10, t=10, b=10),
-            showlegend=True,
-            legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5)
-        )
-        st.plotly_chart(donut_chart, use_container_width=True)
-    else:
-        st.caption("Awaiting interactive variables to plot visual analytics maps.")
-        
+# 4. Sidebar Navigation
+with st.sidebar:
+    st.markdown("<div class='brand-title'>OPPORTA<span class='brand-dot'>.</span></div>", unsafe_allow_html=True)
+    st.caption("Every Opportunity. One Platform.")
     st.write("---")
-    st.markdown("##### 📁 Evaluation Document Drop-Zone")
+    st.radio("Navigation", ["🏠 Dashboard", "🔍 Opportunities", "🤖 AI Eligibility Check", "🔔 Alerts", "❤️ Saved", "💼 Government Jobs", "📊 Reports"], label_visibility="collapsed")
+    st.write("---")
+    
+    # Premium Badge Widget
+    st.markdown("""
+        <div style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 16px; border-radius: 12px; color: white;">
+            <div style="font-weight: 700; font-size: 14px;">👑 Premium Plan</div>
+            <div style="font-size: 12px; opacity: 0.9; margin-top: 4px;">Valid till 24 Jun 2026</div>
+        </div>
+    """, unsafe_allow_html=True)
+    st.write("<br><br><br>", unsafe_allow_html=True)
+    st.markdown("👤 **Akash Singh**<br><span style='color:#94a3b8; font-size:12px;'>⚙️ Settings</span>", unsafe_allow_html=True)
+
+# 5. Top Header & Search
+head_col1, head_col2, head_col3 = st.columns([2, 2, 1])
+with head_col1:
+    st.markdown(f"<h2>{greeting}, Akash! 👋</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #64748b; margin-top: -10px;'>Find, track, and win the right opportunities instantly.</p>", unsafe_allow_html=True)
+with head_col2:
+    search_query = st.text_input("Global Search", placeholder="🔍 Search opportunities, departments, locations...", label_visibility="collapsed")
+with head_col3:
+    st.markdown("<div style='text-align: right; padding-top: 10px; font-size: 18px;'>💬 &nbsp;&nbsp; 🔔 <span style='background-color:#ef4444; color:white; border-radius:50%; padding:2px 6px; font-size:10px;'>5</span></div>", unsafe_allow_html=True)
+
+# 6. Core Metrics Dashboard
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Opportunities Found", f"{len(df)}", "🟢 +12 new this week")
+m2.metric("Matching Your Profile", len(df[df['ai_score'].str.rstrip('%').astype(int) > 90]), "🎯 High match index")
+m3.metric("Closing Soon", "4", "⏳ Within next 7 days")
+m4.metric("Saved Opportunities", "12", "❤️ Saved by you")
+
+st.write("")
+
+# 7. One-Click Horizontal Category Chips (Replacing the clunky multi-selects)
+categories = ["All Opportunities"] + list(df['category'].unique())
+selected_category = st.radio("Quick Filters", categories, horizontal=True, label_visibility="collapsed")
+
+# 8. Advanced Filters (Hidden behind Expander)
+with st.expander("⚙️ Advanced Filters & Location Preferences"):
+    f_col1, f_col2, f_col3 = st.columns(3)
+    with f_col1:
+        st.selectbox("State", ["All India"] + list(df['state'].unique()))
+    with f_col2:
+        st.selectbox("Contractor Class", ["All"] + list(df['contractor_class'].unique()))
+    with f_col3:
+        st.selectbox("Experience Match", ["Any", "No Experience", "1-3 Years", "3+ Years"])
+
+st.write("---")
+
+# 9. Main Opportunity Feed & AI Sidebar Split
+feed_col, right_col = st.columns([2.5, 1])
+
+# Filter Logic
+view_df = df if selected_category == "All Opportunities" else df[df['category'] == selected_category]
+if search_query:
+    view_df = view_df[view_df['title'].str.contains(search_query, case=False) | view_df['organization'].str.contains(search_query, case=False)]
+
+with feed_col:
+    st.markdown("### Recommended Opportunities")
+    
+    if view_df.empty:
+        st.info("No opportunities match this specific filter right now.")
+    else:
+        for _, row in view_df.iterrows():
+            with st.container():
+                c1, c2, c3, c4 = st.columns([3, 1.2, 1.2, 1.5])
+                
+                with c1:
+                    st.markdown(f"<div class='opp-title'>{row['title']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='opp-org'>🏢 {row['organization']} &nbsp; | &nbsp; 📍 {row['state']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='background:#f1f5f9; color:#475569; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:600;'>{row['category']}</span>", unsafe_allow_html=True)
+                
+                with c2:
+                    st.markdown("<div class='opp-label'>Project Value</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='opp-value'>{row['project_value']}</div>", unsafe_allow_html=True)
+                    
+                with c3:
+                    st.markdown("<div class='opp-label'>Deadline</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div class='opp-value' style='color:#ef4444;'>{row['deadline']}</div>", unsafe_allow_html=True)
+                    
+                with c4:
+                    status_class = "badge-eligible" if row['eligibility'] == "Eligible" else "badge-review"
+                    st.markdown(f"<div style='text-align:right;'><span class='{status_class}'>✓ {row['eligibility']}</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='text-align:right; font-size:12px; font-weight:700; color:#10b981; margin-top:4px;'>🤖 {row['ai_score']} Match</div>", unsafe_allow_html=True)
+                    st.write("")
+                    c4_1, c4_2 = st.columns(2)
+                    c4_1.button("❤️ Save", key=f"save_{row['id']}", use_container_width=True)
+                    c4_2.link_button("View Details", row['direct_url'], use_container_width=True)
+
+with right_col:
+    st.markdown("### AI Eligibility Check")
     with st.container():
-        st.markdown("<p style='font-size:12px; color:#64748b;'>Upload organizational profiles, qualification certificates, or compliance files to cross-reference with active criteria parameters automatically.</p>", unsafe_allow_html=True)
-        uploaded_doc = st.file_uploader("Upload Profile PDF Documents:", type=["pdf"], key="clean_dash_uploader")
-        if uploaded_doc:
-            st.success("Analysis complete. Qualifications map cleanly onto active profiles.")
+        st.markdown("<div class='side-panel'>", unsafe_allow_html=True)
+        st.markdown("<div style='font-size:32px;'>☁️</div>", unsafe_allow_html=True)
+        st.markdown("**Upload tender document / PDF**")
+        st.caption("Get AI-powered eligibility summary instantly in under 10 seconds.")
+        st.file_uploader("Upload", label_visibility="collapsed")
+        st.button("Upload & Check", type="primary", use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+    st.write("")
+    st.markdown("### Recent Alerts")
+    with st.container():
+        st.markdown("🟢 **New tender matching your profile**")
+        st.markdown("<div style='font-size:13px; color:#0284c7;'>Supply of Coal (500 MT) - SECL</div>", unsafe_allow_html=True)
+        st.caption("10 mins ago")
+        st.write("---")
+        st.markdown("🟡 **Bid closing soon**")
+        st.markdown("<div style='font-size:13px; color:#0284c7;'>Medical Equipment Supply - GMCH</div>", unsafe_allow_html=True)
+        st.caption("1 hour ago")

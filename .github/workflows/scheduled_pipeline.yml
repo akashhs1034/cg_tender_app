@@ -5,6 +5,13 @@ on:
     - cron: '0 */2 * * *' # Runs every 2 hours
   workflow_dispatch: # Allows you to trigger it manually
 
+name: Opporta 24/7 Cloud Engine
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
 jobs:
   execute-etl-matrix:
     runs-on: ubuntu-latest
@@ -23,7 +30,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-   - name: Execute Master Pipeline
+    - name: Execute Master Pipeline
       env:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}

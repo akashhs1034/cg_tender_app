@@ -1,32 +1,31 @@
 name: Opporta 24/7 Cloud Engine
 
 on:
-  schedule:
-    - cron: '0 */2 * * *'
   workflow_dispatch:
+  schedule:
+    - cron: "0 */6 * * *" # Runs every 6 hours
 
 jobs:
   execute-etl-matrix:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Check out Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v3
 
-    - name: Provision Python Environment
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
 
-    - name: Install Production Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install aiohttp beautifulsoup4 supabase
 
-    - name: Execute Master Pipeline
-      env:
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      run: |
-        python master_pipeline.py || (echo "PIPELINE FAILED: Scraping process exited with error" && exit 1)
+      - name: Execute Master Pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          python master_pipeline.py || (echo "PIPELINE FAILED: Scraping process exited with error" && exit 1)

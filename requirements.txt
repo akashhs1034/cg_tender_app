@@ -5,3 +5,5 @@ beautifulsoup4
 google-genai
 pydantic
 supabase
+aiohttp==3.9.5
+beautifulsoup4==4.12.3

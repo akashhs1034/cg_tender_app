@@ -9,14 +9,14 @@ import google.generativeai as genai
 # 1. PAGE SETUP & WORKSPACE OPTIMIZATION
 # =====================================================================
 st.set_page_config(
-    page_title="Opporta | Opportunity Intelligence",
+    page_title="Opporta Enterprise | Multi-Tenant Platform",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # =====================================================================
-# 2. PREMIUM ENTERPRISE DESIGN SYSTEM
+# 2. TOP 1% ENTERPRISE DESIGN SYSTEM
 # =====================================================================
 st.markdown("""
 <style>
@@ -76,36 +76,104 @@ st.markdown("""
         border-color: var(--primary) !important;
         box-shadow: 0 4px 12px rgba(79, 70, 229, 0.08) !important;
     }
-    .stButton > button:active { transform: translateY(1px) !important; }
 </style>
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 3. STATE MACHINE INITIALIZATION ENGINE
+# 3. SECURE WORKSPACE INFRASTRUCTURE RECONNAISSANCE
 # =====================================================================
-INITIAL_STATES = {
+@st.cache_resource(show_spinner="Establishing Secure Pipeline Link...")
+def init_connection():
+    try:
+        return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+    except Exception: return None
+
+supabase = init_connection()
+
+if supabase is None:
+    st.error("🚨 Database Link Offline. Verify credentials.")
+    st.stop()
+
+# Initialize Gemini
+ai_ready = False
+if "GEMINI_API_KEY" in st.secrets:
+    try:
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        ai_ready = True
+    except Exception: pass
+
+# =====================================================================
+# 4. MULTI-TENANT AUTHENTICATION STATE GATEWAY
+# =====================================================================
+if "auth_session" not in st.session_state:
+    st.session_state.auth_session = None
+
+if st.session_state.auth_session is None:
+    st.markdown('<div class="opporta-topbar"><p class="opporta-title">⚡ Opporta Gateway</p><div class="opporta-subtle">Enterprise Opportunity Intelligence Layer Login</div></div>', unsafe_allow_html=True)
+    
+    auth_tab_in, auth_tab_up = st.tabs(["Sign In to Platform", "Create Enterprise Account"])
+    
+    with auth_tab_in:
+        li_email = st.text_input("Corporate Email Address", key="login_email")
+        li_pass = st.text_input("Secure Gateway Password", type="password", key="login_password")
+        if st.button("Authenticate Identity", use_container_width=True):
+            try:
+                res = supabase.auth.sign_in_with_password({"email": li_email, "password": li_pass})
+                st.session_state.auth_session = res.session
+                st.success("Access Granted. Slicing environment charts...")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Authentication Failed: {str(e)}")
+                
+    with auth_tab_up:
+        su_email = st.text_input("Corporate Email Address", key="reg_email")
+        su_pass = st.text_input("Create Secure Password (Min 6 Characters)", type="password", key="reg_password")
+        if st.button("Provision Multi-Tenant Space", use_container_width=True):
+            try:
+                res = supabase.auth.sign_up({"email": su_email, "password": su_pass})
+                st.info("Registration request transmitted. Check verification constraints or proceed to sign-in.")
+            except Exception as e:
+                st.error(f"Provisioning Failure: {str(e)}")
+    st.stop()
+
+# Extract active session identifiers
+current_user_id = st.session_state.auth_session.user.id
+current_user_email = st.session_state.auth_session.user.email
+
+# =====================================================================
+# 5. RETRIEVE OR PROVISION DATABASE PERSISTED CONTEXT NODES
+# =====================================================================
+@st.cache_data(ttl=10, show_spinner=False)
+def load_db_profile(uid):
+    try:
+        res = supabase.table("opporta_profiles").select("*").eq("user_id", uid).execute()
+        if res.data: return res.data[0]
+        # Auto-provision profile node on fresh user detection
+        default_profile = {"user_id": uid, "business_type": "Contractor", "turnover": "₹5 Crore", "contractor_class": "Class A", "industries": ["Civil Infrastructure"]}
+        supabase.table("opporta_profiles").insert(default_profile).execute()
+        return default_profile
+    except Exception:
+        return {"user_id": uid, "business_type": "Contractor", "turnover": "₹5 Crore", "contractor_class": "Class A", "industries": ["Civil Infrastructure"]}
+
+db_profile = load_db_profile(current_user_id)
+
+# Initialize Session-States with DB Ground-Truth Values
+STATE_MANAGEMENT_NODES = {
     "selected_state": "All Regions",
     "selected_sector": "All Categories",
     "job_subcat": "All Jobs",
     "search_filter": "",
     "min_score_filter": 0,
     "kpi_focus": "Clear Focus",
-    "saved_opportunities": set(),
-    "active_alerts": [],
-    "user_profile": {
-        "business_type": "Contractor",
-        "turnover": "₹5 Crore",
-        "contractor_class": "Class A",
-        "industries": ["Civil Infrastructure"]
-    }
+    "bid_doc_output": ""
 }
 
-for state_key, default_val in INITIAL_STATES.items():
-    if state_key not in st.session_state:
-        st.session_state[state_key] = default_val
+for sk, dv in STATE_MANAGEMENT_NODES.items():
+    if sk not in st.session_state: st.session_state[sk] = dv
 
 # =====================================================================
-# 4. DATA NORMALIZATION & ADVANCED CLEANING HELPERS
+# 6. UNIVERSAL NORMALIZATION & DATA RECON CLEANING HELPERS
 # =====================================================================
 def get_valid_col(df, col_list, default=""):
     for col in col_list:
@@ -117,33 +185,22 @@ def extract_safe_string(val):
     return str(val) if (pd.notna(val) and str(val).strip().lower() != "nan") else "Not specified"
 
 def is_genuine_work_tender(title):
-    title_clean = str(title).lower().strip()
-    noise_indicators = [
-        "policy", "csr policy", "guideline", "rules", "act 20", "regulation", "grievance", 
-        "manual", "approved posts", "minutes of", "meeting", "notice board", "ppt", "presentation", 
-        "press release", "prakashan", "v विज्ञप्ति", "vignapti", "circular", "transfer order", 
-        "seniority list", "niti", "eligibility list", "citizen charter"
-    ]
-    if any(noise in title_clean for noise in noise_indicators): return False
-    if len(title_clean) <= 3 or title_clean.isdigit(): return False
+    t_c = str(title).lower().strip()
+    noise = ["policy", "guideline", "rules", "act 20", "regulation", "grievance", "manual", "approved posts", "minutes", "meeting", "ppt", "circular", "transfer order", "seniority list"]
+    if any(n in t_c for n in noise): return False
+    if len(t_c) <= 3 or t_c.isdigit(): return False
     return True
 
 def infer_sector(title, sector):
     text = f"{title} {sector}".lower()
     mapping = [
         ("Coal & Mining", ["coal", "mining", "mine", "secl", "nmdc"]),
-        ("Medical Procurement", ["medical", "hospital", "drug", "medicine", "surgical", "health", "upmsc"]),
-        ("Civil Infrastructure", ["road", "bridge", "civil", "construction", "building", "pwd", "expressway", "upeida", "nhai"]),
-        ("Transport & Logistics", ["transport", "logistics", "vehicle", "fleet", "cargo", "bus hire", "hiring of vehicle"]),
-        ("Electrical & Energy", ["power", "electric", "energy", "solar", "transformer", "substation"]),
-        ("Water & Irrigation", ["water", "irrigation", "pipeline", "phed", "jal", "tube well"]),
-        ("IT & Digital Services", ["software", "it", "digital", "server", "network", "cctv", "hardware procurement"]),
-        ("Municipal Projects", ["municipal", "nagar", "corporation", "urban"]),
-        ("Panchayat Projects", ["panchayat", "district", "collector", "zilla"]),
-        ("Government Jobs", ["recruitment", "vacancy", "job", "bharti", "post", "apply"]),
-        ("Government Supplies", ["supply", "procurement", "furniture", "equipment", "office"]),
-        ("Consultancy Services", ["consultancy", "consultant", "advisory"]),
-        ("AMC & Maintenance Contracts", ["amc", "maintenance", "repair", "upkeep"])
+        ("Medical Procurement", ["medical", "hospital", "drug", "medicine", "surgical", "health"]),
+        ("Civil Infrastructure", ["road", "bridge", "civil", "construction", "building", "pwd", "nhai"]),
+        ("Transport & Logistics", ["transport", "logistics", "vehicle", "fleet", "bus hire"]),
+        ("Electrical & Energy", ["power", "electric", "energy", "solar", "transformer"]),
+        ("Water & Irrigation", ["water", "irrigation", "pipeline", "phed", "jal"]),
+        ("IT & Digital Services", ["software", "it", "digital", "server", "cctv"])
     ]
     for label, keywords in mapping:
         if any(k in text for k in keywords): return label
@@ -152,16 +209,9 @@ def infer_sector(title, sector):
 def generate_match_score(title, sector):
     base = 74
     text = f"{title} {sector}".lower()
-    user_inds = st.session_state.user_profile["industries"]
-    if any(ind.split()[0].lower() in text for ind in user_inds): base += 10
-    if any(k in text for k in ["tender", "nit", "supply", "construction", "transport", "procurement"]): base += 8
-    if "open" not in text: base += 2
+    if any(ind.split()[0].lower() in text for ind in db_profile["industries"]): base += 10
+    if any(k in text for k in ["tender", "nit", "supply", "construction", "procurement"]): base += 8
     return min(98, max(54, base + random.randint(-5, 5)))
-
-def eligibility_label(score):
-    if score >= 85: return "Eligible", "success"
-    if score >= 72: return "Partially Eligible", "warning"
-    return "Needs Review", "danger"
 
 def format_inr_compact(value):
     try:
@@ -171,492 +221,287 @@ def format_inr_compact(value):
         return f"₹{num:,.0f}"
     except Exception: return "₹N/A"
 
-def parse_amount_from_text(text):
-    if text is None: return 0.0
-    s = str(text).replace(",", "").replace("₹", "").strip().lower()
-    try:
-        if "cr" in s or "crore" in s:
-            n = float("".join(ch for ch in s if ch.isdigit() or ch == "."))
-            return n * 10000000
-        if "lakh" in s:
-            n = float("".join(ch for ch in s if ch.isdigit() or ch == "."))
-            return n * 100000
-        return float("".join(ch for ch in s if ch.isdigit() or ch == "."))
-    except Exception: return 0.0
-
 # =====================================================================
-# 5. SECURE PRODUCTION DATABASES LINK
-# =====================================================================
-@st.cache_resource(show_spinner="Establishing Secure Pipeline Link...")
-def init_connection():
-    try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except Exception: return None
-
-supabase = init_connection()
-
-if supabase is None:
-    st.error("🚨 Cloud Database Connection Offline. Check configurations.")
-    st.stop()
-
-ai_ready = False
-if "GEMINI_API_KEY" in st.secrets:
-    try:
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        model = genai.GenerativeModel('gemini-1.5-flash')
-        ai_ready = True
-    except Exception: pass
-
-# =====================================================================
-# 6. HIGH-PERFORMANCE DATA INGESTION LAYERS
+# 7. ASYNCHRONOUS HIGH-PERFORMANCE DATA LOADING LAYERS
 # =====================================================================
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_tenders():
-    for table_name in ["tenders", "opporta_tenders"]:
+def fetch_tenders_stream():
+    for table in ["tenders", "opporta_tenders"]:
         try:
-            res = supabase.table(table_name).select("*").order("date_scraped", desc=True).limit(500).execute()
-            if res.data: return pd.DataFrame(res.data), table_name
-        except Exception:
-            try:
-                res = supabase.table(table_name).select("*").order("scraped_at", desc=True).limit(500).execute()
-                if res.data: return pd.DataFrame(res.data), table_name
-            except Exception: pass
-    return pd.DataFrame(), None
+            res = supabase.table(table).select("*").order("date_scraped", desc=True).limit(500).execute()
+            if res.data: return pd.DataFrame(res.data)
+        except Exception: pass
+    return pd.DataFrame()
 
 @st.cache_data(ttl=60, show_spinner=False)
-def fetch_jobs():
-    for table_name in ["jobs", "opporta_jobs"]:
+def fetch_jobs_stream():
+    for table in ["jobs", "opporta_jobs"]:
         try:
-            res = supabase.table(table_name).select("*").order("date_scraped", desc=True).limit(500).execute()
-            if res.data: return pd.DataFrame(res.data), table_name
-        except Exception:
-            try:
-                res = supabase.table(table_name).select("*").order("scraped_at", desc=True).limit(500).execute()
-                if res.data: return pd.DataFrame(res.data), table_name
-            except Exception: pass
-    return pd.DataFrame(), None
+            res = supabase.table(table).select("*").order("date_scraped", desc=True).limit(500).execute()
+            if res.data: return pd.DataFrame(res.data)
+        except Exception: pass
+    return pd.DataFrame()
 
-df_tenders_raw, tenders_source = fetch_tenders()
-df_jobs_raw, jobs_source = fetch_jobs()
+df_tenders_raw = fetch_tenders_stream()
+df_jobs_raw = fetch_jobs_stream()
 
-# =====================================================================
-# 7. RE-COMPILATION DATA TRANSFORMATION MAPPINGS
-# =====================================================================
+# Transform Arrays
 if not df_tenders_raw.empty:
     df_tenders_raw = df_tenders_raw.loc[:, ~df_tenders_raw.columns.duplicated()].copy()
-    df_tenders_raw["is_valid_work"] = df_tenders_raw["title"].apply(is_genuine_work_tender)
-    df_tenders_raw = df_tenders_raw[df_tenders_raw["is_valid_work"] == True].copy()
-    
+    df_tenders_raw = df_tenders_raw[df_tenders_raw["title"].apply(is_genuine_work_tender)].copy()
     df_tenders_raw["title"] = get_valid_col(df_tenders_raw, ["title"], "Untitled Tenders")
     df_tenders_raw["agency"] = get_valid_col(df_tenders_raw, ["agency", "department"], "Unknown Agency")
     df_tenders_raw["state"] = get_valid_col(df_tenders_raw, ["state"], "Unknown")
     df_tenders_raw["sector"] = [infer_sector(t, s) for t, s in zip(df_tenders_raw["title"], get_valid_col(df_tenders_raw, ["sector"], ""))]
     df_tenders_raw["url"] = get_valid_col(df_tenders_raw, ["url", "source_url", "link"], "")
-    df_tenders_raw["location"] = get_valid_col(df_tenders_raw, ["location", "district", "state"], "Unknown")
     df_tenders_raw["project_value"] = get_valid_col(df_tenders_raw, ["project_value", "value"], "Not specified")
     df_tenders_raw["emd"] = get_valid_col(df_tenders_raw, ["emd"], "Not specified")
     df_tenders_raw["deadline"] = get_valid_col(df_tenders_raw, ["deadline", "closing_date"], "Open")
-    df_tenders_raw["contract_type"] = get_valid_col(df_tenders_raw, ["contract_type"], "Tender / Opportunity")
-    df_tenders_raw["amount_num"] = df_tenders_raw["project_value"].apply(parse_amount_from_text)
+    df_tenders_raw["contract_type"] = get_valid_col(df_tenders_raw, ["contract_type"], "Tender Contract")
+    df_tenders_raw["amount_num"] = df_tenders_raw["project_value"].apply(lambda x: float(''.join(c for c in str(x) if c.isdigit() or c=='.')) if any(c.isdigit() for c in str(x)) else 0.0)
     df_tenders_raw["match_score"] = [generate_match_score(t, s) for t, s in zip(df_tenders_raw["title"], df_tenders_raw["sector"])]
 
 if not df_jobs_raw.empty:
     df_jobs_raw = df_jobs_raw.loc[:, ~df_jobs_raw.columns.duplicated()].copy()
-    df_jobs_raw["title"] = get_valid_col(df_jobs_raw, ["title", "job_title"], "Untitled Job Notification")
+    df_jobs_raw["title"] = get_valid_col(df_jobs_raw, ["title", "job_title"], "Job Vacancy")
     df_jobs_raw["agency"] = get_valid_col(df_jobs_raw, ["agency", "board"], "Unknown Board")
     df_jobs_raw["state"] = get_valid_col(df_jobs_raw, ["state"], "Unknown")
     df_jobs_raw["sector"] = get_valid_col(df_jobs_raw, ["sector"], "Government Jobs")
     df_jobs_raw["url"] = get_valid_col(df_jobs_raw, ["url", "apply_url", "link"], "")
+    df_jobs_raw["vacancies"] = get_valid_col(df_jobs_raw, ["vacancies"], "Not specified")
+    df_jobs_raw["salary"] = get_valid_col(df_jobs_raw, ["salary"], "As per norm")
     df_jobs_raw["qualification"] = get_valid_col(df_jobs_raw, ["qualification"], "Not specified")
-    df_jobs_raw["salary"] = get_valid_col(df_jobs_raw, ["salary"], "As per notification")
-    df_jobs_raw["deadline"] = get_valid_col(df_jobs_raw, ["deadline", "closing_date"], "Open")
-    df_jobs_raw["vacancies"] = get_valid_col(df_jobs_raw, ["vacancy_count", "vacancies"], "Not specified")
+    df_jobs_raw["deadline"] = get_valid_col(df_jobs_raw, ["deadline"], "Open")
     df_jobs_raw["match_score"] = [generate_match_score(t, s) for t, s in zip(df_jobs_raw["title"], df_jobs_raw["sector"])]
 
 # =====================================================================
-# 8. CENTRAL RUNTIME DATA FILTRATION PIPELINES
+# 8. PROCESS LIVE WORKSPACE RENDERING FILTERS
 # =====================================================================
 df_tenders = df_tenders_raw.copy() if not df_tenders_raw.empty else pd.DataFrame()
 df_jobs = df_jobs_raw.copy() if not df_jobs_raw.empty else pd.DataFrame()
 
 if not df_tenders.empty:
-    if st.session_state.selected_state != "All Regions":
-        df_tenders = df_tenders[df_tenders["state"].astype(str).str.contains(st.session_state.selected_state, case=False, na=False)]
-    if st.session_state.selected_sector != "All Categories":
-        df_tenders = df_tenders[df_tenders["sector"].astype(str).str.contains(st.session_state.selected_sector.split()[0], case=False, na=False)]
-    if st.session_state.search_filter:
-        q = st.session_state.search_filter
-        df_tenders = df_tenders[df_tenders["title"].str.contains(q, case=False, na=False) | df_tenders["agency"].str.contains(q, case=False, na=False)]
+    if st.session_state.selected_state != "All Regions": df_tenders = df_tenders[df_tenders["state"].str.contains(st.session_state.selected_state, case=False, na=False)]
+    if st.session_state.selected_sector != "All Categories": df_tenders = df_tenders[df_tenders["sector"].str.contains(st.session_state.selected_sector.split()[0], case=False, na=False)]
+    if st.session_state.search_filter: df_tenders = df_tenders[df_tenders["title"].str.contains(st.session_state.search_filter, case=False, na=False)]
     df_tenders = df_tenders[df_tenders["match_score"] >= st.session_state.min_score_filter]
-
-    if st.session_state.kpi_focus == "Matching Only":
-        df_tenders = df_tenders[df_tenders["match_score"] >= 75]
-    elif st.session_state.kpi_focus == "High Confidence":
-        df_tenders = df_tenders[df_tenders["match_score"] >= 85]
-    elif st.session_state.kpi_focus == "Urgent Cycles":
-        df_tenders = df_tenders[df_tenders["deadline"].str.lower().str.contains("open|specified") == False]
+    
+    if st.session_state.kpi_focus == "Matching Only": df_tenders = df_tenders[df_tenders["match_score"] >= 75]
+    elif st.session_state.kpi_focus == "High Confidence": df_tenders = df_tenders[df_tenders["match_score"] >= 85]
+    elif st.session_state.kpi_focus == "Urgent Cycles": df_tenders = df_tenders[~df_tenders["deadline"].str.lower().str.contains("open|specified", na=True)]
 
 if not df_jobs.empty:
-    if st.session_state.selected_state != "All Regions":
-        df_jobs = df_jobs[df_jobs["state"].astype(str).str.contains(st.session_state.selected_state, case=False, na=False)]
-    if st.session_state.selected_sector != "All Categories":
-        if "Jobs" not in st.session_state.selected_sector: df_jobs = df_jobs.iloc[0:0]
-    if st.session_state.search_filter:
-        q = st.session_state.search_filter
-        df_jobs = df_jobs[df_jobs["title"].str.contains(q, case=False, na=False) | df_jobs["agency"].str.contains(q, case=False, na=False)]
-    df_jobs = df_jobs[df_jobs["match_score"] >= st.session_state.min_score_filter]
+    if st.session_state.selected_state != "All Regions": df_jobs = df_jobs[df_jobs["state"].str.contains(st.session_state.selected_state, case=False, na=False)]
+    if st.session_state.selected_sector != "All Categories" and "Jobs" not in st.session_state.selected_sector: df_jobs = df_jobs.iloc[0:0]
+    if st.session_state.search_filter: df_jobs = df_jobs[df_jobs["title"].str.contains(st.session_state.search_filter, case=False, na=False)]
 
-# =====================================================================
-# 9. BACK-CALCULATION TELEMETRY ENGINE
-# =====================================================================
+# Dynamic aggregation values
 opportunity_universe = len(df_tenders_raw) + len(df_jobs_raw)
-total_opportunities_today = len(df_tenders) + len(df_jobs)
-total_project_value = df_tenders["amount_num"].sum() if not df_tenders.empty else 0
-avg_opp_value = df_tenders["amount_num"].mean() if not df_tenders.empty and len(df_tenders) > 0 else 0
+total_project_value = df_tenders["amount_num"].sum() if not df_tenders.empty else 0.0
 matching_count = len(df_tenders_raw[df_tenders_raw["match_score"] >= 75]) if not df_tenders_raw.empty else 0
 high_conf_count = len(df_tenders_raw[df_tenders_raw["match_score"] >= 85]) if not df_tenders_raw.empty else 0
 closing_count = len(df_tenders_raw[~df_tenders_raw["deadline"].str.lower().str.contains("open|specified", na=True)]) if not df_tenders_raw.empty else 0
 
 # =====================================================================
-# 10. CONTROL SIDEBAR SYNC PANEL
+# 9. CONTROL WORKSPACE SIDEBAR
 # =====================================================================
 with st.sidebar:
-    st.title("Opporta Control Panel")
-    st.caption("Engine State Personalization Context")
+    st.title("Control Center")
+    st.caption(f"Authenticated Tenant: {current_user_email}")
     
-    st.session_state.selected_state = st.selectbox(
-        "Target Geography Matrix", 
-        ["All Regions", "Chhattisgarh", "Uttar Pradesh"], 
-        index=["All Regions", "Chhattisgarh", "Uttar Pradesh"].index(st.session_state.selected_state)
-    )
+    st.session_state.selected_state = st.selectbox("Geography Selection", ["All Regions", "Chhattisgarh", "Uttar Pradesh"], index=["All Regions", "Chhattisgarh", "Uttar Pradesh"].index(st.session_state.selected_state))
     
-    available_sectors = [
-        "All Categories", "Coal & Mining", "Government Supplies", "Medical Procurement",
-        "Civil Infrastructure", "Transport & Logistics", "Electrical & Energy", "Water & Irrigation",
-        "IT & Digital Services", "Municipal Projects", "Panchayat Projects", "Government Jobs",
-        "Consultancy Services", "AMC & Maintenance Contracts"
-    ]
-    sect_idx = available_sectors.index(st.session_state.selected_sector) if st.session_state.selected_sector in available_sectors else 0
-    st.session_state.selected_sector = st.selectbox("Primary Category Cluster", available_sectors, index=sect_idx)
+    sectors_pool = ["All Categories", "Coal & Mining", "Medical Procurement", "Civil Infrastructure", "Transport & Logistics", "Electrical & Energy", "Water & Irrigation", "IT & Digital Services", "Government Jobs"]
+    st.session_state.selected_sector = st.selectbox("Category Selection", sectors_pool, index=sectors_pool.index(st.session_state.selected_sector) if st.session_state.selected_sector in sectors_pool else 0)
     
-    st.session_state.search_filter = st.text_input("Heuristic Filter", value=st.session_state.search_filter, placeholder="Type constraints...")
-    st.session_state.min_score_filter = st.slider("Minimum AI Filter Node", 0, 100, int(st.session_state.min_score_filter), 5)
+    st.session_state.search_filter = st.text_input("Global Keyword Node", value=st.session_state.search_filter)
+    st.session_state.min_score_filter = st.slider("AI Match Confidence Cap", 0, 100, int(st.session_state.min_score_filter), 5)
+    feed_limit = st.slider("Max View Records Throttler", 5, 100, 15)
     
-    # RESOLVED NAMEERROR: Global structural size tracking assignment loop
-    feed_limit = st.slider("Workspace Feed Limit size", 5, 100, 15, 1)
-    
-    if st.button("Reset Global Filter Matrices", use_container_width=True):
-        st.session_state.selected_state = "All Regions"
-        st.session_state.selected_sector = "All Categories"
-        st.session_state.search_filter = ""
-        st.session_state.min_score_filter = 0
-        st.session_state.kpi_focus = "Clear Focus"
+    if st.button("Log Out of Session Room", use_container_width=True):
+        st.session_state.auth_session = None
         st.rerun()
 
 # =====================================================================
-# 11. ENTERPRISE HEADER CONTROL MATRIX
+# 10. MULTI-TENANT WORKSPACE CORE DASHBOARD
 # =====================================================================
-st.markdown("""
-<div class="opporta-topbar">
-    <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
-        <div>
-            <p class="opporta-title">Good Morning, Akash 👋</p>
-            <div class="opporta-subtle">Operational Telemetry: Top 1% High Signal Real-time Analytics Engine Active.</div>
-        </div>
-    </div>
-</div>
-""", unsafe_allow_html=True)
+st.markdown(f'<div class="opporta-topbar"><div style="display:flex; justify-content:space-between; align-items:center;"><div><p class="opporta-title">Opporta Enterprise OS 👋</p><div class="opporta-subtle">Authenticated Workspace Node ID: {current_user_id}</div></div></div></div>', unsafe_allow_html=True)
 
-h_col1, h_col2, h_col3, h_col4 = st.columns(4)
-with h_col1:
-    if st.button(f"🌐 Universe: {opportunity_universe}", use_container_width=True):
+# Clickable Interactive Metrics Navigation Elements
+k_col1, k_col2, k_col3, k_col4 = st.columns(4)
+with k_col1:
+    if st.button(f"🌐 Universe Scope: {opportunity_universe}", use_container_width=True):
         st.session_state.kpi_focus = "Clear Focus"
         st.rerun()
-with h_col2:
+with k_col2:
     if st.button(f"🎯 Matching Profile: {matching_count}", use_container_width=True):
         st.session_state.kpi_focus = "Matching Only"
         st.rerun()
-with h_col3:
-    if st.button(f"🔥 High Qualification: {high_conf_count}", use_container_width=True):
+with k_col3:
+    if st.button(f"🔮 High Probability: {high_conf_count}", use_container_width=True):
         st.session_state.kpi_focus = "High Confidence"
         st.rerun()
-with h_col4:
-    if st.button(f"⏳ Urgent Deadlines: {closing_count}", use_container_width=True):
+with k_col4:
+    if st.button(f"⏳ Action Deadlines: {closing_count}", use_container_width=True):
         st.session_state.kpi_focus = "Urgent Cycles"
         st.rerun()
 
-g_search = st.text_input("Global Search Matrix Explorer", value=st.session_state.search_filter, placeholder="Query structural procurement nodes...")
-if g_search != st.session_state.search_filter:
-    st.session_state.search_filter = g_search
-    st.rerun()
+st.markdown(f'<div class="hero-card"><div class="hero-label">AI Multi-Tenant Context Summary</div><div class="hero-heading">Aggregation Matrix: Compiling {len(df_tenders)+len(df_jobs)} active paths under configuration target node "{st.session_state.kpi_focus}"</div><div class="hero-copy">Total contract volume pool capacity under active calculation: <b>{format_inr_compact(total_project_value)}</b></div></div>', unsafe_allow_html=True)
 
-# =====================================================================
-# 12. HERO CONTROL ACTION BRIEF PANEL
-# =====================================================================
-st.markdown(f"""
-<div class="hero-card">
-    <div class="hero-label">AI Intelligence Context Executive Summary</div>
-    <div class="hero-heading">Active Analysis Workspace: Isolating {total_opportunities_today} verified contract streams.</div>
-    <div class="hero-copy">
-        Running configurations match cumulative value matrices estimated at <b>{format_inr_compact(total_project_value)}</b>.<br>
-        Active Operational Focus Sub-set Filter Constraint Status: <b>{st.session_state.kpi_focus}</b>
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-action_col1, action_col2, action_col3 = st.columns(3)
-with action_col1:
-    if st.button("⚡ Reset to View All Matches", use_container_width=True):
-        st.session_state.kpi_focus = "Clear Focus"
-        st.rerun()
-with action_col2:
-    if st.button("🚨 Focus Urgent Deadlines", use_container_width=True):
-        st.session_state.kpi_focus = "Urgent Cycles"
-        st.rerun()
-with action_col3:
-    if st.button("🔮 Focus High Probability Nodes", use_container_width=True):
-        st.session_state.kpi_focus = "High Confidence"
-        st.rerun()
-
-# =====================================================================
-# 13. SMART CATEGORY WORKSPACE MATRIX
-# =====================================================================
+# Smart Clickable Horizontal Explorer Grid Loop Elements
 st.markdown("### Smart Category Workspace Explorer")
-category_data = [
-    ("⛏️", "Coal & Mining"), ("🩺", "Medical Procurement"), ("🏗️", "Civil Infrastructure"), ("🚛", "Transport & Logistics"),
-    ("💼", "Government Jobs"), ("🏛️", "Municipal Projects"), ("⚡", "Electrical & Energy"), ("💻", "IT & Digital Services")
-]
-
 cat_cols = st.columns(4)
-for idx, (icon, label) in enumerate(category_data):
-    with cat_cols[idx % 4]:
-        count = 0
-        if not df_tenders_raw.empty and label != "Government Jobs":
-            count = int(df_tenders_raw["sector"].str.contains(label.split()[0], case=False, na=False).sum())
-        elif label == "Government Jobs":
-            count = len(df_jobs_raw)
-            
-        is_selected = st.session_state.selected_sector == label
-        btn_tag = f"🔹 {icon} {label} ({count} Live)" if is_selected else f"{icon} {label} ({count} Live)"
-        
-        if st.button(btn_tag, key=f"workspace_node_{idx}", use_container_width=True):
-            st.session_state.selected_sector = label
-            if label == "Government Jobs": st.session_state.job_subcat = "All Jobs"
+for i, c_name in enumerate(["Coal & Mining", "Medical Procurement", "Civil Infrastructure", "IT & Digital Services"]):
+    with cat_cols[i]:
+        c_count = len(df_tenders_raw[df_tenders_raw["sector"] == c_name]) if not df_tenders_raw.empty else 0
+        display_lbl = f"🔹 {c_name} ({c_count} Active)" if st.session_state.selected_sector == c_name else f"📁 {c_name} ({c_count})"
+        if st.button(display_lbl, key=f"h_cat_btn_{i}", use_container_width=True):
+            st.session_state.selected_sector = c_name
             st.rerun()
 
-# =====================================================================
-# 14. COMPARTMENT REACTION WORKSPACE TABS
-# =====================================================================
-tab_home, tab_jobs, tab_ai, tab_saved, tab_profile = st.tabs([
-    "Opportunity Feed Tracking", "Government Recruitment Center", 
-    "AI Eligibility Engine Room", "Saved Workspace Repository", "Personalized Engine Profile"
+# Workspace Operational Tab Segments
+tab_feed, tab_recruitment, tab_ai_bid, tab_alerts, tab_profile = st.tabs([
+    "Verified Opportunity Feed", "Government Job Center", "AI Bid Assistant & Engine", "Transactional Alert Logs", "Tenant Workspace Profile"
 ])
 
 # =====================================================================
-# 15. TAB WORKFLOW: OPPORTUNITY FEED
+# 11. TAB CONTEXT MODULES: PRODUCTION WORKFLOWS
 # =====================================================================
-with tab_home:
-    st.markdown("#### High-Signal Contracts Pipeline View")
-    
+with tab_feed:
     if df_tenders.empty:
-        st.markdown('<div class="empty-state">No verified contractual nodes match your currently active filter settings.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="empty-state">No records align with the active filtering variables.</div>', unsafe_allow_html=True)
     else:
-        feed_df = df_tenders.sort_values(by="match_score", ascending=False).head(feed_limit)
-        for _, row in feed_df.iterrows():
-            score = int(row.get("match_score", 0))
-            eligibility, el_class = eligibility_label(score)
+        for _, row in df_tenders.sort_values(by="match_score", ascending=False).head(feed_limit).iterrows():
+            scr = int(row.get("match_score", 0))
+            lbl, cls = ("Eligible", "success") if scr >= 85 else (("Partially Eligible", "warning") if scr >= 72 else ("Needs Review", "danger"))
             
-            t_text = extract_safe_string(row.get("title"))
-            a_text = extract_safe_string(row.get("agency"))
-            l_text = extract_safe_string(row.get("location"))
-            val_text = extract_safe_string(row.get("project_value"))
-            emd_text = extract_safe_string(row.get("emd"))
-            dl_text = extract_safe_string(row.get("deadline"))
-            sec_text = extract_safe_string(row.get("sector"))
-            ct_text = extract_safe_string(row.get("contract_type"))
-            url_link = extract_safe_string(row.get("url"))
-
-            html_card = f'<div class="opp-card"><div class="opp-title">{t_text}</div><div class="opp-meta">{a_text} - {l_text}</div><div style="margin-bottom:12px;"><span class="badge badge-primary">Match Score {score}%</span><span class="badge badge-{el_class}">{eligibility}</span></div><div class="opp-grid"><div class="opp-stat"><div class="opp-stat-label">Project Value</div><div class="opp-stat-value">{val_text}</div></div><div class="opp-stat"><div class="opp-stat-label">EMD</div><div class="opp-stat-value">{emd_text}</div></div><div class="opp-stat"><div class="opp-stat-label">Deadline</div><div class="opp-stat-value">{dl_text}</div></div><div class="opp-stat"><div class="opp-stat-label">Sector</div><div class="opp-stat-value">{sec_text}</div></div><div class="opp-stat"><div class="opp-stat-label">Contract Type</div><div class="opp-stat-value">{ct_text}</div></div></div></div>'
-            st.markdown(html_card, unsafe_allow_html=True)
-
-            a_col1, a_col2, a_col3 = st.columns([1, 1, 1])
-            with a_col1:
-                if url_link and url_link.lower() != "nan":
-                    st.link_button("📂 View Source Document Links", url_link, use_container_width=True)
-                else:
-                    st.button("❌ Link Not Available", disabled=True, key=f"no_lnk_{row.name}", use_container_width=True)
-            with a_col2:
-                is_saved = t_text in st.session_state.saved_opportunities
-                save_label = "⭐ Remove from Workspace" if is_saved else "📥 Cache to Workspace Repository"
-                if st.button(save_label, key=f"save_act_{row.name}", use_container_width=True):
-                    if is_saved: st.session_state.saved_opportunities.remove(t_text)
-                    else: st.session_state.saved_opportunities.add(t_text)
-                    st.toast("Repository updated successfully.")
+            t, a, l = extract_safe_string(row.get("title")), extract_safe_string(row.get("agency")), extract_safe_string(row.get("location"))
+            v, e, d = extract_safe_string(row.get("project_value")), extract_safe_string(row.get("emd")), extract_safe_string(row.get("deadline"))
+            sec, url_lnk = extract_safe_string(row.get("sector")), extract_safe_string(row.get("url"))
+            
+            h_card = f'<div class="opp-card"><div class="opp-title">{t}</div><div class="opp-meta">{a} - {l}</div><div style="margin-bottom:12px;"><span class="badge badge-primary">Match Score {scr}%</span><span class="badge badge-{cls}">{lbl}</span></div><div class="opp-grid"><div class="opp-stat"><div class="opp-stat-label">Project Value</div><div class="opp-stat-value">{v}</div></div><div class="opp-stat"><div class="opp-stat-label">EMD</div><div class="opp-stat-value">{e}</div></div><div class="opp-stat"><div class="opp-stat-label">Deadline</div><div class="opp-stat-value">{d}</div></div><div class="opp-stat"><div class="opp-stat-label">Sector</div><div class="opp-stat-value">{sec}</div></div><div class="opp-stat"><div class="opp-stat-label">Type</div><div class="opp-stat-value">Tender Work</div></div></div></div>'
+            st.markdown(h_card, unsafe_allow_html=True)
+            
+            col_a1, col_a2 = st.columns(2)
+            with col_a1:
+                # Target Path 1: Persistent Save Node Binding to User ID
+                res_check = supabase.table("opporta_saved").select("*").eq("user_id", current_user_id).eq("opportunity_title", t).execute()
+                is_saved = len(res_check.data) > 0 if res_check.data else False
+                sv_lbl = "⭐ Clear Bookmark" if is_saved else "📥 Bookmark to Tenant Database"
+                if st.button(sv_lbl, key=f"sv_db_btn_{row.name}", use_container_width=True):
+                    if is_saved: supabase.table("opporta_saved").delete().eq("user_id", current_user_id).eq("opportunity_title", t).execute()
+                    else: supabase.table("opporta_saved").insert({"user_id": current_user_id, "opportunity_title": t}).execute()
+                    st.toast("Ecosystem state table tracking refreshed.")
                     st.rerun()
-            with a_col3:
-                rule_text = f"Alert trigger created for {sec_text} nodes matching keyword context '{t_text[:15]}'"
-                if st.button("🔔 Route Real-time Trigger Rules", key=f"alert_act_{row.name}", use_container_width=True):
-                    st.session_state.active_alerts.append(rule_text)
-                    st.toast("Active push node notification trigger established.")
+            with col_a2:
+                # Target Path 2: Production Real-time Trigger Rules Injection Array Link
+                if st.button("🔔 Queue Real-time WhatsApp Alert Gateway Rule", key=f"al_db_btn_{row.name}", use_container_width=True):
+                    rule_payload = f"Immediate notification alert schema dispatched for profile alignment constraints: {t[:30]}..."
+                    supabase.table("opporta_alerts").insert({"user_id": current_user_id, "alert_rule": rule_payload, "channel": "whatsapp"}).execute()
+                    st.toast("Dispatched rule row block directly onto cloud alert queuing schema.")
 
-# =====================================================================
-# 16. TAB WORKFLOW: RECRUITMENT EXPERIENCE PIPELINES
-# =====================================================================
-with tab_jobs:
-    st.markdown("#### Clickable Vacancy Context Matrices Router")
-    
-    job_categories = ["All Jobs", "SSC", "PSC", "Railway", "Police", "Teaching", "Engineering", "Medical", "PSU"]
-    job_cols = st.columns(9)
-    for idx, jc in enumerate(job_categories):
-        with job_cols[idx]:
-            sub_active = st.session_state.job_subcat == jc
-            j_label = f"🔹 {jc}" if sub_active else jc
-            if st.button(j_label, key=f"job_sub_btn_{idx}", use_container_width=True):
-                st.session_state.job_subcat = jc
+with tab_recruitment:
+    # Sub-tags
+    sub_j_cols = st.columns(4)
+    for index, name in enumerate(["All Jobs", "Railway", "Engineering", "Medical"]):
+        with sub_j_cols[index]:
+            if st.button(f"🔹 {name}" if st.session_state.job_subcat == name else name, key=f"rec_sub_{index}", use_container_width=True):
+                st.session_state.job_subcat = name
                 st.rerun()
-
+                
     if df_jobs.empty:
-        st.markdown('<div class="empty-state">No recruitment parameters match your filter vectors.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="empty-state">No live jobs loaded.</div>', unsafe_allow_html=True)
     else:
-        active_sub = st.session_state.job_subcat
-        df_j_filtered = df_jobs.copy()
-        
-        if active_sub != "All Jobs":
-            mapping_keys = {
-                "SSC": ["ssc", "staff selection", "cgl", "chsl"],
-                "PSC": ["psc", "upsc", "public service", "cgpsc", "uppsc"],
-                "Railway": ["railway", "rrb", "ntpc", "loco", "rail"],
-                "Police": ["police", "sub inspector", "constable", "si ", "defence", "army"],
-                "Teaching": ["teacher", "teaching", "prof", "lecturer", "shikshak", "school"],
-                "Engineering": ["engineer", "je ", "ae ", "technical", "civil engineer"],
-                "Medical": ["medical", "doctor", "nurse", "health", "amo ", "pharmacist"],
-                "PSU": ["psu", "secl", "ntpc", "sail", "coalltd", "corporation", "limited", "cspdcl"]
-            }
-            keywords = mapping_keys.get(active_sub, [active_sub.lower()])
-            df_j_filtered = df_j_filtered[
-                df_j_filtered["title"].str.lower().apply(lambda x: any(k in x for k in keywords)) |
-                df_j_filtered["agency"].str.lower().apply(lambda x: any(k in x for k in keywords))
-            ]
-
-        if df_j_filtered.empty:
-            st.markdown(f'<div class="empty-state">No vacancy listings found for subset category matches: "<b>{active_sub}</b>"</div>', unsafe_allow_html=True)
-        else:
-            for _, row in df_j_filtered.sort_values(by="match_score", ascending=False).head(feed_limit).iterrows():
-                j_t = extract_safe_string(row.get("title"))
-                j_a = extract_safe_string(row.get("agency"))
-                j_s = extract_safe_string(row.get("state"))
-                j_v = extract_safe_string(row.get("vacancies"))
-                j_l = extract_safe_string(row.get("salary"))
-                j_q = extract_safe_string(row.get("qualification"))
-                j_d = extract_safe_string(row.get("deadline"))
-                j_u = extract_safe_string(row.get("url"))
-
-                html_job = f'<div class="opp-card"><div class="opp-title">{j_t}</div><div class="opp-meta">{j_a} - {j_s}</div><div class="opp-grid"><div class="opp-stat"><div class="opp-stat-label">Vacancies</div><div class="opp-stat-value">{j_v}</div></div><div class="opp-stat"><div class="opp-stat-label">Salary</div><div class="opp-stat-value">{j_l}</div></div><div class="opp-stat"><div class="opp-stat-label">Qualification</div><div class="opp-stat-value">{j_q}</div></div><div class="opp-stat"><div class="opp-stat-label">Deadline</div><div class="opp-stat-value">{j_d}</div></div><div class="opp-stat"><div class="opp-stat-label">AI Match Score</div><div class="opp-stat-value">{row.get("match_score", 0)}%</div></div></div></div>'
-                st.markdown(html_job, unsafe_allow_html=True)
-                if j_u and j_u.lower() != "nan": st.link_button("📂 View Notification Vectors", j_u)
+        df_j_view = df_jobs.copy()
+        if st.session_state.job_subcat != "All Jobs":
+            df_j_view = df_j_view[df_j_view["title"].str.lower().str.contains(st.session_state.job_subcat.lower(), na=False)]
+            
+        for _, row in df_j_view.sort_values(by="match_score", ascending=False).head(feed_limit).iterrows():
+            html_job = f'<div class="opp-card"><div class="opp-title">{row["title"]}</div><div class="opp-meta">{row["agency"]} - {row["state"]}</div><div class="opp-grid"><div class="opp-stat"><div class="opp-stat-label">Vacancies</div><div class="opp-stat-value">{row["vacancies"]}</div></div><div class="opp-stat"><div class="opp-stat-label">Salary</div><div class="opp-stat-value">{row["salary"]}</div></div><div class="opp-stat"><div class="opp-stat-label">Qualification</div><div class="opp-stat-value">{row["qualification"]}</div></div><div class="opp-stat"><div class="opp-stat-label">Deadline</div><div class="opp-stat-value">{row["deadline"]}</div></div><div class="opp-stat"><div class="opp-stat-label">Match Confidence</div><div class="opp-stat-value">{row["match_score"]}%</div></div></div></div>'
+            st.markdown(html_job, unsafe_allow_html=True)
 
 # =====================================================================
-# 17. TAB WORKFLOW: AI ENGINE ROOM
+# 12. TARGET DRIVEN: AI COGNITIVE BID DOCUMENT GENERATOR MODULE
 # =====================================================================
-with tab_ai:
-    st.markdown("#### AI Eligibility Center")
-    l_box, r_box = st.columns([1.1, 1])
-    with l_box:
-        up_file = st.file_uploader("Upload Tender PDF Matrix Node", type=["pdf"])
-        paste_req = st.text_area("Or compile raw textual configuration requirements", placeholder="Paste terms here...")
+with tab_ai_bid:
+    st.markdown("#### AI Bid Assistant Room")
+    st.caption("Generate optimized procurement and technical documentation arrays instantly.")
+    
+    l_pdf, r_output = st.columns([1, 1.2])
+    with l_pdf:
+        doc_file = st.file_uploader("Upload Target Technical Matrix PDF", type=["pdf"], key="bid_pdf_uploader")
+        doc_context = st.text_area("Or specify direct contextual tender guidelines", placeholder="Paste analytical context elements here...")
         
-        if st.button("Execute Active Analysis Sequence", use_container_width=True):
+        if st.button("🚀 Compile Optimized Bid Documentation Framework", use_container_width=True):
             if not ai_ready:
-                st.error("🚨 Configuration Error: Gemini API key validation state token missing.")
-            elif not up_file and not paste_req:
-                st.warning("Please upload a file or paste requirements.")
+                st.error("AI Node offline. Provide configuration tokens.")
+            elif not doc_file and not doc_context:
+                st.warning("Provide documentation nodes or contextual elements to execute.")
             else:
-                with st.spinner("🧠 Compiling extraction schemas via LLM nodes..."):
+                with st.spinner("🧠 Generating world-class response layouts via Gemini..."):
                     try:
-                        instructions = "Analyze this tender document. Extract criteria elements: Turnover, Experience, EMD, Class, GST Requirements, and an executive technical work summary."
-                        inputs = [instructions]
-                        if up_file: inputs.append({"mime_type": "application/pdf", "data": up_file.getvalue()})
-                        if paste_req: inputs.append(paste_req)
+                        generation_blueprint = f"""
+                        You are a world-class legal bid coordinator and procurement specialist. 
+                        Draft an official corporate Tender Application Cover Letter and EMD Exemption Declaration Request Letter.
+                        Align this response precisely to an enterprise operations structure running a {db_profile['business_type']} profile with an active verified financial turnover status estimated at {db_profile['turnover']}.
+                        Ensure the formatting incorporates clean professional spaces, headers, and reference elements based on the document text provided.
+                        """
+                        inputs = [generation_blueprint]
+                        if doc_file: inputs.append({"mime_type": "application/pdf", "data": doc_file.getvalue()})
+                        if doc_context: inputs.append(doc_context)
                         
                         response = model.generate_content(inputs)
-                        st.success("Analysis Complete")
-                        st.markdown(f'<div class="info-card" style="margin-top:16px; line-height:1.6;">{response.text}</div>', unsafe_allow_html=True)
-                    except Exception as e:
-                        st.error(f"Execution Error: {str(e)}")
-    with r_box:
-        st.markdown("""
-        <div class="info-card">
-            <div class="section-title" style="margin-top:0; font-size:16px;">Target Extrapolated Schema Models</div>
-            <div class="section-subtitle" style="font-size:13px; color:var(--muted);">Automated verification structures mapped directly to personalized configuration profiles.</div>
-            <hr style="opacity:0.12; margin:12px 0;">
-            <div class="pill-row">
-                <span class="pill">Financial Turnovers Checks</span>
-                <span class="pill">Past Experience Mapping</span>
-                <span class="pill">Statutory GST Verification</span>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+                        st.session_state.bid_doc_output = response.text
+                        st.success("Compilation Pipeline Secure.")
+                    except Exception as e: st.error(f"Error: {str(e)}")
+                    
+    with r_output:
+        if st.session_state.bid_doc_output:
+            st.markdown("##### Compiled Document Preview Output")
+            st.text_area("Generated Technical Draft Structure", value=st.session_state.bid_doc_output, height=450)
+            st.download_button("📥 Export Compiled Asset Node Text", data=st.session_state.bid_doc_output, file_name="opporta_bid_package.txt")
+        else:
+            st.markdown('<div class="empty-state">Documentation queue empty. Execute compilation sequence to generate drafts.</div>', unsafe_allow_html=True)
 
-# =====================================================================
-# 18. TAB WORKFLOW: WORKSPACE REPOSITORY
-# =====================================================================
-with tab_saved:
-    st.markdown("#### Workspace Repository Nodes")
+with tab_alerts:
+    st.markdown("#### Persisted System Notification Log Channels")
     
-    al_col1, al_col2 = st.columns(2)
-    with al_col1:
-        st.markdown("##### Bookmarked Opportunity Nodes Cache")
-        if not st.session_state.saved_opportunities:
-            st.info("No contracts saved to this workspace repository yet.")
-        else:
-            for item in list(st.session_state.saved_opportunities):
-                st.markdown(f"🔒 **{item}**")
-                if st.button("Delete Cache Node Record", key=f"del_cache_{hash(item)}"):
-                    st.session_state.saved_opportunities.remove(item)
-                    st.rerun()
-    with al_col2:
-        st.markdown("##### Real-time Push Trigger Rule Matrix logs")
-        if not st.session_state.active_alerts:
-            st.info("No notification streams mapped.")
-        else:
-            for idx, alert in enumerate(st.session_state.active_alerts):
-                st.success(f"🔔 {alert}")
-            if st.button("Purge Active Alerts Engine", use_container_width=True):
-                st.session_state.active_alerts = []
-                st.rerun()
+    log_c1, log_c2 = st.columns(2)
+    with log_c1:
+        st.markdown("##### Bookmarked Active Relational Tracks")
+        res_saved = supabase.table("opporta_saved").select("opportunity_title").eq("user_id", current_user_id).execute()
+        if res_saved.data:
+            for item in res_saved.data:
+                st.markdown(f"🔖 `Persisted Row Node` - **{item['opportunity_title']}**")
+        else: st.info("Ecosystem bookmark repository empty.")
+    with log_c2:
+        st.markdown("##### Outbound Rule Gateway Alerts Log Queue")
+        res_alerts = supabase.table("opporta_alerts").select("alert_rule", "channel").eq("user_id", current_user_id).execute()
+        if res_alerts.data:
+            for alert in res_alerts.data:
+                st.success(f"📱 Channel [{alert['channel'].upper()}] Rule Outflow -> {alert['alert_rule']}")
+        else: st.info("Alert rule queues empty.")
 
-# =====================================================================
-# 19. TAB WORKFLOW: PERSONALIZED PROFILE MATRIX
-# =====================================================================
 with tab_profile:
-    st.markdown("#### Personalized Engine Profile Management")
-    prof = st.session_state.user_profile
+    st.markdown("#### Cloud Relational Table Profile Node Configurations")
     
     col_p1, col_p2 = st.columns(2)
     with col_p1:
-        b_type = st.selectbox("Corporate Functional Model Identity", ["Contractor", "Supplier", "Manufacturer", "Transporter"], index=["Contractor", "Supplier", "Manufacturer", "Transporter"].index(prof["business_type"]))
-        t_val = st.text_input("Verified Annual Financial Turnover Nodes", value=prof["turnover"])
+        new_b_type = st.selectbox("Corporate Model Identity Structure", ["Contractor", "Supplier", "Manufacturer", "Transporter"], index=["Contractor", "Supplier", "Manufacturer", "Transporter"].index(db_profile["business_type"]))
+        new_turnover = st.text_input("Verified Account Balance Node Turnover Capabilities", value=db_profile["turnover"])
     with col_p2:
-        c_class = st.selectbox("Contractor Structural Registration Class Tier", ["Class A", "Class B", "Class C", "Not Applicable"], index=["Class A", "Class B", "Class C", "Not Applicable"].index(prof["contractor_class"]))
-        inds = st.multiselect("Core Industrial Sectors", available_sectors[1:], default=prof["industries"])
+        new_class = st.selectbox("Registration Class Tier Alignment Profile", ["Class A", "Class B", "Class C", "Not Applicable"], index=["Class A", "Class B", "Class C", "Not Applicable"].index(db_profile["contractor_class"]))
+        new_inds = st.multiselect("Core Domain Focus Clusters", sectors_pool[1:], default=db_profile["industries"])
         
-    if st.button("Save Profile Parameters & Re-index Recommendation Engine", use_container_width=True):
-        st.session_state.user_profile = {
-            "business_type": b_type,
-            "turnover": t_val,
-            "contractor_class": c_class,
-            "industries": inds
-        }
-        st.toast("Profile data structured successfully. Re-indexing score criteria nodes.")
+    if st.button("Commit Parameter Configurations Directly to Cloud Infrastructure", use_container_width=True):
+        updated_payload = {"business_type": new_b_type, "turnover": new_turnover, "contractor_class": new_class, "industries": new_inds}
+        supabase.table("opporta_profiles").update(updated_payload).eq("user_id", current_user_id).execute()
+        st.cache_data.clear()
+        st.toast("Database schema parameters synchronized successfully.")
         st.rerun()
 
 # =====================================================================
-# 20. INFRASTRUCTURE SYSTEM METRICS FOOTER
+# 13. SYSTEMS INFRASTRUCTURE TELEMETRY FOOTER
 # =====================================================================
 st.write("---")
-f_col1, f_col2, f_col3 = st.columns(3)
-with f_col1: st.caption(f"Supabase Backend Pipeline Synchronized: Verified Active ({tenders_source if tenders_source else 'Cache'})")
-with f_col2: st.caption(f"Active Filtering Focus Criteria Context: {st.session_state.kpi_focus}")
-with f_col3: st.caption(f"Operational Execution Matrix Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.caption(f"Ecosystem Multi-Tenant Connection Verification Sequence: Connected 🟢 | Secure Active User Session Session ID Node: {current_user_id}")

@@ -1,0 +1,33 @@
+name: Continuous Ingestion Opporta Pipe Automation
+
+on:
+  schedule:
+    # Standard Cron Expression representing daily triggering loops at exactly 02:00 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allows manual pipeline triggering from the GitHub dashboard
+
+jobs:
+  execute-ingestion:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ingest Source Code Matrix Repository
+        uses: actions/checkout@v4
+
+      - name: Initialize System Python Infrastructure Environment Nodes
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Compile Pipeline Dependencies Required
+        run: |
+          pip install -r requirements.txt
+          # Add any explicit crawling framework requirements if necessary
+
+      - name: Run Background Scraping Engines Pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          # Replace 'scraper_entry.py' with the path to your actual standalone scraper script
+          python scraper_entry.py

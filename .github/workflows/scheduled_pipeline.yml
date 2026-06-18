@@ -2,13 +2,6 @@ name: Opporta 24/7 Cloud Engine
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # Runs every 2 hours
-  workflow_dispatch: # Allows you to trigger it manually
-
-name: Opporta 24/7 Cloud Engine
-
-on:
-  schedule:
     - cron: '0 */2 * * *'
   workflow_dispatch:
 

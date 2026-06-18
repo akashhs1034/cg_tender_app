@@ -3,6 +3,7 @@ from supabase import create_client
 import pandas as pd
 from datetime import datetime
 import random
+import re  # Added for AI Score Extraction
 import google.generativeai as genai
 
 # =====================================================================
@@ -149,7 +150,6 @@ def load_db_profile(uid):
     try:
         res = supabase.table("opporta_profiles").select("*").eq("user_id", uid).execute()
         if res.data: return res.data[0]
-        # Auto-provision profile node on fresh user detection
         default_profile = {"user_id": uid, "business_type": "Contractor", "turnover": "₹5 Crore", "contractor_class": "Class A", "industries": ["Civil Infrastructure"]}
         supabase.table("opporta_profiles").insert(default_profile).execute()
         return default_profile
@@ -158,7 +158,7 @@ def load_db_profile(uid):
 
 db_profile = load_db_profile(current_user_id)
 
-# Initialize Session-States with DB Ground-Truth Values
+# Initialize Session-States
 STATE_MANAGEMENT_NODES = {
     "selected_state": "All Regions",
     "selected_sector": "All Categories",
@@ -245,7 +245,6 @@ def fetch_jobs_stream():
 df_tenders_raw = fetch_tenders_stream()
 df_jobs_raw = fetch_jobs_stream()
 
-# Transform Arrays
 if not df_tenders_raw.empty:
     df_tenders_raw = df_tenders_raw.loc[:, ~df_tenders_raw.columns.duplicated()].copy()
     df_tenders_raw = df_tenders_raw[df_tenders_raw["title"].apply(is_genuine_work_tender)].copy()
@@ -327,7 +326,6 @@ with st.sidebar:
 # =====================================================================
 st.markdown(f'<div class="opporta-topbar"><div style="display:flex; justify-content:space-between; align-items:center;"><div><p class="opporta-title">Opporta Enterprise OS 👋</p><div class="opporta-subtle">Authenticated Workspace Node ID: {current_user_id}</div></div></div></div>', unsafe_allow_html=True)
 
-# Clickable Interactive Metrics Navigation Elements
 k_col1, k_col2, k_col3, k_col4 = st.columns(4)
 with k_col1:
     if st.button(f"🌐 Universe Scope: {opportunity_universe}", use_container_width=True):
@@ -348,7 +346,6 @@ with k_col4:
 
 st.markdown(f'<div class="hero-card"><div class="hero-label">AI Multi-Tenant Context Summary</div><div class="hero-heading">Aggregation Matrix: Compiling {len(df_tenders)+len(df_jobs)} active paths under configuration target node "{st.session_state.kpi_focus}"</div><div class="hero-copy">Total contract volume pool capacity under active calculation: <b>{format_inr_compact(total_project_value)}</b></div></div>', unsafe_allow_html=True)
 
-# Smart Clickable Horizontal Explorer Grid Loop Elements
 st.markdown("### Smart Category Workspace Explorer")
 cat_cols = st.columns(4)
 for i, c_name in enumerate(["Coal & Mining", "Medical Procurement", "Civil Infrastructure", "IT & Digital Services"]):
@@ -359,9 +356,9 @@ for i, c_name in enumerate(["Coal & Mining", "Medical Procurement", "Civil Infra
             st.session_state.selected_sector = c_name
             st.rerun()
 
-# Workspace Operational Tab Segments
-tab_feed, tab_recruitment, tab_ai_bid, tab_alerts, tab_profile = st.tabs([
-    "Verified Opportunity Feed", "Government Job Center", "AI Bid Assistant & Engine", "Transactional Alert Logs", "Tenant Workspace Profile"
+# Workspace Operational Tab Segments (ADDED AI WIN PREDICTOR HERE)
+tab_feed, tab_recruitment, tab_ai_eval, tab_ai_bid, tab_alerts, tab_profile = st.tabs([
+    "Verified Opportunity Feed", "Government Job Center", "AI Win Predictor", "AI Bid Assistant & Engine", "Transactional Alert Logs", "Tenant Workspace Profile"
 ])
 
 # =====================================================================
@@ -384,7 +381,6 @@ with tab_feed:
             
             col_a1, col_a2 = st.columns(2)
             with col_a1:
-                # Target Path 1: Persistent Save Node Binding to User ID
                 res_check = supabase.table("opporta_saved").select("*").eq("user_id", current_user_id).eq("opportunity_title", t).execute()
                 is_saved = len(res_check.data) > 0 if res_check.data else False
                 sv_lbl = "⭐ Clear Bookmark" if is_saved else "📥 Bookmark to Tenant Database"
@@ -394,14 +390,12 @@ with tab_feed:
                     st.toast("Ecosystem state table tracking refreshed.")
                     st.rerun()
             with col_a2:
-                # Target Path 2: Production Real-time Trigger Rules Injection Array Link
                 if st.button("🔔 Queue Real-time WhatsApp Alert Gateway Rule", key=f"al_db_btn_{row.name}", use_container_width=True):
                     rule_payload = f"Immediate notification alert schema dispatched for profile alignment constraints: {t[:30]}..."
                     supabase.table("opporta_alerts").insert({"user_id": current_user_id, "alert_rule": rule_payload, "channel": "whatsapp"}).execute()
                     st.toast("Dispatched rule row block directly onto cloud alert queuing schema.")
 
 with tab_recruitment:
-    # Sub-tags
     sub_j_cols = st.columns(4)
     for index, name in enumerate(["All Jobs", "Railway", "Engineering", "Medical"]):
         with sub_j_cols[index]:
@@ -419,6 +413,36 @@ with tab_recruitment:
         for _, row in df_j_view.sort_values(by="match_score", ascending=False).head(feed_limit).iterrows():
             html_job = f'<div class="opp-card"><div class="opp-title">{row["title"]}</div><div class="opp-meta">{row["agency"]} - {row["state"]}</div><div class="opp-grid"><div class="opp-stat"><div class="opp-stat-label">Vacancies</div><div class="opp-stat-value">{row["vacancies"]}</div></div><div class="opp-stat"><div class="opp-stat-label">Salary</div><div class="opp-stat-value">{row["salary"]}</div></div><div class="opp-stat"><div class="opp-stat-label">Qualification</div><div class="opp-stat-value">{row["qualification"]}</div></div><div class="opp-stat"><div class="opp-stat-label">Deadline</div><div class="opp-stat-value">{row["deadline"]}</div></div><div class="opp-stat"><div class="opp-stat-label">Match Confidence</div><div class="opp-stat-value">{row["match_score"]}%</div></div></div></div>'
             st.markdown(html_job, unsafe_allow_html=True)
+
+# =====================================================================
+# 11b. NEW MODULE: AI WIN PREDICTOR
+# =====================================================================
+with tab_ai_eval:
+    st.markdown("#### 🎯 AI Feasibility Evaluator")
+    st.caption("Predict project win-probability based on your verified tenant profile turnover.")
+    
+    if df_tenders.empty:
+        st.info("No tenders available for evaluation. Check your database connection.")
+    else:
+        selected_title = st.selectbox("Select Tender for Analysis", options=df_tenders['title'])
+        
+        if st.button("Analyze Win Probability", use_container_width=True):
+            # Using Regex to pull the score dynamically packed by the scraper
+            score_match = re.search(r"Win Score: (\d+)%", selected_title)
+            score = int(score_match.group(1)) if score_match else 50
+            
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.metric(label="Win Probability", value=f"{score}%")
+            with col2:
+                st.progress(score / 100)
+            
+            if score > 70:
+                st.success("High Feasibility: Proceed to bid documentation generation.")
+            elif score > 40:
+                st.warning("Moderate Feasibility: Review EMD and capacity requirements closely.")
+            else:
+                st.error("Low Feasibility: Project metrics exceed current turnover capacity thresholds.")
 
 # =====================================================================
 # 12. TARGET DRIVEN: AI COGNITIVE BID DOCUMENT GENERATOR MODULE

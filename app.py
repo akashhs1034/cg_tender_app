@@ -68,7 +68,6 @@ st.markdown("""
     .stTabs [data-baseweb="tab"] { background: #F8FAFC; border: 1px solid var(--border); border-radius: 12px; padding: 10px 16px; color: var(--muted); font-weight: 600; }
     .stTabs [aria-selected="true"] { background: var(--card) !important; color: var(--primary) !important; border-color: rgba(79,70,229,0.20) !important; }
     
-    /* Make standard Streamlit buttons feel like premium cards inside the Explorer framework */
     .stButton > button {
         border-radius: 16px !important;
         border: 1px solid var(--border) !important;
@@ -98,7 +97,7 @@ if "clicked_category" not in st.session_state:
     st.session_state.clicked_category = "All Categories"
 
 # =====================================================================
-# 4. ROBUST DATA NORMALIZATION HELPERS
+# 4. DATA NORMALIZATION & ADVANCED CLEANING HELPERS
 # =====================================================================
 def get_valid_col(df, col_list, default=""):
     for col in col_list:
@@ -111,16 +110,40 @@ def extract_safe_string(val):
         return str(val.iloc[0]) if not val.empty else "Not specified"
     return str(val) if (pd.notna(val) and str(val).strip().lower() != "nan") else "Not specified"
 
+def is_genuine_work_tender(title):
+    """
+    Forensically filters out static documentation, notices, rules, and internal policy noise.
+    Returns True if the title indicates actual contractual work, tender procurement, or jobs.
+    """
+    title_clean = str(title).lower().strip()
+    
+    # Noise keywords that imply internal administrative data instead of contractual work
+    noise_indicators = [
+        "policy", "csr policy", "guideline", "rules", "act 20", "regulation", "grievance", 
+        "manual", "approved posts", "minutes of", "meeting", "notice board", "ppt", "presentation", 
+        "press release", "prakashan", "v विज्ञप्ति", "vignapti", "circular", "transfer order", 
+        "seniority list", "niti", "eligibility list", "citizen charter"
+    ]
+    
+    if any(noise in title_clean for noise in noise_indicators):
+        return False
+        
+    # Standard numbers or single characters without alphabetic context are typically garbage links
+    if len(title_clean) <= 3 or title_clean.isdigit():
+        return False
+        
+    return True
+
 def infer_sector(title, sector):
     text = f"{title} {sector}".lower()
     mapping = [
         ("Coal & Mining", ["coal", "mining", "mine", "secl", "nmdc"]),
         ("Medical Procurement", ["medical", "hospital", "drug", "medicine", "surgical", "health", "upmsc"]),
-        ("Civil Infrastructure", ["road", "bridge", "civil", "construction", "building", "pwd", "expressway", "upeida"]),
-        ("Transport & Logistics", ["transport", "logistics", "vehicle", "fleet", "cargo"]),
-        ("Electrical & Energy", ["power", "electric", "energy", "solar", "transformer"]),
-        ("Water & Irrigation", ["water", "irrigation", "pipeline", "phed", "jal"]),
-        ("IT & Digital Services", ["software", "it", "digital", "server", "network", "cctv"]),
+        ("Civil Infrastructure", ["road", "bridge", "civil", "construction", "building", "pwd", "expressway", "upeida", "building", "nhai"]),
+        ("Transport & Logistics", ["transport", "logistics", "vehicle", "fleet", "cargo", "bus hire", "hiring of vehicle"]),
+        ("Electrical & Energy", ["power", "electric", "energy", "solar", "transformer", "substation"]),
+        ("Water & Irrigation", ["water", "irrigation", "pipeline", "phed", "jal", "tube well"]),
+        ("IT & Digital Services", ["software", "it", "digital", "server", "network", "cctv", "hardware procurement"]),
         ("Municipal Projects", ["municipal", "nagar", "corporation", "urban"]),
         ("Panchayat Projects", ["panchayat", "district", "collector", "zilla"]),
         ("Government Jobs", ["recruitment", "vacancy", "job", "bharti", "post", "apply"]),
@@ -136,15 +159,15 @@ def infer_sector(title, sector):
     return sector if sector else "General Opportunities"
 
 def generate_match_score(title, sector):
-    base = 72
+    base = 74
     text = f"{title} {sector}".lower()
-    if any(k in text for k in ["coal", "medical", "transport", "engineer", "civil", "supply"]): base += 10
-    if any(k in text for k in ["urgent", "corrigendum", "walk-in"]): base -= 4
-    return min(98, max(54, base + random.randint(-8, 8)))
+    if any(k in text for k in ["tender", "nit", "supply", "construction", "transport", "hiring", "procurement"]): base += 12
+    if any(k in text for k in ["urgent", "corrigendum"]): base += 4
+    return min(98, max(55, base + random.randint(-6, 6)))
 
 def eligibility_label(score):
     if score >= 85: return "Eligible", "success"
-    if score >= 70: return "Partially Eligible", "warning"
+    if score >= 72: return "Partially Eligible", "warning"
     return "Needs Review", "danger"
 
 def format_inr_compact(value):
@@ -178,14 +201,12 @@ def init_connection():
         url = st.secrets["SUPABASE_URL"]
         key = st.secrets["SUPABASE_KEY"]
         return create_client(url, key)
-    except Exception:
-        return None
+    except Exception: return None
 
 supabase = init_connection()
 
 if supabase is None:
     st.error("🚨 Cloud Database Connection Offline.")
-    st.info("Verify your `.streamlit/secrets.toml` credentials.")
     st.stop()
 
 ai_ready = False
@@ -235,10 +256,16 @@ df_tenders_raw, tenders_source = fetch_tenders()
 df_jobs_raw, jobs_source = fetch_jobs()
 
 # =====================================================================
-# 7. FLAT STRUCTURAL DATA NORMALIZATION
+# 7. HIGH-SIGNAL INGESTION PROCESSING FILTER
 # =====================================================================
 if not df_tenders_raw.empty:
     df_tenders_raw = df_tenders_raw.loc[:, ~df_tenders_raw.columns.duplicated()].copy()
+    
+    # Expose individual rows to the content validation heuristics engine
+    df_tenders_raw["is_valid_work"] = df_tenders_raw["title"].apply(is_genuine_work_tender)
+    # Filter out administrative document noise immediately
+    df_tenders_raw = df_tenders_raw[df_tenders_raw["is_valid_work"] == True].copy()
+    
     df_tenders_raw["title"] = get_valid_col(df_tenders_raw, ["title"], "Untitled")
     df_tenders_raw["agency"] = get_valid_col(df_tenders_raw, ["agency", "department"], "Unknown Agency")
     df_tenders_raw["state"] = get_valid_col(df_tenders_raw, ["state"], "Unknown")
@@ -281,12 +308,10 @@ with st.sidebar:
         "Consultancy Services", "AMC & Maintenance Contracts", "Renewable Energy", "Manufacturing & Industrial"
     ]
     
-    # Sync visual workspace card clicks straight to the dropdown
     current_state_cat = st.session_state.clicked_category
     default_idx = available_sectors.index(current_state_cat) if current_state_cat in available_sectors else 0
 
     selected_sector = st.selectbox("Primary category", available_sectors, index=default_idx)
-    # Sync back state if modified via dropdown selector manually
     st.session_state.clicked_category = selected_sector
 
     search_query = st.text_input("Search intelligence", placeholder="Search opportunities, agencies, sectors...")
@@ -298,6 +323,7 @@ with st.sidebar:
     if st.button("Refresh cloud cache", use_container_width=True):
         st.cache_data.clear()
         st.success("Live workspace refreshed.")
+        st.write("")
         st.rerun()
 
     st.write("---")
@@ -353,7 +379,7 @@ st.markdown("""
     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap;">
         <div>
             <p class="opporta-title">Good Morning, Akash 👋</p>
-            <div class="opporta-subtle">Your opportunity intelligence layer is live across tenders, jobs, districts, and sectors.</div>
+            <div class="opporta-subtle">Your filtered opportunity intelligence layer is live across verified work contracts.</div>
         </div>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <span class="pill">🔔 Notifications</span>
@@ -389,11 +415,11 @@ with k8: st.metric("New Last 24 Hours", new_last_24h)
 st.markdown(f"""
 <div class="hero-card">
     <div class="hero-label">AI Opportunity Brief</div>
-    <div class="hero-heading">We found {matching_opportunities} opportunities matching your profile today.</div>
+    <div class="hero-heading">We found {matching_opportunities} active contracts matching your parameters today.</div>
     <div class="hero-copy">
-        Estimated business value: <b>{format_inr_compact(total_project_value)}</b>.<br>
-        <b>{high_confidence}</b> opportunities have high qualification probability.<br>
-        <b>{closing_this_week}</b> opportunities appear time-sensitive this week.
+        Estimated aggregate contract volume: <b>{format_inr_compact(total_project_value)}</b>.<br>
+        <b>{high_confidence}</b> tenders exhibit a clear runway for qualification alignment.<br>
+        <b>{closing_this_week}</b> structural opportunities present urgent targeted deadlines this cycle.
     </div>
     <div class="pill-row">
         <span class="pill">View Matches</span>
@@ -404,7 +430,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # =====================================================================
-# 14. SMART CATEGORY WORKSPACE EXPLORER (NATIVE WORKFLOWS)
+# 14. SMART CATEGORY WORKSPACE EXPLORER
 # =====================================================================
 st.markdown("## Smart Category Explorer")
 st.markdown("Navigate opportunity clusters like an intelligence workspace, not a tender portal.")
@@ -423,7 +449,6 @@ for i, (icon, label) in enumerate(category_data):
             
         button_label = f"{icon} {label}\n{count} live opportunities"
         
-        # Checking logic to visually accent the active selector element
         if st.button(button_label, key=f"workspace_cat_{i}", use_container_width=True):
             st.session_state.clicked_category = label
             st.rerun()
@@ -441,7 +466,7 @@ tab_home, tab_jobs, tab_market, tab_ai, tab_alerts, tab_profile = st.tabs([
 # =====================================================================
 with tab_home:
     st.markdown("## Opportunity Feed")
-    st.markdown("High-signal opportunities ranked for discovery, matching, and action.")
+    st.markdown("High-signal contracts ranked for forensic corporate tracking.")
 
     if global_search and not df_tenders.empty:
         feed_df = df_tenders[
@@ -453,7 +478,7 @@ with tab_home:
     else: feed_df = df_tenders.copy()
 
     if feed_df.empty:
-        st.markdown('<div class="empty-state">No opportunities match the current workspace filters.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="empty-state">No clean work contracts currently match your workspace parameters.</div>', unsafe_allow_html=True)
     else:
         feed_df = feed_df.sort_values(by="match_score", ascending=False).head(feed_limit)
 
@@ -471,7 +496,6 @@ with tab_home:
             contract_type = extract_safe_string(row.get("contract_type", "Tender / Opportunity"))
             url_link = extract_safe_string(row.get("url", ""))
 
-            # Flat compression forces Markdown compiler optimization with zero spacing errors
             html_card = f'<div class="opp-card"><div class="opp-title">{title_text}</div><div class="opp-meta">{agency_text} - {location_text}</div><div style="margin-bottom:12px;"><span class="badge badge-primary">Match Score {score}%</span><span class="badge badge-{eligibility_class}">{eligibility}</span></div><div class="opp-grid"><div class="opp-stat"><div class="opp-stat-label">Project Value</div><div class="opp-stat-value">{project_value}</div></div><div class="opp-stat"><div class="opp-stat-label">EMD</div><div class="opp-stat-value">{emd}</div></div><div class="opp-stat"><div class="opp-stat-label">Deadline</div><div class="opp-stat-value">{deadline}</div></div><div class="opp-stat"><div class="opp-stat-label">Sector</div><div class="opp-stat-value">{sector_text}</div></div><div class="opp-stat"><div class="opp-stat-label">Contract Type</div><div class="opp-stat-value">{contract_type}</div></div></div></div>'
             st.markdown(html_card, unsafe_allow_html=True)
 
@@ -627,7 +651,7 @@ with tab_profile:
 # =====================================================================
 st.write("---")
 ft1, ft2, ft3, ft4 = st.columns(4)
-with ft1: st.caption(f"Live tenders loaded: {len(df_tenders_raw)}")
+with ft1: st.caption(f"Live contracts loaded: {len(df_tenders_raw)}")
 with ft2: st.caption(f"Live jobs loaded: {len(df_jobs_raw)}")
 with ft3: st.caption(f"Active view state: {selected_state}")
 with ft4: st.caption(f"Workspace refreshed: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

@@ -2,8 +2,8 @@ name: Opporta 24/7 Cloud Engine
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # Runs every 2 hours
-  workflow_dispatch: # Allows you to trigger it manually
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
 
 jobs:
   execute-etl-matrix:
@@ -25,9 +25,8 @@ jobs:
 
     - name: Execute Master Pipeline
       env:
-        # Securely injects your keys without exposing them in the code
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: |
-        python master_pipeline.py
+        python master_pipeline.py || (echo "PIPELINE FAILED: Scraping process exited with error" && exit 1)

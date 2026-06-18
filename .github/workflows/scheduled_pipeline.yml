@@ -23,11 +23,10 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Execute Master Pipeline
+   - name: Execute Master Pipeline
       env:
-        # Securely injects your keys without exposing them in the code
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
       run: |
-        python master_pipeline.py
+        python master_pipeline.py || (echo "PIPELINE FAILED: Scraping process exited with error" && exit 1)

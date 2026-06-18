@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 # =====================================================================
-# 2. TOP 1% ARCHITECTURE DESIGN SYSTEM (CSS COGNITION LAYER)
+# 2. PREMIUM ENTERPRISE DESIGN SYSTEM
 # =====================================================================
 st.markdown("""
 <style>
@@ -39,7 +39,6 @@ st.markdown("""
     h1, h2, h3, h4, h5, h6, p, div, span, label { color: var(--text); }
     section[data-testid="stSidebar"] { background: #F1F5F9; border-right: 1px solid var(--border); }
     
-    /* Premium Topbar & Hero Branded Frames */
     .opporta-topbar { background: var(--card); border: 1px solid var(--border); border-radius: 20px; box-shadow: var(--shadow); padding: 20px 24px; margin-bottom: 16px; }
     .opporta-title { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; margin: 0; color: var(--text); }
     .opporta-subtle { color: var(--muted); font-size: 14px; margin-top: 4px; }
@@ -48,7 +47,6 @@ st.markdown("""
     .hero-heading { font-size: 28px; font-weight: 700; line-height: 1.2; margin-bottom: 8px; color: var(--text); }
     .hero-copy { font-size: 15px; color: var(--muted); margin-bottom: 14px; }
     
-    /* Clean Cards for Feeds & Records */
     .opp-card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 14px; }
     .opp-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; color: var(--text); }
     .opp-meta { color: var(--muted); font-size: 14px; margin-bottom: 12px; }
@@ -57,7 +55,6 @@ st.markdown("""
     .opp-stat-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
     .opp-stat-value { color: var(--text); font-size: 14px; font-weight: 700; }
     
-    /* Micro Functional Elements */
     .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; margin-right: 8px; }
     .badge-success { background: rgba(16,185,129,0.10); color: var(--success); border: 1px solid rgba(16,185,129,0.18); }
     .badge-warning { background: rgba(245,158,11,0.10); color: var(--warning); border: 1px solid rgba(245,158,11,0.18); }
@@ -66,7 +63,6 @@ st.markdown("""
     .empty-state { background: var(--card); border: 1px dashed rgba(15, 23, 42, 0.18); border-radius: 20px; padding: 32px; text-align: center; color: var(--muted); font-weight: 500; }
     .info-card { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 18px; box-shadow: var(--shadow); height: 100%; }
     
-    /* Interactive Button Framework Overrides */
     .stButton > button {
         border-radius: 14px !important;
         border: 1px solid var(--border) !important;
@@ -109,7 +105,7 @@ for state_key, default_val in INITIAL_STATES.items():
         st.session_state[state_key] = default_val
 
 # =====================================================================
-# 4. ROBUST DATA NORMALIZATION & VALIDATION HELPERS
+# 4. DATA NORMALIZATION & ADVANCED CLEANING HELPERS
 # =====================================================================
 def get_valid_col(df, col_list, default=""):
     for col in col_list:
@@ -156,11 +152,8 @@ def infer_sector(title, sector):
 def generate_match_score(title, sector):
     base = 74
     text = f"{title} {sector}".lower()
-    
-    # Dynamic profile cross-matching loop
     user_inds = st.session_state.user_profile["industries"]
     if any(ind.split()[0].lower() in text for ind in user_inds): base += 10
-        
     if any(k in text for k in ["tender", "nit", "supply", "construction", "transport", "procurement"]): base += 8
     if "open" not in text: base += 2
     return min(98, max(54, base + random.randint(-5, 5)))
@@ -288,7 +281,6 @@ if not df_jobs_raw.empty:
 df_tenders = df_tenders_raw.copy() if not df_tenders_raw.empty else pd.DataFrame()
 df_jobs = df_jobs_raw.copy() if not df_jobs_raw.empty else pd.DataFrame()
 
-# Apply Core States Machine Criteria Configuration Filters
 if not df_tenders.empty:
     if st.session_state.selected_state != "All Regions":
         df_tenders = df_tenders[df_tenders["state"].astype(str).str.contains(st.session_state.selected_state, case=False, na=False)]
@@ -299,7 +291,6 @@ if not df_tenders.empty:
         df_tenders = df_tenders[df_tenders["title"].str.contains(q, case=False, na=False) | df_tenders["agency"].str.contains(q, case=False, na=False)]
     df_tenders = df_tenders[df_tenders["match_score"] >= st.session_state.min_score_filter]
 
-    # Handle Interactive KPI Focus Matrix Filter State Cuts
     if st.session_state.kpi_focus == "Matching Only":
         df_tenders = df_tenders[df_tenders["match_score"] >= 75]
     elif st.session_state.kpi_focus == "High Confidence":
@@ -353,6 +344,9 @@ with st.sidebar:
     st.session_state.search_filter = st.text_input("Heuristic Filter", value=st.session_state.search_filter, placeholder="Type constraints...")
     st.session_state.min_score_filter = st.slider("Minimum AI Filter Node", 0, 100, int(st.session_state.min_score_filter), 5)
     
+    # RESOLVED NAMEERROR: Global structural size tracking assignment loop
+    feed_limit = st.slider("Workspace Feed Limit size", 5, 100, 15, 1)
+    
     if st.button("Reset Global Filter Matrices", use_container_width=True):
         st.session_state.selected_state = "All Regions"
         st.session_state.selected_sector = "All Categories"
@@ -375,7 +369,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Navigation Buttons
 h_col1, h_col2, h_col3, h_col4 = st.columns(4)
 with h_col1:
     if st.button(f"🌐 Universe: {opportunity_universe}", use_container_width=True):
@@ -394,11 +387,10 @@ with h_col4:
         st.session_state.kpi_focus = "Urgent Cycles"
         st.rerun()
 
-# Global search synchronization
 g_search = st.text_input("Global Search Matrix Explorer", value=st.session_state.search_filter, placeholder="Query structural procurement nodes...")
 if g_search != st.session_state.search_filter:
     st.session_state.search_filter = g_search
-    st.st.rerun()
+    st.rerun()
 
 # =====================================================================
 # 12. HERO CONTROL ACTION BRIEF PANEL
@@ -429,7 +421,7 @@ with action_col3:
         st.rerun()
 
 # =====================================================================
-# 13. CLICKABLE SMART CATEGORY WORKSPACE MATRIX
+# 13. SMART CATEGORY WORKSPACE MATRIX
 # =====================================================================
 st.markdown("### Smart Category Workspace Explorer")
 category_data = [
@@ -549,7 +541,7 @@ with tab_jobs:
             ]
 
         if df_j_filtered.empty:
-            st.markdown(f'<div class="empty-state">No results match category nodes matching token profiles matching: <b>{active_sub}</b></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="empty-state">No vacancy listings found for subset category matches: "<b>{active_sub}</b>"</div>', unsafe_allow_html=True)
         else:
             for _, row in df_j_filtered.sort_values(by="match_score", ascending=False).head(feed_limit).iterrows():
                 j_t = extract_safe_string(row.get("title"))

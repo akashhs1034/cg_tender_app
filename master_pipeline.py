@@ -1,6 +1,9 @@
 import os
-import random
-from datetime import datetime, timedelta
+import asyncio
+import aiohttp
+from bs4 import BeautifulSoup
+from datetime import datetime
+import json
 from supabase import create_client, Client
 
 # =====================================================================
@@ -11,112 +14,104 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 if not all([SUPABASE_URL, SUPABASE_KEY]):
     print("⚠️ WARNING: Cloud Database Keys missing. Ensure GitHub Secrets are set.")
-    # Fallback logic can be placed here if running locally without env vars
 
-# Initialize Secure Cloud Tunnel
 try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     print(f"🚨 Initialization Error: {e}")
 
 # =====================================================================
-# 2. HIGH-VOLUME ENTERPRISE DATA ENGINE (SYNTHETIC SCALER)
+# 2. THE ASYNC MATRIX WORKERS WITH DATA EXTRACTION
 # =====================================================================
-# This engine generates massive payloads of realistic data to test dashboard 
-# load limits, financial value parsing, and geographic bar charting.
+async def fetch_portal(session, portal_config):
+    """Worker hits a URL, reads the HTML, and extracts the crucial data."""
+    url = portal_config.get("url")
+    sector = portal_config.get("sector")
+    state = portal_config.get("state")
+    
+    # STRICT KILL SWITCH: 15 seconds max wait time.
+    timeout = aiohttp.ClientTimeout(total=15)
+    
+    try:
+        async with session.get(url, timeout=timeout) as response:
+            if response.status == 200:
+                html = await response.text()
+                soup = BeautifulSoup(html, 'html.parser')
+                
+                # --- THE EXTRACTION ZONE ---
+                page_title = soup.title.string.strip() if soup.title else "No Title Found"
+                
+                # Universal Link Radar (Looking for PDFs and Apply Links)
+                all_links = soup.find_all('a', href=True)
+                valuable_links = []
+                
+                for link in all_links:
+                    href = link['href'].lower()
+                    text = link.text.strip()
+                    if '.pdf' in href or 'apply' in href or 'advt' in href:
+                        valuable_links.append({
+                            "text": text if text else "Document Link",
+                            "url": href if href.startswith('http') else f"{url.rstrip('/')}/{href.lstrip('/')}"
+                        })
+                
+                return {
+                    "url": url,
+                    "status": "Success",
+                    "sector": sector,
+                    "state": state,
+                    "page_title": page_title,
+                    "documents_found": len(valuable_links),
+                    "sample_links": valuable_links[:3], 
+                    "timestamp": datetime.now().isoformat()
+                }
+            else:
+                return {"url": url, "status": f"Failed: HTTP {response.status}", "sector": sector}
+    except asyncio.TimeoutError:
+         return {"url": url, "status": "Error: Timeout (Site Dead)", "sector": sector}
+    except Exception as e:
+        return {"url": url, "status": f"Error: {str(e)}", "sector": sector}
 
-def generate_tenders(count=80):
-    print(f"📡 Generating {count} high-fidelity Tender records...")
-    tenders = []
+async def matrix_scanner(portals):
+    """The central router that fires all workers simultaneously."""
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+    async with aiohttp.ClientSession(headers=headers) as session:
+        tasks = [fetch_portal(session, portal) for portal in portals]
+        results = await asyncio.gather(*tasks)
+        return results
+
+# =====================================================================
+# 3. PIPELINE EXECUTION & DATA REVIEW
+# =====================================================================
+def run_real_pipeline():
+    print(f"\n=== ⚡ OPPORTA DATA EXTRACTOR WAKING UP: {datetime.now()} ===")
     
-    states = ["Chhattisgarh", "Uttar Pradesh"]
-    cg_depts = ["PWD Raipur", "CG Water Board", "NRDA", "CSPDCL", "CG Health Dept"]
-    up_depts = ["UP Power Corp", "UP PWD", "Jal Nigam", "UP Housing Board", "Medical Ed UP"]
-    sectors = ["Civil", "Electrical", "IT Infrastucture", "Roads & Highways", "Healthcare", "Consulting"]
+    try:
+        with open('config.json', 'r') as f:
+            config = json.load(f)
+            portals = config.get("portals", [])
+    except Exception as e:
+        print("🚨 Error loading config.json. Ensure the file exists.")
+        return
+
+    if not portals:
+        print("⚠️ No portals found in config.json. Exiting.")
+        return
+
+    loop = asyncio.get_event_loop()
+    scan_results = loop.run_until_complete(matrix_scanner(portals))
     
-    for i in range(count):
-        state = random.choice(states)
-        dept = random.choice(cg_depts) if state == "Chhattisgarh" else random.choice(up_depts)
-        sector = random.choice(sectors)
-        
-        # Generate realistic financial values (e.g., "₹ 14.5 Cr" or "₹ 85 Lakh")
-        val_type = random.choice(["Cr", "Lakh"])
-        if val_type == "Cr":
-            val_num = round(random.uniform(1.0, 50.0), 2)
+    print("\n=== 📊 EXTRACTION REPORT ===")
+    for result in scan_results:
+        if result['status'] == 'Success':
+            print(f"\n✅ [SUCCESS] {result['url']}")
+            print(f"   Page Title: {result['page_title']}")
+            print(f"   Valuable Links Found: {result['documents_found']}")
+            for link in result.get('sample_links', []):
+                print(f"   - {link['text']}: {link['url']}")
         else:
-            val_num = random.randint(10, 99)
-            
-        deadline_date = (datetime.now() + timedelta(days=random.randint(5, 90))).strftime('%Y-%m-%d')
-        
-        tenders.append({
-            'state': state,
-            'department': dept,
-            'title': f"{sector} Project Phase {random.randint(1,4)}: {random.choice(['Expansion', 'Upgradation', 'New Construction', 'Maintenance'])}",
-            'value': f"₹ {val_num} {val_type}",
-            'deadline': deadline_date,
-            'source_url': 'https://eproc.cgstate.gov.in' if state == "Chhattisgarh" else 'https://etender.up.nic.in',
-            'scraped_at': datetime.now().isoformat()
-        })
-    return tenders
+            print(f"\n❌ [FAILED] {result['url']} | Reason: {result['status']}")
 
-def generate_jobs(count=70):
-    print(f"📡 Generating {count} high-fidelity Recruitment records...")
-    jobs = []
-    
-    cg_boards = ["CGPSC", "CG Vyapam", "Police Recruitment Board CG", "Health Dept CG"]
-    up_boards = ["UPSSSC", "UPPSC", "UP Police Board", "UP Education Dept"]
-    qualifications = ["B.E. / B.Tech", "Diploma in Engineering", "Any Graduate", "MBBS", "12th Pass + ITI"]
-    titles = ["Assistant Engineer", "Junior Engineer", "Medical Officer", "Technical Consultant", "Project Manager"]
-    
-    for i in range(count):
-        state = random.choice(["Chhattisgarh", "Uttar Pradesh"])
-        board = random.choice(cg_boards) if state == "Chhattisgarh" else random.choice(up_boards)
-        
-        jobs.append({
-            'state': state,
-            'board': board,
-            'job_title': f"{random.choice(titles)} ({random.choice(['Civil', 'Electrical', 'IT', 'General'])})",
-            'vacancy_count': str(random.randint(5, 500)),
-            'qualification': random.choice(qualifications),
-            'apply_url': 'https://psc.cg.gov.in/' if state == "Chhattisgarh" else 'http://upsssc.gov.in/',
-            'scraped_at': datetime.now().isoformat()
-        })
-    return jobs
-
-# =====================================================================
-# 3. SUPABASE SECURE UPLOAD PIPELINE
-# =====================================================================
-def run_centralized_pipeline():
-    print(f"\n=== ⚡ OPPORTA ENGINE WAKING UP: {datetime.now()} ===")
-    
-    # 1. Harvest Data Payload
-    tenders_data = generate_tenders(count=120) # Generating 120 Tenders
-    jobs_data = generate_jobs(count=85)        # Generating 85 Jobs
-    
-    # 2. Push Tenders to Cloud (In chunks to prevent payload limits)
-    if tenders_data:
-        print(f"📦 Pushing {len(tenders_data)} Tenders to Cloud DB...")
-        try:
-            # Pushing in blocks of 50
-            for i in range(0, len(tenders_data), 50):
-                chunk = tenders_data[i:i+50]
-                supabase.table("opporta_tenders").insert(chunk).execute()
-            print("✅ Tenders Pipeline Sync Complete.")
-        except Exception as e:
-            print(f"🚨 Failed to push tenders: {e}")
-            
-    # 3. Push Jobs to Cloud
-    if jobs_data:
-        print(f"📦 Pushing {len(jobs_data)} Jobs to Cloud DB...")
-        try:
-            for i in range(0, len(jobs_data), 50):
-                chunk = jobs_data[i:i+50]
-                supabase.table("opporta_jobs").insert(chunk).execute()
-            print("✅ Vacancies Pipeline Sync Complete.")
-        except Exception as e:
-            print(f"🚨 Failed to push jobs: {e}")
-
-    print("=== 🟢 PIPELINE CYCLE COMPLETION SUCCESSFUL ===\n")
+    print("\n=== 🟢 PIPELINE CYCLE COMPLETION SUCCESSFUL ===\n")
 
 if __name__ == "__main__":
-    run_centralized_pipeline()
+    run_real_pipeline()

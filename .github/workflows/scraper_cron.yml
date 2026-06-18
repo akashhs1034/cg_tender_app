@@ -1,33 +1,36 @@
-name: Continuous Ingestion Opporta Pipe Automation
+name: Autopilot Tender Scraper Ingestion Engine
 
 on:
   schedule:
-    # Standard Cron Expression representing daily triggering loops at exactly 02:00 AM UTC
+    # Runs every single day at 02:00 AM UTC (which is 07:30 AM IST)
     - cron: '0 2 * * *'
-  workflow_dispatch: # Allows manual pipeline triggering from the GitHub dashboard
+  workflow_dispatch: # Allows you to manually trigger it from GitHub anytime to test it
 
 jobs:
-  execute-ingestion:
+  run-scraper:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Ingest Source Code Matrix Repository
-        uses: actions/checkout@v4
+    # 1. Download your repository files into the cloud container
+    - name: Checkout Repository Files
+      uses: actions/checkout@v4
 
-      - name: Initialize System Python Infrastructure Environment Nodes
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+    # 2. Set up a secure Python environment
+    - name: Provision Python Runtime Env
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip' # Speeds up subsequent runs by caching packages
 
-      - name: Compile Pipeline Dependencies Required
-        run: |
-          pip install -r requirements.txt
-          # Add any explicit crawling framework requirements if necessary
+    # 3. Read your requirements.txt and install your production libraries
+    - name: Install System Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-      - name: Run Background Scraping Engines Pipeline
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: |
-          # Replace 'scraper_entry.py' with the path to your actual standalone scraper script
-          python scraper_entry.py
+    # 4. Run the scraper script and inject the secrets securely into the system env
+    - name: Execute Live Ingestion Cycle
+      env:
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+      run: python scraper_entry.py

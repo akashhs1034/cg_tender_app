@@ -24,7 +24,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 # =====================================================================
-# 2. HEURISTIC PARSING FUNCTIONS
+# 2. ADVANCED PARSING HEURISTICS
 # =====================================================================
 def clean_and_parse_financials(text_node):
     if not text_node or text_node.lower() in ["not specified", "nan", "nil"]:
@@ -55,7 +55,7 @@ def extract_standard_deadline(date_str):
         return "Open"
     return "Not specified"
 
-def is_genuine_contract_node(title_str):
+def is_genuine_record(title_str):
     t_clean = str(title_str).lower().strip()
     noise_signatures = [
         "policy", "guideline", "rules", "act 20", "regulation", "grievance", "manual", 
@@ -86,31 +86,31 @@ def infer_sector(title, sector):
 # 3. CORE RUNTIME PIPELINE EXECUTION
 # =====================================================================
 def run_ingestion_cycle():
-    print(f"⚡ Starting Ingestion Loop: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"⚡ Starting Dual-Stream Ingest: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    target_table = "tenders"
-    
-    # TOP 1% DEDUPLICATION GUARD: Fetch existing titles from database to avoid duplicate errors locally
-    existing_titles = set()
+    # -----------------------------------------------------------------
+    # STREAM A: PROCUREMENT TENDERS PIPELINE
+    # -----------------------------------------------------------------
+    tenders_table = "tenders"
+    existing_tenders = set()
     try:
-        db_check = supabase.table(target_table).select("title").execute()
+        db_check = supabase.table(tenders_table).select("title").execute()
         if db_check.data:
-            existing_titles = {row["title"] for row in db_check.data}
-            print(f"📡 Cached {len(existing_titles)} existing contract signatures from database to prevent conflicts.")
+            for row in db_check.data:
+                existing_tenders.add(row["title"])
+            print(f"📡 Cached {len(existing_tenders)} active tender keys.")
     except Exception as e:
-        print(f"⚠️ Notice: Pre-ingestion check skipped. Proceeding blindly. Detail: {e}")
+        pass
 
-    raw_scraped_feed = [
+    raw_tenders_feed = [
         {"title": "SECL Coal Evacuation and Transport Work Phase 4", "agency": "South Eastern Coalfields Limited", "location": "Korba", "state": "Chhattisgarh", "project_value": "₹4.50 Crore", "emd": "₹4,50,000", "deadline": "28-07-2026", "url": "https://janjgir-champa.gov.in"},
         {"title": "Procurement of Critical ICU Emergency Medical Supplies", "agency": "Directorate of Health Services", "location": "Raipur", "state": "Chhattisgarh", "project_value": "45 Lakhs", "emd": "Not specified", "deadline": "15/08/2026", "url": "https://gariaband.gov.in"},
-        {"title": "Internal Departmental Promotion Policies and PPT Presentation Guidelines", "agency": "Zilla Panchayat Office", "location": "Durg", "state": "Chhattisgarh", "project_value": "Not specified", "emd": "Not specified", "deadline": "Open", "url": "https://durg.gov.in"}
+        {"title": "Internal Departmental Promotion Policies and PPT Guidelines", "agency": "Zilla Panchayat", "location": "Durg", "state": "Chhattisgarh", "project_value": "Not specified", "emd": "Not specified", "deadline": "Open", "url": "https://durg.gov.in"}
     ]
     
-    cleaned_batch_payload = []
-    
-    for item in raw_scraped_feed:
-        if not is_genuine_contract_node(item["title"]):
-            print(f"🗑️ Dropped Administrative Noise: {item['title'][:40]}...")
+    cleaned_tenders = []
+    for item in raw_tenders_feed:
+        if not is_genuine_record(item["title"]):
             continue
             
         val_formatted = clean_and_parse_financials(item["project_value"])
@@ -120,30 +120,81 @@ def run_ingestion_cycle():
         
         combined_title = f"{item['title']} (Value: {val_formatted} | EMD: {emd_formatted} | Deadline: {valid_deadline})"
         
-        # Checking logic to ensure we don't try to insert something that is already inside the table
-        if combined_title in existing_titles:
-            print(f"⏩ Skipping Duplicate Row: {item['title'][:40]}... already exists.")
+        if combined_title in existing_tenders:
             continue
             
-        normalized_row = {
+        cleaned_tenders.append({
             "title": combined_title,
             "agency": f"{item['agency']} - {item['location']}",
             "state": item["state"],
             "sector": inferred_sec,
             "url": item["url"],
             "date_scraped": datetime.now(timezone.utc).isoformat()
-        }
-        cleaned_batch_payload.append(normalized_row)
+        })
         
-    if cleaned_batch_payload:
+    if cleaned_tenders:
         try:
-            # FIXED: Removed the upsert constraint and swapped with standard insert tracking block
-            supabase.table(target_table).insert(cleaned_batch_payload).execute()
-            print(f"✅ Ingestion Successful! Uploaded {len(cleaned_batch_payload)} fresh high-signal records to '{target_table}' securely.")
-        except Exception as e:
-            print(f"❌ Supabase Ingestion Upload Failure: {str(e)}")
+            supabase.table(tenders_table).insert(cleaned_tenders).execute()
+            print(f"✅ Successful: Ingested {len(cleaned_tenders)} procurement records.")
+        except Exception as e: 
+            print(f"❌ Tenders Upload Failure: {str(e)}")
     else:
-        print("ℹ️ Cycle complete. No new, non-duplicate high-signal records detected.")
+        print("ℹ️ Tenders clean: No fresh records found.")
+
+    # -----------------------------------------------------------------
+    # STREAM B: GOVERNMENT RECRUITMENT REPOSITORY PIPELINE
+    # -----------------------------------------------------------------
+    jobs_table = "jobs"
+    existing_jobs = set()
+    
+    try:
+        db_all_jobs = supabase.table(jobs_table).select("title").execute()
+        if db_all_jobs.data:
+            existing_jobs = {r["title"] for r in db_all_jobs.data}
+        print(f"📡 Cached {len(existing_jobs)} active recruitment keys.")
+    except Exception as e:
+        print(f"⚠️ Jobs cache skipped: {e}")
+
+    raw_jobs_feed = [
+        {"title": "CGPSC Assistant Professor Technical Recruitment Notification 2026", "agency": "Chhattisgarh Public Service Commission", "state": "Chhattisgarh", "vacancies": "412 Posts", "salary": "Level 10 (₹57,700 - ₹1,82,400)", "qualification": "B.E / B.Tech / M.Tech in respective domains", "deadline": "30-08-2026", "url": "https://psc.cg.gov.in"},
+        {"title": "Railway RRB Junior Engineer Civil Executive Vacancy Roster", "agency": "Railway Recruitment Board", "state": "All India", "vacancies": "1,205 Posts", "salary": "₹35,400 - ₹1,12,400", "qualification": "Diploma or Degree in Civil Engineering", "deadline": "12-09-2026", "url": "https://rrbbilaspur.gov.in"},
+        {"title": "Draft Notification for Internal Transfer Rules of Grade-4 Clerical Staff Members", "agency": "Department of Revenue", "state": "Chhattisgarh", "vacancies": "N/A", "salary": "N/A", "qualification": "Internal Only", "deadline": "Open", "url": "https://cg.nic.in"}
+    ]
+    
+    cleaned_jobs = []
+    for job in raw_jobs_feed:
+        if not is_genuine_record(job["title"]):
+            print(f"🗑️ Dropped Job Noise: {job['title'][:40]}...")
+            continue
+            
+        valid_dl = extract_standard_deadline(job["deadline"])
+        
+        # TOP 1% SCHEMA COMPRESSION: Packing rich data into guaranteed safe core columns
+        rich_title = f"{job['title']} (Vacancies: {job['vacancies']} | Salary: {job['salary']} | Deadline: {valid_dl})"
+        
+        if rich_title in existing_jobs:
+            print(f"⏩ Skipping Existing Job: {job['title'][:40]}...")
+            continue
+            
+        job_record = {
+            "title": rich_title,
+            "agency": f"{job['agency']} (Req: {job['qualification']})",
+            "state": job["state"],
+            "sector": "Government Jobs",
+            "url": job["url"],
+            "date_scraped": datetime.now(timezone.utc).isoformat()
+        }
+            
+        cleaned_jobs.append(job_record)
+        
+    if cleaned_jobs:
+        try:
+            supabase.table(jobs_table).insert(cleaned_jobs).execute()
+            print(f"✅ Successful: Ingested {len(cleaned_jobs)} recruitment updates cleanly.")
+        except Exception as e: 
+            print(f"❌ Jobs Upload Failure: {str(e)}")
+    else:
+        print("ℹ️ Job repository clean: No new notifications.")
 
 if __name__ == "__main__":
     run_ingestion_cycle()

@@ -253,6 +253,8 @@ def scrape() -> list[dict]:
             print(f"   cppp_state: detail fetch failed — {e}")
 
     print(f"   cppp_state: {len(records)} core.tender_record() objects ready")
+    if not records:
+        print("   cppp_state: WARNING — 0 records returned, portal may be down or restructured")
     return records
 
 

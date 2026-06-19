@@ -201,8 +201,8 @@ def classify_job_category(title, department=""):
 
 def job_record(*, title, state=None, department=None, district=None,
                vacancies=None, qualification=None, salary=None, deadline=None,
-               description=None, document_url=None, ai_score=None,
-               source_portal=None, category=None):
+               description=None, document_url=None, apply_link=None,
+               ai_score=None, source_portal=None, category=None):
     d = parse_date(deadline)
     return {
         "source_id": make_source_id(title, department, deadline),
@@ -217,6 +217,7 @@ def job_record(*, title, state=None, department=None, district=None,
         "deadline": d.isoformat() if d else None,
         "description": (description or "").strip() or None,
         "document_url": (document_url or "").strip() or None,
+        "apply_link": (apply_link or "").strip() or None,
         "ai_score": int(ai_score) if ai_score is not None else None,
         "source_portal": (source_portal or "").strip() or None,
         "scraped_at": _now_iso(),

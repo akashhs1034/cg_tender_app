@@ -213,6 +213,8 @@ def scrape() -> list[dict]:
         print(f"   up_etender: error — {exc}")
 
     print(f"   up_etender: {len(records)} core.tender_record() objects ready")
+    if not records:
+        print("   up_etender: WARNING — 0 records returned, portal may be down or restructured")
     return records
 
 

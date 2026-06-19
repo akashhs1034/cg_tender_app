@@ -364,6 +364,106 @@ with tab2:
                 if r.get("qualification"):
                     st.info(f"🎓 Mandatory Criteria: {r['qualification']}")
 
+    # -----------------------------------------------------------------
+    # RESUME ANALYZER
+    # -----------------------------------------------------------------
+    if not df_j.empty:
+        st.markdown("---")
+        st.markdown("### 📄 Match My Resume")
+        st.caption(
+            "Upload your resume and pick a job — we'll check how well your "
+            "qualifications match the stated requirements."
+        )
+
+        ru_col, rd_col = st.columns([1, 1])
+        with ru_col:
+            resume_file = st.file_uploader(
+                "Resume (PDF or TXT)",
+                type=["pdf", "txt"],
+                key="resume_upload_jobs",
+            )
+        with rd_col:
+            all_jobs_list = [r.to_dict() for _, r in df_j.iterrows()]
+            job_display = [
+                f"{r.get('title','Untitled')[:55]} · {(r.get('department') or '')[:35]}"
+                for r in all_jobs_list
+            ]
+            resume_job_idx = st.selectbox(
+                "Job to check against",
+                range(len(all_jobs_list)),
+                format_func=lambda i: job_display[i],
+                key="resume_job_sel",
+            ) if all_jobs_list else None
+
+        check_resume = st.button("🔍 Check Match", type="primary", key="resume_check")
+
+        if check_resume:
+            if resume_file is None:
+                st.error("Please upload your resume first.")
+            elif resume_job_idx is None:
+                st.error("No jobs available to match against.")
+            else:
+                with st.spinner("Analysing resume…"):
+                    _rt = extract_text([resume_file])
+                    _rjob = all_jobs_list[resume_job_idx]
+                    _rr = evaluator.evaluate_resume_for_job(_rjob, _rt)
+                st.session_state["_resume_result"] = _rr
+                st.session_state["_resume_job"]    = _rjob
+
+        rr   = st.session_state.get("_resume_result")
+        rjob = st.session_state.get("_resume_job")
+        if rr and rjob:
+            pct = rr["match_pct"]
+            n_met   = len(rr["met"])
+            n_total = n_met + len(rr["missing"]) + len(rr["unknown"])
+
+            if pct >= 75:
+                bg, fg = "#DCFCE7", "#15803D"
+            elif pct >= 50:
+                bg, fg = "#FEF3C7", "#B45309"
+            else:
+                bg, fg = "#FEE2E2", "#B91C1C"
+
+            st.markdown(f"""
+            <div style="text-align:center;padding:1.5rem;background:{bg};
+                        border-radius:12px;margin:1rem 0">
+                <div style="font-size:3.5rem;font-weight:900;color:{fg};
+                            line-height:1">{pct}%</div>
+                <div style="font-size:1rem;color:{fg};margin-top:0.5rem">
+                    Resume Match Score</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown(
+                f"**Your resume matches {n_met} of {n_total} requirements** "
+                f"for *{rjob.get('title','')}*."
+            )
+            st.write(rr["verdict"])
+
+            if rr["met"]:
+                st.markdown("**Requirements satisfied:**")
+                for item in rr["met"]:
+                    st.success(f"✅  {item}")
+
+            if rr["missing"]:
+                st.markdown("**Not found in resume:**")
+                for item in rr["missing"]:
+                    st.error(f"❌  {item}")
+
+            if rr["unknown"]:
+                st.markdown("**Could not verify:**")
+                for item in rr["unknown"]:
+                    st.warning(f"❔  {item}")
+
+            st.caption(
+                "⚠️  This checks stated qualifications only, not a selection guarantee. "
+                "Always verify eligibility against the official notification."
+            )
+
+            apply_url = rjob.get("document_url")
+            if isinstance(apply_url, str) and apply_url.startswith("http"):
+                st.link_button("📋 Apply Now / View Official Notification", apply_url)
+
 # =====================================================================
 # TAB 3: STRATEGIC PROJECT MANAGEMENT PIPELINE
 # =====================================================================

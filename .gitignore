@@ -14,4 +14,5 @@ __pycache__/
 # Scraper dev probe artifacts
 probe_*.png
 probe_*.html
+*_probe.html
 portal_*.html

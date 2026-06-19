@@ -15,6 +15,7 @@ Run:  python ingest.py
 from __future__ import annotations
 
 import os
+import re
 import csv
 from pathlib import Path
 
@@ -22,6 +23,10 @@ import pandas as pd
 from dotenv import load_dotenv
 
 import core
+
+_PRIVATE_ORG = re.compile(
+    r"\b(hospitals?|pvt\.?|limited|ltd\.?|private|corporate)\b", re.I
+)
 
 load_dotenv()
 
@@ -47,6 +52,8 @@ def load_master_leads():
     for r in _read_csv("master_leads.csv"):
         is_job = "/mo" in str(r.get("project_value", "")) or r.get("category") == "Government Jobs"
         if is_job:
+            if _PRIVATE_ORG.search(str(r.get("organization", ""))):
+                continue  # skip private company postings
             jobs.append(core.job_record(
                 title=r.get("title"), state=r.get("state"),
                 department=r.get("organization"), salary=r.get("project_value"),
@@ -111,17 +118,28 @@ def run_live_scrapers():
     jobs: list[dict] = []
     counts: OrderedDict[str, int] = OrderedDict()
 
-    from scrapers import cg_eproc, up_etender, cppp_state
+    from scrapers import cg_eproc, up_etender, cppp_state, cg_jobs, up_jobs, cg_vyapam, up_upsssc
 
-    _SCRAPERS = [
-        ("cg_eproc     (eproc.cgstate.gov.in) ", cg_eproc.scrape),
-        ("up_etender   (etender.up.nic.in)    ", up_etender.scrape),
-        ("cppp_state   (eprocure.gov.in/cppp) ", cppp_state.scrape),
+    _TENDER_SCRAPERS = [
+        ("cg_eproc     (eproc.cgstate.gov.in)      ", cg_eproc.scrape),
+        ("up_etender   (etender.up.nic.in)         ", up_etender.scrape),
+        ("cppp_state   (eprocure.gov.in/cppp)      ", cppp_state.scrape),
+    ]
+    _JOB_SCRAPERS = [
+        ("cg_jobs      (psc.cg.gov.in)             ", cg_jobs.scrape),
+        ("cg_vyapam    (vyapamcg.cgstate.gov.in)   ", cg_vyapam.scrape),
+        ("up_jobs      (uppsc.up.nic.in)           ", up_jobs.scrape),
+        ("up_upsssc    (upsssc.gov.in)             ", up_upsssc.scrape),
     ]
 
-    for label, fn in _SCRAPERS:
+    for label, fn in _TENDER_SCRAPERS:
         batch = fn()
         tenders += batch
+        counts[label] = len(batch)
+
+    for label, fn in _JOB_SCRAPERS:
+        batch = fn()
+        jobs += batch
         counts[label] = len(batch)
 
     return tenders, jobs, counts
@@ -175,7 +193,7 @@ def _print_scraper_summary(counts: dict, total_tenders: int, total_jobs: int) ->
     print(bar)
     for label, n in counts.items():
         flag = "  [OK]" if n > 0 else "  [WARN] 0 RESULTS"
-        print(f"  {label}: {n:>4} tenders{flag}")
+        print(f"  {label}: {n:>4} records{flag}")
     print(bar)
     print(f"  Total after dedup : {total_tenders} tenders, {total_jobs} jobs")
     print(f"{bar}\n")
@@ -192,13 +210,12 @@ def main():
     print("1. Loading seed data…")
     t1, j1 = load_master_leads()
     t2 = load_master_tenders()
-    j2 = load_master_jobs()
 
     print("2. Running live scrapers…")
     t3, j3, scraper_counts = run_live_scrapers()
 
     tenders = dedup(t1 + t2 + t3)
-    jobs = dedup(j1 + j2 + j3)
+    jobs = dedup(j1 + j3)
 
     _print_scraper_summary(scraper_counts, len(tenders), len(jobs))
 

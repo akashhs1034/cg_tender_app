@@ -39,6 +39,7 @@ create table if not exists jobs (
     deadline      date,
     description   text,
     document_url  text,
+    apply_link    text,                   -- direct URL to apply or view the official notice
     ai_score      int,
     source_portal text,
     scraped_at    timestamptz default now()

@@ -216,6 +216,8 @@ def scrape() -> list[dict]:
         print(f"   cg_eproc: error — {exc}")
 
     print(f"   cg_eproc: {len(records)} core.tender_record() objects ready")
+    if not records:
+        print("   cg_eproc: WARNING — 0 records returned, portal may be down or restructured")
     return records
 
 

@@ -1,4 +1,20 @@
 {
+  "project_name": "Opporta_Enterprise_Engine",
+  "version": "2.0.0",
+  "schema_version": "1.0",
+  "fields": {
+    "title": "title",
+    "details": "details",
+    "state": "state",
+    "district": "district",
+    "url": "document_link",
+    "category": "category"
+  },
+  "scraping_settings": {
+    "async_enabled": true,
+    "concurrency": 5,
+    "timeout_seconds": 30
+  },
   "portals": [
     { "url": "https://eproc.cgstate.gov.in", "state": "Chhattisgarh", "sector": "Civil Infrastructure" },
     { "url": "https://www.secl-cil.in", "state": "Chhattisgarh", "sector": "Coal & Mining" },

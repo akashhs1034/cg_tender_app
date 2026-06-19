@@ -1,36 +1,49 @@
-name: Autopilot Tender Scraper Ingestion Engine
+name: Daily Tender Ingestion
 
 on:
   schedule:
-    # Runs every single day at 02:00 AM UTC (which is 07:30 AM IST)
-    - cron: '0 2 * * *'
-  workflow_dispatch: # Allows you to manually trigger it from GitHub anytime to test it
+    - cron: '0 2 * * *'   # 07:30 IST = 02:00 UTC
+  workflow_dispatch:        # allow manual trigger from GitHub UI
 
 jobs:
-  run-scraper:
+  ingest:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
-    # 1. Download your repository files into the cloud container
-    - name: Checkout Repository Files
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    # 2. Set up a secure Python environment
-    - name: Provision Python Runtime Env
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip' # Speeds up subsequent runs by caching packages
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
 
-    # 3. Read your requirements.txt and install your production libraries
-    - name: Install System Dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
-    # 4. Run the scraper script and inject the secrets securely into the system env
-    - name: Execute Live Ingestion Cycle
-      env:
-        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-        SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-      run: python scraper_entry.py
+      # Playwright browsers are not cached by setup-python; cache them manually.
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
+      - name: Install Playwright browser
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: playwright install --with-deps chromium
+
+      # Install only the OS-level deps when the browser binary is already cached.
+      - name: Install Playwright OS dependencies (cached browser)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: playwright install-deps chromium
+
+      - name: Run ingestion pipeline
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python ingest.py

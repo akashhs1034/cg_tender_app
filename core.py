@@ -255,13 +255,22 @@ def _exp_years(label):
 
 # A contractor's profile. Stored per user (see profiles table / data/profiles.json).
 DEFAULT_PROFILE = {
-    "company_name": "",
-    "turnover_lakhs": 500.0,
+    # ── Contractor / tender fields ──
+    "company_name":     "",
+    "turnover_lakhs":   500.0,
     "contractor_class": "Class C",
     "experience_years": 3,
-    "sectors": [],          # e.g. ["Civil Works", "Coal & Mining"]
-    "states": ["Chhattisgarh", "Uttar Pradesh"],
-    "districts": [],        # empty = all districts in their states
+    "sectors":          [],
+    "states":           ["Chhattisgarh", "Uttar Pradesh"],
+    "districts":        [],
+    # ── Job seeker fields ──
+    "full_name":              "",
+    "qualification":          "",   # free text, e.g. "B.Tech Civil, NIT Raipur 2018"
+    "degree_type":            "",   # e.g. "B.Tech / B.E. (Engineering)"
+    "job_experience_years":   0,
+    "job_skills":             [],   # e.g. ["AutoCAD", "MS Office", "Tally"]
+    "job_category":           "General",   # General/OBC/SC/ST/EWS
+    "languages":              ["Hindi", "English"],
 }
 
 

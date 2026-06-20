@@ -3,6 +3,15 @@ accounts.py — Secure User Profiles, Auth & Document Vault.
 
 Handles secure interactions with Supabase Auth (GoTrue), database, and storage buckets.
 Includes a highly resilient local filesystem fallback for offline development.
+
+Security model:
+  - After login, the caller receives a Supabase JWT access_token.
+  - Pass that token to every user-data function so all PostgREST queries
+    carry `Authorization: Bearer <token>`.
+  - Supabase RLS policies enforce auth.jwt()->>'email' = email, so a user
+    can only ever read/write their own rows — even the app owner cannot.
+  - Without a token (local fallback / offline) functions use the anon key
+    but still scope all queries to the caller's email.
 """
 
 from __future__ import annotations
@@ -18,19 +27,24 @@ from pathlib import Path
 from dotenv import load_dotenv
 import core
 
-# Set up basic logging so we stop "silently failing" when cloud errors occur
 logging.basicConfig(level=logging.INFO, format="[Accounts] %(levelname)s: %(message)s")
 
 load_dotenv()
 DATA = Path(__file__).parent / "data"
 DATA.mkdir(exist_ok=True)
 LOCAL_PROFILES = DATA / "profiles.json"
-LOCAL_SAVED = DATA / "saved_tenders.json"
-LOCAL_DOCS = DATA / "documents.json"
-LOCAL_USERS = DATA / "local_users.json" # Fallback for offline auth
-VAULT_DIR = DATA / "vault"
+LOCAL_SAVED    = DATA / "saved_tenders.json"
+LOCAL_DOCS     = DATA / "documents.json"
+LOCAL_USERS    = DATA / "local_users.json"
+VAULT_DIR      = DATA / "vault"
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
 def _sb():
+    """Anon Supabase client — for public data only."""
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
     if not (url and key):
@@ -39,8 +53,24 @@ def _sb():
         from supabase import create_client
         return create_client(url, key)
     except Exception as e:
-        logging.error(f"Failed to initialize Supabase client: {e}")
+        logging.error(f"Supabase init failed: {e}")
         return None
+
+
+def _sb_user(token: str | None = None):
+    """
+    Supabase client scoped to the logged-in user's JWT.
+    When token is present, PostgREST sends Authorization: Bearer <token>,
+    so RLS policies (auth.jwt()->>'email' = email) are enforced at DB level.
+    """
+    client = _sb()
+    if client and token:
+        try:
+            client.postgrest.auth(token)
+        except Exception:
+            pass
+    return client
+
 
 def _load_json(path: Path) -> dict | list:
     if path.exists():
@@ -51,14 +81,17 @@ def _load_json(path: Path) -> dict | list:
             return {} if "json" in str(path) else []
     return {}
 
-def _save_json(path: Path, obj: any) -> None:
+
+def _save_json(path: Path, obj) -> None:
     path.write_text(json.dumps(obj, indent=2, default=str), encoding="utf-8")
+
 
 def _now_iso() -> str:
     return datetime.utcnow().isoformat()
 
+
 # ===========================================================================
-# 1. AUTHENTICATION ENGINE (New Production Security)
+# 1. AUTHENTICATION
 # ===========================================================================
 
 def _local_register(email: str, password: str) -> tuple[bool, str]:
@@ -72,6 +105,7 @@ def _local_register(email: str, password: str) -> tuple[bool, str]:
     _save_json(LOCAL_USERS, store)
     return True, "Account created. You can now log in."
 
+
 def _local_login(email: str, password: str) -> tuple[bool, str]:
     store = _load_json(LOCAL_USERS)
     if not isinstance(store, dict):
@@ -80,6 +114,7 @@ def _local_login(email: str, password: str) -> tuple[bool, str]:
     if store.get(email, {}).get("password") == hashed:
         return True, "Login successful."
     return False, "Invalid email or password."
+
 
 def register_user(email: str, password: str) -> tuple[bool, str]:
     email = email.strip().lower()
@@ -92,25 +127,34 @@ def register_user(email: str, password: str) -> tuple[bool, str]:
             logging.warning(f"Supabase register failed ({e}), using local fallback.")
     return _local_register(email, password)
 
-def login_user(email: str, password: str) -> tuple[bool, str]:
+
+def login_user(email: str, password: str) -> tuple[bool, str, str | None]:
+    """
+    Returns (success, message, access_token).
+    access_token is the Supabase JWT — store it in session state and pass it
+    to every user-data call so RLS is enforced.
+    Returns None token on local fallback (offline dev mode).
+    """
     email = email.strip().lower()
     sb = _sb()
     if sb:
         try:
-            sb.auth.sign_in_with_password({"email": email, "password": password})
-            return True, "Login successful."
+            resp  = sb.auth.sign_in_with_password({"email": email, "password": password})
+            token = resp.session.access_token if (resp and resp.session) else None
+            return True, "Login successful.", token
         except Exception as e:
             logging.warning(f"Supabase login failed ({e}), trying local fallback.")
-    return _local_login(email, password)
+    ok, msg = _local_login(email, password)
+    return ok, msg, None
 
 
 # ===========================================================================
-# 2. PROFILES & PIPELINE
+# 2. PROFILES
 # ===========================================================================
 
-def get_profile(email: str) -> dict | None:
+def get_profile(email: str, token: str | None = None) -> dict | None:
     email = email.strip().lower()
-    sb = _sb()
+    sb = _sb_user(token)
     if sb:
         try:
             rows = sb.table("profiles").select("*").eq("email", email).execute().data
@@ -119,24 +163,29 @@ def get_profile(email: str) -> dict | None:
             logging.error(f"Profile fetch failed: {e}")
     return _load_json(LOCAL_PROFILES).get(email)
 
-def save_profile(email: str, profile: dict) -> None:
-    email = email.strip().lower()
+
+def save_profile(email: str, profile: dict, token: str | None = None) -> None:
+    email  = email.strip().lower()
     record = {**core.DEFAULT_PROFILE, **profile, "email": email}
-    sb = _sb()
+    sb = _sb_user(token)
     if sb:
         try:
             sb.table("profiles").upsert(record, on_conflict="email").execute()
             return
         except Exception as e:
             logging.error(f"Profile save failed: {e}")
-            
     store = _load_json(LOCAL_PROFILES)
     store[email] = record
     _save_json(LOCAL_PROFILES, store)
 
-def list_saved(email: str) -> list[dict]:
+
+# ===========================================================================
+# 3. SAVED TENDER PIPELINE
+# ===========================================================================
+
+def list_saved(email: str, token: str | None = None) -> list[dict]:
     email = email.strip().lower()
-    sb = _sb()
+    sb = _sb_user(token)
     if sb:
         try:
             return sb.table("saved_tenders").select("*").eq("email", email).execute().data
@@ -144,17 +193,18 @@ def list_saved(email: str) -> list[dict]:
             logging.error(f"Fetch saved pipeline failed: {e}")
     return _load_json(LOCAL_SAVED).get(email, [])
 
-def save_tender(email: str, source_id: str, status="interested", note="") -> None:
+
+def save_tender(email: str, source_id: str, status="interested", note="",
+                token: str | None = None) -> None:
     email = email.strip().lower()
-    rec = {"email": email, "source_id": source_id, "status": status, "note": note}
-    sb = _sb()
+    rec   = {"email": email, "source_id": source_id, "status": status, "note": note}
+    sb    = _sb_user(token)
     if sb:
         try:
             sb.table("saved_tenders").upsert(rec, on_conflict="email,source_id").execute()
             return
         except Exception as e:
             logging.error(f"Save tender failed: {e}")
-            
     store = _load_json(LOCAL_SAVED)
     items = [s for s in store.get(email, []) if s.get("source_id") != source_id]
     items.append(rec)
@@ -163,7 +213,7 @@ def save_tender(email: str, source_id: str, status="interested", note="") -> Non
 
 
 # ===========================================================================
-# 3. SECURE DOCUMENT VAULT
+# 4. SECURE DOCUMENT VAULT
 # ===========================================================================
 
 def _vault_dir(email: str) -> Path:
@@ -172,9 +222,10 @@ def _vault_dir(email: str) -> Path:
     d.mkdir(parents=True, exist_ok=True)
     return d
 
-def list_documents(email: str) -> list[dict]:
+
+def list_documents(email: str, token: str | None = None) -> list[dict]:
     email = email.strip().lower()
-    sb = _sb()
+    sb = _sb_user(token)
     if sb:
         try:
             return (sb.table("documents").select("*")
@@ -183,30 +234,33 @@ def list_documents(email: str) -> list[dict]:
             logging.error(f"Document list fetch failed: {e}")
     return list(reversed(_load_json(LOCAL_DOCS).get(email, [])))
 
-def save_document(email: str, name: str, filename: str, content: bytes, mime_type: str = "application/pdf") -> str | None:
-    """Store a document securely. Uses explicit file_options for Supabase Storage API."""
-    email = email.strip().lower()
+
+def save_document(email: str, name: str, filename: str, content: bytes,
+                  mime_type: str = "application/pdf",
+                  token: str | None = None) -> str | None:
+    """Store a document securely in Supabase Storage + metadata table."""
+    email  = email.strip().lower()
     doc_id = uuid.uuid4().hex[:16]
-    meta = {
-        "doc_id": doc_id,
-        "email": email,
-        "name": name,
-        "filename": filename,
-        "mime_type": mime_type,
-        "size_bytes": len(content),
+    meta   = {
+        "doc_id":      doc_id,
+        "email":       email,
+        "name":        name,
+        "filename":    filename,
+        "mime_type":   mime_type,
+        "size_bytes":  len(content),
         "uploaded_at": _now_iso(),
     }
-    sb = _sb()
+    sb = _sb_user(token)
     if sb:
         try:
-            # Correct Supabase Py SDK Storage syntax
             path = f"{email}/{doc_id}/{filename}"
-            sb.storage.from_("vault").upload(path, content, file_options={"content-type": mime_type})
+            sb.storage.from_("vault").upload(
+                path, content, file_options={"content-type": mime_type}
+            )
             sb.table("documents").insert(meta).execute()
             return doc_id
         except Exception as e:
             logging.error(f"Cloud vault upload failed: {e}")
-            
     # Local fallback
     (_vault_dir(email) / f"{doc_id}.bin").write_bytes(content)
     store = _load_json(LOCAL_DOCS)
@@ -214,27 +268,31 @@ def save_document(email: str, name: str, filename: str, content: bytes, mime_typ
     _save_json(LOCAL_DOCS, store)
     return doc_id
 
-def get_document_bytes(email: str, doc_id: str) -> bytes | None:
+
+def get_document_bytes(email: str, doc_id: str,
+                       token: str | None = None) -> bytes | None:
     email = email.strip().lower()
-    sb = _sb()
+    sb = _sb_user(token)
     if sb:
         try:
-            rows = sb.table("documents").select("filename").eq("email", email).eq("doc_id", doc_id).execute().data
+            rows = (sb.table("documents").select("filename")
+                    .eq("email", email).eq("doc_id", doc_id).execute().data)
             if rows:
                 path = f"{email}/{doc_id}/{rows[0]['filename']}"
                 return sb.storage.from_("vault").download(path)
         except Exception as e:
             logging.error(f"Cloud vault download failed: {e}")
-            
     f = _vault_dir(email) / f"{doc_id}.bin"
     return f.read_bytes() if f.exists() else None
 
-def delete_document(email: str, doc_id: str) -> None:
+
+def delete_document(email: str, doc_id: str, token: str | None = None) -> None:
     email = email.strip().lower()
-    sb = _sb()
+    sb = _sb_user(token)
     if sb:
         try:
-            rows = sb.table("documents").select("filename").eq("email", email).eq("doc_id", doc_id).execute().data
+            rows = (sb.table("documents").select("filename")
+                    .eq("email", email).eq("doc_id", doc_id).execute().data)
             if rows:
                 path = f"{email}/{doc_id}/{rows[0]['filename']}"
                 sb.storage.from_("vault").remove([path])
@@ -242,7 +300,6 @@ def delete_document(email: str, doc_id: str) -> None:
             return
         except Exception as e:
             logging.error(f"Cloud vault delete failed: {e}")
-            
     f = _vault_dir(email) / f"{doc_id}.bin"
     if f.exists():
         f.unlink()

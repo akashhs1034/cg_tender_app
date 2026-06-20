@@ -25,7 +25,8 @@ st.set_page_config(
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 for _k, _v in {
-    "authenticated": False, "email": "", "current_page": "🏠  Dashboard",
+    "authenticated": False, "email": "", "sb_token": "",
+    "current_page": "🏠  Dashboard",
     "explore_search": "", "explore_category": "All",
     "explore_state": "All", "explore_district": "All",
     "bid_tender": None,
@@ -396,6 +397,19 @@ def days_left(d) -> int | None:
     dd = core.parse_date(d)
     return (dd - date.today()).days if dd else None
 
+def _profile_to_resume_text(p: dict) -> str:
+    """Build a keyword-matchable text blob from job seeker profile fields."""
+    parts = []
+    for f in ("full_name", "qualification", "degree_type", "job_category"):
+        v = p.get(f, "")
+        if v: parts.append(str(v))
+    for lst in ("job_skills", "languages"):
+        parts.extend(p.get(lst) or [])
+    yrs = p.get("job_experience_years") or 0
+    if yrs:
+        parts.append(f"{yrs} years experience")
+    return " ".join(parts)
+
 def ring_cls(s) -> str:
     try: s = int(s)
     except: return "ring-lo"
@@ -503,10 +517,11 @@ with st.sidebar:
                                 placeholder="Password")
         c1, c2 = st.columns(2)
         if c1.button("Login", use_container_width=True):
-            ok, msg = accounts.login_user(auth_email, auth_pw)
+            ok, msg, token = accounts.login_user(auth_email, auth_pw)
             if ok:
                 st.session_state.authenticated = True
-                st.session_state.email = auth_email.strip().lower()
+                st.session_state.email    = auth_email.strip().lower()
+                st.session_state.sb_token = token or ""
                 st.rerun()
             else:
                 st.error(msg)
@@ -538,12 +553,14 @@ with st.sidebar:
 
         if st.button("⏏  Log Out", use_container_width=True):
             st.session_state.authenticated = False
-            st.session_state.email = ""
+            st.session_state.email    = ""
+            st.session_state.sb_token = ""
             st.rerun()
 
 # ── GLOBAL CONTEXT ────────────────────────────────────────────────────────────
-email   = st.session_state.email
-profile = accounts.get_profile(email) if email else dict(core.DEFAULT_PROFILE)
+email    = st.session_state.email
+_token   = st.session_state.get("sb_token", "")
+profile  = accounts.get_profile(email, token=_token) if email else dict(core.DEFAULT_PROFILE)
 if profile is None:
     profile = dict(core.DEFAULT_PROFILE)
 cname = profile.get("company_name") or (
@@ -688,7 +705,7 @@ if "Dashboard" in page:
                         if doc_url and str(doc_url) not in ("nan","None","—"):
                             _pdf_widget(doc_url, rec.get("source_id",""), ctx="dash")
                         if st.button("➕ Save to Pipeline", key=f"d_save_{rec.get('source_id')}"):
-                            accounts.save_tender(email, rec.get("source_id"))
+                            accounts.save_tender(email, rec.get("source_id"), token=_token)
                             st.toast("✓ Saved to pipeline")
             else:
                 st.markdown("""<div class="ocard" style="text-align:center;padding:32px;color:#475569">
@@ -1425,6 +1442,8 @@ elif "Jobs" in page:
         st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(jobs_filtered)} postings</div>',
                     unsafe_allow_html=True)
 
+        _job_prof_text = _profile_to_resume_text(profile) if st.session_state.authenticated else ""
+
         for rec in jobs_filtered[:100]:
             dl     = days_left(rec.get("deadline"))
             dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else "Open"
@@ -1445,6 +1464,16 @@ elif "Jobs" in page:
             sal_tag   = f'<span class="tag tag-val">&#x20B9; {salary_v}</span>' if salary_v != "—" else ""
             jvac_div  = f'<div class="jvac">{vac_txt}</div>' if vac_txt else ""
 
+            # Auto eligibility badge from profile
+            match_div = ""
+            if _job_prof_text:
+                _m = evaluator._keyword_resume_eval(rec, _job_prof_text)
+                _p = _m["readiness_pct"]
+                _c = score_color(_p)
+                match_div = (f'<div style="text-align:center;flex-shrink:0;min-width:48px;margin-left:8px">'
+                             f'<div style="font-size:.95rem;font-weight:700;color:{_c}">{_p}%</div>'
+                             f'<div style="font-size:.6rem;color:#64748B">match</div></div>')
+
             card_html = (
                 f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
                 f'<div class="jcard-title">{title_v}</div>'
@@ -1454,7 +1483,7 @@ elif "Jobs" in page:
                 f'{vac_tag}'
                 f'<span class="tag tag-cat">{cat_v}</span>'
                 f'{sal_tag}'
-                f'</div></div>{jvac_div}</div></div>'
+                f'</div></div>{match_div}{jvac_div}</div></div>'
             )
             st.markdown(card_html, unsafe_allow_html=True)
 
@@ -1475,15 +1504,37 @@ elif "Jobs" in page:
 
                 if st.session_state.authenticated:
                     st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
-                    st.markdown("**Quick Resume Match**")
-                    resume_up = st.file_uploader("Upload resume", type=["pdf","txt"],
+                    st.markdown("**Job Eligibility Check**")
+
+                    # Auto-match from saved profile (instant, no upload needed)
+                    _prof_resume = _profile_to_resume_text(profile)
+                    if _prof_resume.strip():
+                        _auto = evaluator._keyword_resume_eval(rec, _prof_resume)
+                        _apct = _auto["readiness_pct"]
+                        _acol = score_color(_apct)
+                        st.markdown(
+                            f'<div class="res-panel" style="padding:10px 16px">'
+                            f'<b style="color:{_acol};font-size:1.3rem">{_apct}%</b>'
+                            f'&nbsp; <span style="color:#94A3B8;font-size:.82rem">Profile match · {_auto["verdict"]}</span>'
+                            f'</div>', unsafe_allow_html=True)
+                        if _auto["met"]:
+                            st.success("✅ Met: " + " · ".join(_auto["met"][:4]))
+                        if _auto["missing"]:
+                            st.error("❌ Missing: " + " · ".join(_auto["missing"][:4]))
+                        st.caption("Auto-scored from your Job Seeker Profile. Upload resume below for deeper AI analysis.")
+                    else:
+                        st.caption("Complete your **Job Seeker Profile** (Profile → Job Seeker Profile tab) for auto-scoring.")
+
+                    # Optional resume upload for deeper AI analysis
+                    resume_up = st.file_uploader("Upload resume for AI analysis (optional)",
+                                                 type=["pdf","txt"],
                                                  key=f"jr_{rec.get('source_id')}")
                     if resume_up:
                         rtext = (_read_pdf_text(resume_up)
                                  if resume_up.name.lower().endswith(".pdf")
                                  else resume_up.read().decode("utf-8", errors="ignore"))
-                        if st.button("⚡ Analyze Match", key=f"jra_{rec.get('source_id')}"):
-                            with st.spinner("Analyzing..."):
+                        if st.button("⚡ Deep AI Analysis", key=f"jra_{rec.get('source_id')}"):
+                            with st.spinner("AI analyzing resume..."):
                                 res = evaluator.evaluate_resume_for_job(rec, rtext)
                             pct   = res["readiness_pct"]
                             color = score_color(pct)
@@ -1519,7 +1570,8 @@ elif "Documents" in page:
         if st.button("⬆️ Upload to Vault", use_container_width=True) and doc_file and doc_name:
             with st.spinner("Uploading securely..."):
                 doc_id = accounts.save_document(email, doc_name, doc_file.name,
-                                                doc_file.read(), doc_file.type or "application/octet-stream")
+                                                doc_file.read(), doc_file.type or "application/octet-stream",
+                                                token=_token)
             if doc_id:
                 st.success(f"✓ '{doc_name}' uploaded successfully.")
                 st.rerun()
@@ -1531,7 +1583,7 @@ elif "Documents" in page:
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
-    docs = accounts.list_documents(email)
+    docs = accounts.list_documents(email, token=_token)
     if docs:
         st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:14px">{len(docs)} documents</div>',
                     unsafe_allow_html=True)
@@ -1731,15 +1783,19 @@ elif "Analytics" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Profile" in page:
     if not st.session_state.authenticated:
-        st.warning("Sign in to access your firm profile.")
+        st.warning("Sign in to access your profile.")
         st.stop()
 
     st.markdown("""<div class="sec-hd">
-      <span class="sec-title">👤 Firm Intelligence Profile</span>
+      <span class="sec-title">👤 My Profile</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
-    with st.form("profile_form"):
+    ptab1, ptab2 = st.tabs(["🏢  Contractor Profile", "👤  Job Seeker Profile"])
+
+    # ── Tab 1: Contractor Profile ──────────────────────────────────────────────
+    with ptab1:
+      with st.form("profile_form"):
         st.markdown('<div class="profile-section-title">Company Identity</div>', unsafe_allow_html=True)
         pf1, pf2 = st.columns(2)
         with pf1:
@@ -1777,7 +1833,7 @@ elif "Profile" in page:
                                        avail_dists, default=saved_dists)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.form_submit_button("💾 Save Firm Profile", use_container_width=True):
+        if st.form_submit_button("💾 Save Contractor Profile", use_container_width=True):
             accounts.save_profile(email, {
                 "company_name":     company,
                 "turnover_lakhs":   turnover,
@@ -1786,50 +1842,134 @@ elif "Profile" in page:
                 "sectors":          sectors,
                 "states":           target_states,
                 "districts":        districts,
-            })
+            }, token=_token)
             st.success("✓ Profile saved. AI scores will update on next page load.")
             st.rerun()
 
-    # ── Saved Pipeline ──
-    st.markdown("""<div class="sec-hd" style="margin-top:36px">
-      <span class="sec-title">📋 My Saved Pipeline</span>
-      <div class="sec-divider"></div>
-    </div>""", unsafe_allow_html=True)
+      # ── Saved Pipeline (inside Contractor tab) ──
+      st.markdown("""<div class="sec-hd" style="margin-top:36px">
+        <span class="sec-title">📋 My Saved Tender Pipeline</span>
+        <div class="sec-divider"></div>
+      </div>""", unsafe_allow_html=True)
 
-    saved = accounts.list_saved(email)
-    if saved:
-        tender_lookup = ({r["source_id"]: r for _, r in df_t.iterrows()}
-                         if not df_t.empty else {})
-        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:14px">{len(saved)} saved</div>',
+      saved = accounts.list_saved(email, token=_token)
+      if saved:
+          tender_lookup = ({r["source_id"]: r for _, r in df_t.iterrows()}
+                           if not df_t.empty else {})
+          st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:14px">{len(saved)} saved</div>',
+                      unsafe_allow_html=True)
+          for s in saved:
+              rec    = tender_lookup.get(s.get("source_id",""), {})
+              title  = safe_str(rec.get("title", s.get("source_id","—")), 80)
+              org    = _v(rec.get("organization"))
+              status = _v(s.get("status"), "interested")
+              val    = _v(rec.get("value_text"))
+              dl     = days_left(rec.get("deadline"))
+              dl_txt   = f"&#9201; {dl}d left" if dl is not None and dl >= 0 else ""
+              val_tag  = f'<span class="tag tag-val">{_html.escape(val)}</span>' if val != "—" else ""
+              dl_tag   = f'<span class="tag tag-dl">{dl_txt}</span>' if dl_txt else ""
+              pcard_html = (
+                  f'<div class="pipe-card"><div style="flex:1;min-width:0">'
+                  f'<div style="font-size:.87rem;font-weight:600;color:#E2E8F0;margin-bottom:3px">&#128204; {_html.escape(title)}</div>'
+                  f'<div style="font-size:.72rem;color:#475569">{_html.escape(org)}</div>'
+                  f'<div class="ocard-tags" style="margin-top:8px">'
+                  f'<span class="tag tag-cat">Status: {_html.escape(status)}</span>'
+                  f'{val_tag}{dl_tag}'
+                  f'</div></div></div>'
+              )
+              st.markdown(pcard_html, unsafe_allow_html=True)
+      else:
+          st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
+            <div style="font-size:2rem;margin-bottom:10px">📋</div>
+            <div style="font-size:.86rem;color:#64748B">No saved tenders yet</div>
+            <div style="font-size:.75rem;color:#334155;margin-top:6px">
+              Use the Explore page to save tenders to your pipeline.
+            </div>
+          </div>""", unsafe_allow_html=True)
+
+    # ── Tab 2: Job Seeker Profile ──────────────────────────────────────────────
+    with ptab2:
+        st.markdown('<div class="profile-section-title">Personal & Academic Details</div>',
                     unsafe_allow_html=True)
-        for s in saved:
-            rec    = tender_lookup.get(s.get("source_id",""), {})
-            title  = safe_str(rec.get("title", s.get("source_id","—")), 80)
-            org    = _v(rec.get("organization"))
-            status = _v(s.get("status"), "interested")
-            val    = _v(rec.get("value_text"))
-            dl     = days_left(rec.get("deadline"))
-            dl_txt   = f"&#9201; {dl}d left" if dl is not None and dl >= 0 else ""
-            val_tag  = f'<span class="tag tag-val">{_html.escape(val)}</span>' if val != "—" else ""
-            dl_tag   = f'<span class="tag tag-dl">{dl_txt}</span>' if dl_txt else ""
-            pcard_html = (
-                f'<div class="pipe-card"><div style="flex:1;min-width:0">'
-                f'<div style="font-size:.87rem;font-weight:600;color:#E2E8F0;margin-bottom:3px">&#128204; {_html.escape(title)}</div>'
-                f'<div style="font-size:.72rem;color:#475569">{_html.escape(org)}</div>'
-                f'<div class="ocard-tags" style="margin-top:8px">'
-                f'<span class="tag tag-cat">Status: {_html.escape(status)}</span>'
-                f'{val_tag}{dl_tag}'
-                f'</div></div></div>'
-            )
-            st.markdown(pcard_html, unsafe_allow_html=True)
-    else:
-        st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
-          <div style="font-size:2rem;margin-bottom:10px">📋</div>
-          <div style="font-size:.86rem;color:#64748B">No saved tenders yet</div>
-          <div style="font-size:.75rem;color:#334155;margin-top:6px">
-            Use the Explore page to save tenders to your pipeline.
-          </div>
-        </div>""", unsafe_allow_html=True)
+
+        _DEGREE_OPTIONS = [
+            "B.Tech / B.E. (Engineering)", "MBA / PGDM", "MCA",
+            "M.Tech / M.E.", "B.Ed (Teacher Training)", "MBBS / Medical Degree",
+            "GNM / B.Sc Nursing", "12th / Intermediate", "Diploma",
+            "B.Sc / B.A. / B.Com (Graduate)", "Ph.D / Post-Graduate (Other)",
+        ]
+        _CATEGORY_OPTIONS = ["General", "OBC", "SC", "ST", "EWS"]
+        _LANG_OPTIONS     = ["Hindi", "English", "Chhattisgarhi", "Awadhi", "Bhojpuri", "Urdu"]
+
+        with st.form("job_seeker_form"):
+            js1, js2 = st.columns(2)
+            with js1:
+                full_name = st.text_input("Full Name",
+                    value=_v(profile.get("full_name"), ""),
+                    placeholder="Rajesh Kumar Sharma")
+                cur_deg = _v(profile.get("degree_type"), "")
+                deg_idx = _DEGREE_OPTIONS.index(cur_deg) if cur_deg in _DEGREE_OPTIONS else 0
+                degree_type = st.selectbox("Highest Degree / Qualification",
+                    _DEGREE_OPTIONS, index=deg_idx)
+                job_exp = st.number_input("Total Work Experience (years)", min_value=0,
+                    step=1, value=int(profile.get("job_experience_years") or 0))
+            with js2:
+                cur_cat = _v(profile.get("job_category"), "General")
+                cat_idx = _CATEGORY_OPTIONS.index(cur_cat) if cur_cat in _CATEGORY_OPTIONS else 0
+                job_cat = st.selectbox("Reservation Category", _CATEGORY_OPTIONS, index=cat_idx)
+                saved_langs = [l for l in (profile.get("languages") or []) if l in _LANG_OPTIONS]
+                languages   = st.multiselect("Languages Known", _LANG_OPTIONS,
+                    default=saved_langs if saved_langs else ["Hindi", "English"])
+                skills_raw = st.text_input("Key Skills (comma-separated)",
+                    value=", ".join(profile.get("job_skills") or []),
+                    placeholder="e.g. AutoCAD, MS Office, Tally, Python")
+
+            qualification = st.text_area("Qualification Details",
+                value=_v(profile.get("qualification"), ""),
+                placeholder="e.g. B.Tech Civil Engineering, NIT Raipur, 2018, 75%\nAlso list any diploma, certificate courses, or training",
+                height=90)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.form_submit_button("💾 Save Job Seeker Profile", use_container_width=True):
+                skills_list = [s.strip() for s in skills_raw.split(",") if s.strip()]
+                accounts.save_profile(email, {
+                    "full_name":            full_name,
+                    "qualification":        qualification,
+                    "degree_type":          degree_type,
+                    "job_experience_years": job_exp,
+                    "job_skills":           skills_list,
+                    "job_category":         job_cat,
+                    "languages":            languages,
+                }, token=_token)
+                st.success("✓ Job seeker profile saved. The Jobs page will now auto-score your eligibility.")
+                st.rerun()
+
+        # ── Auto Job Eligibility Preview ──
+        _js_resume = _profile_to_resume_text(profile)
+        if _js_resume.strip():
+            st.markdown('<div class="profile-section-title" style="margin-top:24px">Your Job Eligibility (from profile)</div>',
+                        unsafe_allow_html=True)
+            st.caption("Based on your saved profile — upload a resume in the Jobs tab for deeper AI analysis.")
+            if not df_j.empty:
+                _preview_jobs = df_j.head(15).to_dict("records")
+                for _j in _preview_jobs:
+                    _res = evaluator._keyword_resume_eval(_j, _js_resume)
+                    _pct = _res["readiness_pct"]
+                    _col = score_color(_pct)
+                    _ttl = safe_str(_j.get("title"), 70)
+                    _dept = _v(_j.get("department"))
+                    st.markdown(
+                        f'<div class="jcard" style="padding:10px 16px">'
+                        f'<div class="jcard-row"><div class="jcard-body">'
+                        f'<div class="jcard-title" style="font-size:.82rem">{_html.escape(_ttl)}</div>'
+                        f'<div class="jcard-dept">{_html.escape(_dept)}</div></div>'
+                        f'<div style="text-align:center;flex-shrink:0;min-width:52px">'
+                        f'<div style="font-size:1.1rem;font-weight:700;color:{_col}">{_pct}%</div>'
+                        f'<div style="font-size:.62rem;color:#64748B">match</div>'
+                        f'</div></div></div>',
+                        unsafe_allow_html=True)
+        else:
+            st.info("Fill in your qualification, degree type, skills and save above — the app will automatically score your eligibility for every job.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── FOOTER ────────────────────────────────────────────────────────────────────

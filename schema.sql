@@ -50,13 +50,20 @@ create index if not exists idx_tenders_deadline on tenders (deadline);
 create index if not exists idx_jobs_state       on jobs (state);
 create index if not exists idx_jobs_category    on jobs (category);
 
--- Row Level Security: the public site only needs READ access. The pipeline
--- writes using the service key (server-side only, never in the browser).
+-- Row Level Security
 alter table tenders enable row level security;
 alter table jobs    enable row level security;
 
-create policy "public read tenders" on tenders for select using (true);
-create policy "public read jobs"    on jobs    for select using (true);
+-- Public read (browser + app)
+create policy "public read tenders"  on tenders for select using (true);
+create policy "public read jobs"     on jobs    for select using (true);
+
+-- Pipeline write: tenders and jobs are public government data, no user-specific secrets.
+-- The anon key is used by the local ingest pipeline (no user auth context).
+create policy "pipeline insert tenders" on tenders for insert with check (true);
+create policy "pipeline update tenders" on tenders for update using (true);
+create policy "pipeline insert jobs"    on jobs    for insert with check (true);
+create policy "pipeline update jobs"    on jobs    for update using (true);
 
 
 -- ===========================================================================

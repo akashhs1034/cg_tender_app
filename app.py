@@ -1,629 +1,1595 @@
 """
-app.py — Opporta Enterprise Web Console.
-Fully custom-styled dashboard implementation optimized for desktop web view.
+app.py -- OPPORTA  ·  Every Opportunity. One Platform.
+Elite Intelligence OS for CG & UP Government Tenders & Jobs.
 """
-
 from __future__ import annotations
-
-import io
-import os
+import json, os
 from datetime import date
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import core, accounts, evaluator
 
-import core
-import accounts
-import evaluator
+st.set_page_config(
+    page_title="Opporta · Intelligence Platform",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
 
-ROOT = Path(__file__).parent
-DATA = ROOT / "data"
-SECTORS = ["Civil Works", "Civil Infrastructure", "Electrical & Energy", "Coal & Mining",
-           "Medical Procurement", "Water & Irrigation", "Municipal Projects",
-           "Transport", "Manufacturing", "IT Services"]
-DISTRICTS = ["Raipur", "Bilaspur", "Durg", "Bhilai", "Korba", "Bastar", "Raigarh",
-             "Lucknow", "Kanpur", "Prayagraj", "Varanasi", "Gorakhpur", "Gonda"]
+# ── SESSION STATE ─────────────────────────────────────────────────────────────
+for _k, _v in {
+    "authenticated": False, "email": "", "current_page": "🏠  Dashboard",
+    "explore_search": "", "explore_category": "All",
+    "explore_state": "All", "explore_district": "All",
+    "bid_tender": None,
+}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
-# Set page to wide layout for maximum screen real estate utilization
-st.set_page_config(page_title="Opporta Console", page_icon="⚡", layout="wide")
+# ── DESIGN SYSTEM CSS ─────────────────────────────────────────────────────────
+st.markdown("""<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
-# =====================================================================
-# CUSTOM CORPORATE CSS SHELL INJECTION
-# =====================================================================
-st.markdown("""
-    <style>
-        /* General Canvas Tidy-up */
-        .block-container {
-            padding-top: 2rem !important;
-            padding-bottom: 2rem !important;
-        }
-        
-        /* Premium Core Value Cards */
-        .kpi-container {
-            display: flex;
-            gap: 1rem;
-            margin-bottom: 1.5rem;
-        }
-        .kpi-box {
-            flex: 1;
-            background-color: #FFFFFF;
-            padding: 1.25rem;
-            border-radius: 10px;
-            border: 1px solid #E2E8F0;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            text-align: left;
-        }
-        .kpi-value {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: #1E293B;
-            line-height: 1.2;
-        }
-        .kpi-label {
-            font-size: 0.85rem;
-            color: #64748B;
-            font-weight: 500;
-            margin-top: 0.25rem;
-        }
-        
-        /* Dynamic Opportunity Feeds */
-        .custom-card {
-            background-color: #FFFFFF;
-            padding: 1.5rem;
-            border-radius: 12px;
-            border: 1px solid #E2E8F0;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-            margin-bottom: 1rem;
-        }
-        
-        /* Metric Badges Alignment */
-        .score-badge {
-            display: inline-block;
-            padding: 0.35rem 0.65rem;
-            border-radius: 6px;
-            font-size: 0.85rem;
-            font-weight: 700;
-            text-align: center;
-        }
-        .fit-high { background-color: #DCFCE7; color: #15803D; }
-        .fit-mid { background-color: #FEF3C7; color: #B45309; }
-        .fit-low { background-color: #FEE2E2; color: #B91C1C; }
-        
-        .eligibility-tag {
-            font-size: 0.8rem;
-            font-weight: 600;
-            padding: 0.2rem 0.5rem;
-            border-radius: 4px;
-            text-transform: uppercase;
-        }
-        .eligible-true { background-color: #E0F2FE; color: #0369A1; }
-        .eligible-false { background-color: #FFEDD5; color: #C2410C; }
-    </style>
-""", unsafe_allow_html=True)
+/* ── Base Reset ── */
+html,body,.stApp{background:#02040A!important;color:#F1F5F9;font-family:'Inter',sans-serif;-webkit-font-smoothing:antialiased}
+#MainMenu,footer,header,[data-testid="stToolbar"]{visibility:hidden}
+.block-container{padding:0 2.5rem 3rem!important;max-width:1600px!important}
 
-def _secret(name):
-    if name in os.environ:
-        return os.environ[name]
-    try:
-        return st.secrets[name]
-    except Exception:
-        return None
+/* ── Sidebar ── */
+section[data-testid="stSidebar"]{background:linear-gradient(180deg,#060C1A 0%,#030710 100%)!important;border-right:1px solid rgba(99,102,241,.12)!important}
+section[data-testid="stSidebar"] .stButton>button{background:transparent!important;border:1px solid rgba(255,255,255,.06)!important;color:#94A3B8!important;font-size:.78rem!important;font-weight:500!important;border-radius:8px!important;text-align:left!important;justify-content:flex-start!important;padding:8px 12px!important;margin-bottom:2px}
+section[data-testid="stSidebar"] .stButton>button:hover{background:rgba(99,102,241,.08)!important;border-color:rgba(99,102,241,.3)!important;color:#F1F5F9!important}
+section[data-testid="stSidebar"] .stButton>button[kind="primary"]{background:linear-gradient(135deg,rgba(99,102,241,.2),rgba(139,92,246,.15))!important;border-color:rgba(99,102,241,.4)!important;color:#A5B4FC!important;font-weight:600!important}
 
-@st.cache_data(ttl=600)
-def load_table(name):
+/* ── Scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:#02040A}
+::-webkit-scrollbar-thumb{background:#1E293B;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#6366F1}
+
+/* ── Global Inputs ── */
+.stTextInput>div>div>input,.stNumberInput>div>div>input{background:#0B1329!important;border:1px solid rgba(99,102,241,.2)!important;border-radius:10px!important;color:#F1F5F9!important;font-size:.85rem!important;padding:10px 14px!important}
+.stTextInput>div>div>input:focus,.stNumberInput>div>div>input:focus{border-color:rgba(99,102,241,.6)!important;box-shadow:0 0 0 3px rgba(99,102,241,.08)!important}
+.stSelectbox>div>div{background:#0B1329!important;border:1px solid rgba(99,102,241,.2)!important;border-radius:10px!important;color:#F1F5F9!important}
+.stMultiSelect>div>div{background:#0B1329!important;border:1px solid rgba(99,102,241,.2)!important;border-radius:10px!important}
+.stTextArea>div>textarea{background:#0B1329!important;border:1px solid rgba(99,102,241,.2)!important;border-radius:10px!important;color:#F1F5F9!important;font-size:.84rem!important}
+.stTextArea>div>textarea:focus{border-color:rgba(99,102,241,.5)!important;box-shadow:0 0 0 3px rgba(99,102,241,.06)!important}
+label,.stSelectbox label,.stTextInput label,.stTextArea label,.stNumberInput label,.stMultiSelect label{color:#64748B!important;font-size:.75rem!important;font-weight:500!important;letter-spacing:.04em!important;text-transform:uppercase!important}
+
+/* ── Main Buttons ── */
+.stButton>button{background:linear-gradient(135deg,#6366F1,#8B5CF6)!important;border:none!important;border-radius:10px!important;color:#fff!important;font-weight:600!important;font-size:.83rem!important;letter-spacing:.02em!important;transition:all .2s!important}
+.stButton>button:hover{transform:translateY(-1px)!important;box-shadow:0 8px 24px rgba(99,102,241,.35)!important}
+.stButton>button[kind="secondary"]{background:rgba(255,255,255,.04)!important;border:1px solid rgba(255,255,255,.08)!important;color:#94A3B8!important}
+.stButton>button[kind="secondary"]:hover{background:rgba(99,102,241,.08)!important;border-color:rgba(99,102,241,.3)!important;color:#F1F5F9!important}
+
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"]{background:rgba(11,19,41,.6);border:1px solid rgba(99,102,241,.12);border-radius:12px;padding:5px;gap:4px;backdrop-filter:blur(10px)}
+.stTabs [data-baseweb="tab"]{border-radius:8px;color:#64748B!important;font-size:.82rem!important;font-weight:500!important;padding:8px 18px!important;border:none!important}
+.stTabs [aria-selected="true"]{background:linear-gradient(135deg,#6366F1,#8B5CF6)!important;color:#fff!important;font-weight:600!important;box-shadow:0 4px 12px rgba(99,102,241,.3)!important}
+
+/* ── Expander ── */
+div[data-testid="stExpander"]{background:#080F22!important;border:1px solid rgba(99,102,241,.1)!important;border-radius:12px!important}
+div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!important}
+
+/* ── File Uploader ── */
+[data-testid="stFileUploader"]{border:1.5px dashed rgba(99,102,241,.25)!important;border-radius:12px!important;background:rgba(11,19,41,.4)!important;padding:12px!important}
+
+/* ── ──────────────────────────────────────────── ── */
+/* ── COMPONENT LIBRARY                           ── */
+/* ── ──────────────────────────────────────────── ── */
+
+/* Hero */
+.hero{text-align:center;padding:72px 20px 56px;position:relative}
+.hero::before{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:600px;height:400px;background:radial-gradient(ellipse at center,rgba(99,102,241,.08) 0%,transparent 70%);pointer-events:none}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:7px;background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.22);border-radius:100px;padding:6px 16px;font-size:.72rem;color:#818CF8;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-bottom:28px}
+.hero-pulse{width:7px;height:7px;border-radius:50%;background:#6366F1;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+.hero-h1{font-size:clamp(2.8rem,6vw,4.8rem);font-weight:900;line-height:1.05;color:#F1F5F9;letter-spacing:-.04em;margin-bottom:18px}
+.hero-h1 em{font-style:normal;background:linear-gradient(135deg,#6366F1 0%,#8B5CF6 50%,#06B6D4 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.hero-sub{font-size:1rem;color:#475569;max-width:520px;margin:0 auto 40px;line-height:1.75;font-weight:400}
+.hero-cta-row{display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap}
+.hero-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:100px;padding:8px 18px;font-size:.78rem;color:#10B981;font-weight:600}
+
+/* KPI Cards */
+.kpi-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin-bottom:32px}
+.kpi{background:linear-gradient(145deg,#0B1329,#0D1A35);border:1px solid rgba(99,102,241,.14);border-radius:18px;padding:22px 20px 18px;position:relative;overflow:hidden;cursor:default;transition:transform .2s,box-shadow .2s,border-color .2s}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#6366F1,#8B5CF6,#A78BFA,transparent);opacity:.8}
+.kpi::after{content:'';position:absolute;top:-30px;right:-20px;width:80px;height:80px;background:radial-gradient(circle,rgba(99,102,241,.06),transparent 70%);pointer-events:none}
+.kpi:hover{transform:translateY(-3px);box-shadow:0 20px 48px rgba(99,102,241,.1);border-color:rgba(99,102,241,.28)}
+.kpi-icon{font-size:1.1rem;margin-bottom:14px;opacity:.7}
+.kpi-num{font-size:1.9rem;font-weight:900;color:#F1F5F9;line-height:1;letter-spacing:-.03em}
+.kpi-lbl{font-size:.65rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.1em;margin-top:7px}
+.kpi-sub{font-size:.7rem;color:#10B981;margin-top:5px;font-weight:500;display:flex;align-items:center;gap:4px}
+.kpi-sub.warn{color:#F59E0B}
+
+/* Briefing Banner */
+.brief{background:linear-gradient(135deg,rgba(99,102,241,.06),rgba(139,92,246,.04),rgba(16,185,129,.02));border:1px solid rgba(99,102,241,.18);border-radius:20px;padding:26px 30px;margin-bottom:28px;position:relative;overflow:hidden}
+.brief::before{content:'';position:absolute;right:-50px;top:-50px;width:200px;height:200px;background:radial-gradient(circle,rgba(99,102,241,.05),transparent 70%)}
+.brief-row{display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.brief-greeting{font-size:1.3rem;font-weight:800;color:#F1F5F9;letter-spacing:-.02em;margin-bottom:4px}
+.brief-sub{font-size:.83rem;color:#64748B;line-height:1.5}
+.brief-stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.bstat{display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:100px;padding:6px 14px;font-size:.75rem;color:#CBD5E1;font-weight:500}
+.bstat b{color:#F1F5F9;font-weight:700}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#10B981;display:inline-block;box-shadow:0 0 8px rgba(16,185,129,.6);animation:pulse 2s infinite}
+
+/* Section Header */
+.sec-hd{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding-top:4px}
+.sec-title{font-size:.92rem;font-weight:700;color:#F1F5F9;letter-spacing:-.01em}
+.sec-badge{background:rgba(99,102,241,.1);color:#818CF8;border:1px solid rgba(99,102,241,.2);border-radius:100px;padding:3px 12px;font-size:.67rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.sec-badge-green{background:rgba(16,185,129,.08);color:#10B981;border:1px solid rgba(16,185,129,.2);border-radius:100px;padding:3px 12px;font-size:.67rem;font-weight:700}
+.sec-divider{flex:1;height:1px;background:linear-gradient(90deg,rgba(99,102,241,.12),transparent)}
+
+/* Opportunity Cards */
+.ocard{background:linear-gradient(145deg,#080F22,#0A1428);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:18px 20px;margin-bottom:10px;transition:border-color .2s,box-shadow .2s,transform .15s;position:relative;overflow:hidden}
+.ocard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#6366F1,#8B5CF6);opacity:0;transition:opacity .2s}
+.ocard:hover{border-color:rgba(99,102,241,.25);box-shadow:0 8px 32px rgba(99,102,241,.07);transform:translateX(2px)}
+.ocard:hover::before{opacity:1}
+.ocard-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.ocard-body{flex:1;min-width:0}
+.ocard-title{font-size:.9rem;font-weight:700;color:#E2E8F0;line-height:1.45;margin-bottom:5px;letter-spacing:-.01em}
+.ocard-org{font-size:.73rem;color:#475569;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.ocard-tags{display:flex;gap:6px;flex-wrap:wrap}
+
+/* Tags */
+.tag{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:100px;font-size:.67rem;font-weight:600;white-space:nowrap;letter-spacing:.02em}
+.tag-val{background:rgba(16,185,129,.08);color:#10B981;border:1px solid rgba(16,185,129,.18)}
+.tag-dl{background:rgba(245,158,11,.08);color:#F59E0B;border:1px solid rgba(245,158,11,.18)}
+.tag-loc{background:rgba(99,102,241,.08);color:#818CF8;border:1px solid rgba(99,102,241,.18)}
+.tag-cat{background:rgba(139,92,246,.08);color:#A78BFA;border:1px solid rgba(139,92,246,.18)}
+.tag-green{background:rgba(16,185,129,.1);color:#10B981;border:1px solid rgba(16,185,129,.25)}
+.tag-warn{background:rgba(245,158,11,.1);color:#F59E0B;border:1px solid rgba(245,158,11,.25)}
+.tag-red{background:rgba(239,68,68,.08);color:#F87171;border:1px solid rgba(239,68,68,.2)}
+
+/* Score Ring */
+.ring{width:54px;height:54px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:900;letter-spacing:-.02em}
+.ring-hi{background:rgba(16,185,129,.1);color:#10B981;border:2.5px solid #10B981;box-shadow:0 0 14px rgba(16,185,129,.15)}
+.ring-md{background:rgba(245,158,11,.1);color:#F59E0B;border:2.5px solid #F59E0B;box-shadow:0 0 14px rgba(245,158,11,.15)}
+.ring-lo{background:rgba(239,68,68,.08);color:#F87171;border:2.5px solid #F87171;box-shadow:0 0 14px rgba(239,68,68,.1)}
+
+/* Job Cards */
+.jcard{background:linear-gradient(145deg,#080F22,#0A1428);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 20px;margin-bottom:9px;transition:border-color .2s,box-shadow .2s;position:relative;overflow:hidden}
+.jcard:hover{border-color:rgba(99,102,241,.22);box-shadow:0 6px 24px rgba(99,102,241,.06)}
+.jcard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#06B6D4,#6366F1);opacity:0;transition:opacity .2s}
+.jcard:hover::before{opacity:1}
+.jcard-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+.jcard-body{flex:1;min-width:0}
+.jcard-title{font-size:.88rem;font-weight:700;color:#E2E8F0;letter-spacing:-.01em;margin-bottom:4px}
+.jcard-dept{font-size:.72rem;color:#475569;margin-bottom:11px}
+.jvac{background:rgba(6,182,212,.08);color:#06B6D4;border:1px solid rgba(6,182,212,.2);border-radius:8px;padding:4px 10px;font-size:.72rem;font-weight:700;flex-shrink:0}
+
+/* AI Workspace */
+.terminal-hd{background:linear-gradient(135deg,#080F22,#0B1329);border:1px solid rgba(99,102,241,.15);border-radius:16px;padding:20px 24px;margin-bottom:16px;position:relative;overflow:hidden}
+.terminal-hd::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#6366F1,#8B5CF6,transparent)}
+.terminal-label{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:#6366F1;font-weight:500;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.terminal-label::before{content:'>';color:#10B981}
+.terminal-title{font-size:1rem;font-weight:700;color:#F1F5F9;letter-spacing:-.01em}
+.terminal-sub{font-size:.8rem;color:#475569;margin-top:4px}
+
+.res-panel{background:#080F22;border:1px solid rgba(99,102,241,.12);border-radius:14px;padding:20px 24px;margin-top:14px;position:relative;overflow:hidden}
+.res-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(99,102,241,.3),transparent)}
+.res-score{font-size:3rem;font-weight:900;line-height:1;letter-spacing:-.05em}
+.res-label{font-size:.62rem;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-top:6px}
+.res-verdict{font-size:.85rem;color:#94A3B8;line-height:1.65}
+
+/* Doc Cards */
+.doc-card{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:14px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;transition:border-color .2s}
+.doc-card:hover{border-color:rgba(99,102,241,.2)}
+.doc-icon{font-size:1.5rem;flex-shrink:0}
+.doc-name{font-size:.86rem;font-weight:600;color:#E2E8F0;letter-spacing:-.01em}
+.doc-meta{font-size:.7rem;color:#475569;margin-top:3px;font-family:'JetBrains Mono',monospace}
+
+/* Profile Form */
+.profile-card{background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(99,102,241,.14);border-radius:18px;padding:24px 26px;margin-bottom:16px;position:relative;overflow:hidden}
+.profile-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1.5px;background:linear-gradient(90deg,#6366F1,#8B5CF6,transparent);opacity:.7}
+.profile-section-title{font-size:.72rem;font-weight:700;color:#6366F1;text-transform:uppercase;letter-spacing:.1em;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.profile-section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(99,102,241,.2),transparent)}
+
+/* Pipeline Card */
+.pipe-card{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:13px;padding:15px 18px;margin-bottom:8px;display:flex;align-items:center;gap:14px;transition:border-color .2s}
+.pipe-card:hover{border-color:rgba(99,102,241,.2)}
+.pipe-status{font-size:.67rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;padding:3px 9px;border-radius:100px}
+
+/* Stat Metric */
+.stat-card{background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px 20px;text-align:center}
+.stat-num{font-size:1.8rem;font-weight:900;color:#F1F5F9;letter-spacing:-.04em;line-height:1}
+.stat-lbl{font-size:.67rem;color:#475569;font-weight:600;text-transform:uppercase;letter-spacing:.1em;margin-top:6px}
+
+/* Alert Item */
+.alert-item{background:#080F22;border:1px solid rgba(99,102,241,.1);border-left:3px solid #6366F1;border-radius:0 12px 12px 0;padding:14px 18px;margin-bottom:8px}
+.alert-title{font-size:.86rem;font-weight:600;color:#E2E8F0;margin-bottom:4px}
+.alert-meta{font-size:.7rem;color:#475569;font-family:'JetBrains Mono',monospace}
+
+/* Readiness Bar */
+.readiness-bar{background:#0B1329;border-radius:100px;height:6px;margin-top:8px;overflow:hidden}
+.readiness-fill{height:100%;border-radius:100px;transition:width .5s ease}
+
+/* Filter Row */
+.filter-row{background:linear-gradient(135deg,#060C1A,#080F22);border:1px solid rgba(99,102,241,.1);border-radius:14px;padding:14px 18px;margin-bottom:20px}
+
+/* Auth Panel */
+.auth-panel{padding:16px 14px}
+.auth-label{font-size:.67rem;font-weight:700;color:#6366F1;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.auth-label::before{content:'';width:6px;height:6px;border-radius:50%;background:#6366F1;display:inline-block}
+.session-badge{margin:8px 14px;padding:10px 14px;background:rgba(16,185,129,.05);border:1px solid rgba(16,185,129,.12);border-radius:10px}
+.session-live{font-size:.62rem;color:#10B981;font-weight:700;text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:5px;margin-bottom:3px}
+.session-email{font-size:.74rem;color:#64748B;font-family:'JetBrains Mono',monospace}
+
+/* Quick Filter Buttons */
+.qfbtn{background:rgba(11,19,41,.8)!important;border:1px solid rgba(99,102,241,.1)!important;border-radius:10px!important;color:#64748B!important;font-size:.75rem!important;font-weight:500!important;padding:9px 14px!important}
+.qfbtn:hover{border-color:rgba(99,102,241,.3)!important;color:#F1F5F9!important;background:rgba(99,102,241,.06)!important}
+
+/* Analytics */
+.chart-card{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:20px;margin-bottom:16px}
+.chart-title{font-size:.78rem;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.07em;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.chart-title::before{content:'';width:3px;height:12px;border-radius:2px;background:#6366F1;display:inline-block}
+
+/* Divider */
+.glass-divider{border:none;border-top:1px solid rgba(255,255,255,.05);margin:20px 0}
+
+/* Sidebar logo */
+.sb-logo{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,.04);margin-bottom:14px}
+.sb-brand{font-size:1.15rem;font-weight:900;color:#F1F5F9;letter-spacing:-.03em;margin-bottom:3px}
+.sb-brand span{background:linear-gradient(135deg,#6366F1,#8B5CF6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sb-tagline{font-size:.6rem;color:#334155;font-weight:600;text-transform:uppercase;letter-spacing:.1em}
+.sb-nav-label{font-size:.6rem;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:.1em;padding:0 14px;margin:10px 0 6px}
+
+/* Metric Grid */
+.metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+
+/* Stray Streamlit cleanup */
+div[data-testid="metric-container"]{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 20px}
+div[data-testid="metric-container"] [data-testid="stMetricValue"]{color:#F1F5F9!important;font-weight:900!important;font-size:1.7rem!important}
+div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#475569!important;font-size:.7rem!important;text-transform:uppercase!important;letter-spacing:.08em!important}
+
+/* ── Responsive Breakpoints ── */
+@media (max-width:1200px){
+  .kpi-grid{grid-template-columns:repeat(3,1fr)!important}
+  .metric-row{grid-template-columns:repeat(2,1fr)!important}
+}
+@media (max-width:768px){
+  .block-container{padding:0 1rem 2rem!important}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)!important}
+  .metric-row{grid-template-columns:repeat(2,1fr)!important}
+  .hero-h1{font-size:2.2rem!important}
+  .brief{padding:18px 20px!important}
+  .brief-stats{gap:6px!important}
+  .bstat{padding:5px 10px!important;font-size:.7rem!important}
+  .ocard-row{flex-direction:column!important;gap:10px!important}
+  .ring{width:42px!important;height:42px!important;font-size:.7rem!important}
+  .filter-row>div{flex-direction:column!important}
+  section[data-testid="stSidebar"]{min-width:220px!important}
+}
+@media (max-width:480px){
+  .kpi-grid{grid-template-columns:1fr 1fr!important}
+  .hero-h1{font-size:1.8rem!important}
+  .hero-sub{font-size:.88rem!important}
+  .kpi-num{font-size:1.5rem!important}
+}
+
+/* ── Plotly dark theme overrides ── */
+.js-plotly-plot .plotly,.js-plotly-plot .plotly div{color:#94A3B8!important}
+.stPlotlyChart{border-radius:12px;overflow:hidden}
+</style>""", unsafe_allow_html=True)
+
+# ── CONSTANTS ─────────────────────────────────────────────────────────────────
+SECTORS = [
+    "Civil Works", "Civil Infrastructure", "Electrical & Energy",
+    "Coal & Mining", "Medical Procurement", "Water & Irrigation",
+    "Municipal Projects", "Transport", "Manufacturing", "IT Services",
+]
+
+CG_DISTRICTS = sorted([
+    "Raipur","Bilaspur","Durg","Bhilai","Korba","Raigarh","Rajnandgaon",
+    "Jagdalpur","Ambikapur","Mahasamund","Dhamtari","Kanker","Dantewada",
+    "Balod","Bemetara","Baloda Bazar","Gariaband","Jashpur","Kabirdham",
+    "Kondagaon","Mungeli","Narayanpur","Sukma","Surajpur","Surguja",
+    "Balrampur","Gaurela-Pendra-Marwahi","Manendragarh-Chirmiri-Bharatpur",
+    "Mohla-Manpur-Ambagarh Chowki","Sarangarh-Bilaigarh","Shakti",
+])
+
+UP_DISTRICTS = sorted([
+    "Lucknow","Kanpur","Prayagraj","Varanasi","Noida","Ghaziabad","Agra",
+    "Meerut","Gorakhpur","Bareilly","Aligarh","Moradabad","Saharanpur",
+    "Jhansi","Ayodhya","Muzaffarnagar","Mathura","Banda","Gonda","Bahraich",
+    "Amroha","Azamgarh","Ballia","Balrampur","Barabanki","Basti","Bijnor",
+    "Budaun","Bulandshahr","Chandauli","Chitrakoot","Deoria","Etah","Etawah",
+    "Farrukhabad","Fatehpur","Firozabad","Gautam Buddha Nagar","Ghazipur",
+    "Hapur","Hardoi","Hathras","Jalaun","Jaunpur","Amethi","Kannauj",
+    "Kanpur Dehat","Kasganj","Kaushambi","Kushinagar","Lakhimpur Kheri",
+    "Lalitpur","Maharajganj","Mahoba","Mainpuri","Mirzapur","Pilibhit",
+    "Pratapgarh","Rae Bareli","Rampur","Sant Kabir Nagar","Bhadohi",
+    "Sambhal","Shahjahanpur","Shamli","Shravasti","Siddharthnagar",
+    "Sitapur","Sonbhadra","Sultanpur","Unnao",
+])
+
+STATE_DISTRICTS = {
+    "Chhattisgarh":  CG_DISTRICTS,
+    "Uttar Pradesh": UP_DISTRICTS,
+}
+
+# ── HELPERS ───────────────────────────────────────────────────────────────────
+def _secret(k):
+    if k in os.environ: return os.environ[k]
+    try: return st.secrets[k]
+    except: return None
+
+@st.cache_data(ttl=300)
+def load_table(name: str) -> pd.DataFrame:
     url, key = _secret("SUPABASE_URL"), _secret("SUPABASE_KEY")
     if url and key:
         try:
             from supabase import create_client
-            sb = create_client(url, key)
-            rows = sb.table(name).select("*").execute().data
+            rows = create_client(url, key).table(name).select("*").execute().data
             if rows:
                 return pd.DataFrame(rows)
         except Exception:
             pass
-    local = DATA / f"{name}.csv"
+    local = Path(__file__).parent / "data" / f"{name}.csv"
     return pd.read_csv(local) if local.exists() else pd.DataFrame()
 
-def days_left(d):
+def days_left(d) -> int | None:
     dd = core.parse_date(d)
     return (dd - date.today()).days if dd else None
 
-def extract_text(uploaded_files) -> str:
-    chunks = []
-    for f in uploaded_files or []:
-        name = f.name.lower()
-        try:
-            if name.endswith(".pdf"):
-                import pdfplumber
-                with pdfplumber.open(f) as pdf:
-                    chunks += [(p.extract_text() or "") for p in pdf.pages]
-            else:
-                chunks.append(f.read().decode("utf-8", errors="ignore"))
-        except Exception as e:
-            chunks.append(f"[could not read {f.name}: {e}]")
-    return "\n".join(chunks)
+def ring_cls(s) -> str:
+    try: s = int(s)
+    except: return "ring-lo"
+    return "ring-hi" if s >= 75 else "ring-md" if s >= 50 else "ring-lo"
 
-
-def extract_bytes_text(filename: str, content: bytes) -> str:
-    """Extract plain text from raw bytes (used for vault documents)."""
+def _v(val, fallback="—") -> str:
+    if val is None: return fallback
     try:
-        if filename.lower().endswith(".pdf"):
-            import pdfplumber
-            with pdfplumber.open(io.BytesIO(content)) as pdf:
-                return "\n".join(p.extract_text() or "" for p in pdf.pages)
-        return content.decode("utf-8", errors="ignore")
-    except Exception as e:
-        return f"[could not read {filename}: {e}]"
+        if val != val: return fallback
+    except Exception: pass
+    s = str(val).strip()
+    return s if s and s.lower() not in ("nan","none","nat","") else fallback
 
-# =====================================================================
-# SIDEBAR CONSOLE NAVIGATION & CONTROLS
-# =====================================================================
-st.sidebar.title("⚡ Opporta OS")
-st.sidebar.caption("Hyper-local Procurement Console · CG + UP")
-st.sidebar.markdown("---")
+def safe_str(text, length=90) -> str:
+    t = _v(text, "Untitled")
+    return t[:length] + ("..." if len(t) > length else "")
 
-if "email" not in st.session_state:
-    st.session_state.email = ""
+def score_color(pct: int) -> str:
+    return "#10B981" if pct >= 70 else "#F59E0B" if pct >= 40 else "#EF4444"
 
-email = st.sidebar.text_input("Administrative Session Sign-in", st.session_state.email,
-                              placeholder="operator@firm.com")
-if email:
-    st.session_state.email = email.strip().lower()
+def _read_pdf_text(file) -> str:
+    try:
+        import pdfplumber
+        with pdfplumber.open(file) as pdf:
+            return " ".join(p.extract_text() or "" for p in pdf.pages)
+    except Exception:
+        return ""
 
-if not st.session_state.email:
-    st.title("⚡ Enterprise Tender Sourcing Console")
-    st.markdown(
-        "Welcome to your centralized intelligence hub. Opporta constantly scans corporate, "
-        "municipal, and panchayat data nodes across **Chhattisgarh** and **Uttar Pradesh** to score "
-        "and isolate critical infrastructure opportunities calibrated to your exact operational parameters.\n\n"
-        "👈 **Provide an authorized session email in the workspace console sidebar to load the target engine matrix.**")
-    st.info("System Notification: Current session gate is active in developer mode.")
-    st.stop()
+def _districts_for_state(state: str) -> list[str]:
+    return STATE_DISTRICTS.get(state, CG_DISTRICTS + UP_DISTRICTS)
 
-email = st.session_state.email
-profile = accounts.get_profile(email)
-
-# Onboarding Profile Configuration Sidebar Module
-new_user = profile is None
-if new_user:
-    profile = dict(core.DEFAULT_PROFILE)
-
-with st.sidebar.expander("💼 Contractor Sourcing Profile", expanded=new_user):
-    company = st.text_input("Corporate Identity", profile.get("company_name", ""))
-    turnover = st.number_input("Audited Annual Turnover (₹ Lakhs)", min_value=0.0,
-                               value=float(profile.get("turnover_lakhs") or 0), step=10.0)
-    classes = ["Class A", "Class B", "Class C", "Class D", "Open"]
-    cls = st.selectbox("Contractor Compliance Classification", classes,
-                       index=classes.index(profile.get("contractor_class", "Class C")))
-    exp = st.number_input("Verified Sourcing Experience (Years)", min_value=0,
-                          value=int(profile.get("experience_years") or 0))
-    sectors = st.multiselect("Active Target Sectors", SECTORS, profile.get("sectors", []))
-    states = st.multiselect("Territorial Jurisdictions", ["Chhattisgarh", "Uttar Pradesh"],
-                            profile.get("states", ["Chhattisgarh", "Uttar Pradesh"]))
-    target_districts = st.multiselect("Hyper-Local Target Nodes (Optional)", DISTRICTS,
-                                      profile.get("districts", []))
-    if st.button("💾 Commit Sourcing Profile Changes"):
-        profile = {"company_name": company, "turnover_lakhs": turnover,
-                   "contractor_class": cls, "experience_years": exp,
-                   "sectors": sectors, "states": states, "districts": target_districts}
-        accounts.save_profile(email, profile)
-        st.success("Profile parameters synced with local system configuration.")
-        st.rerun()
-
-st.sidebar.markdown("---")
-query = st.sidebar.text_input("🔎 Workspace Global Filter").strip().lower()
-synced = "Supabase Cloud Database" if (_secret("SUPABASE_URL") and _secret("SUPABASE_KEY")) else "Local Offline Cache Engine"
-st.sidebar.caption(f"System Linkageage: {synced}")
-
-# Load tables for global performance index calculation
+# ── LOAD DATA ─────────────────────────────────────────────────────────────────
 df_t = load_table("tenders")
 df_j = load_table("jobs")
 
-# =====================================================================
-# HEADER WORKSPACE PERFORMANCE STATS MATRIX
-# =====================================================================
-cname = profile.get("company_name")
-company_header = f" | {cname}" if cname else ""
-st.subheader(f"Workspace Console Dashboard{company_header}")
+# ── SIDEBAR ───────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("""
+    <div class="sb-logo">
+      <div class="sb-brand">⚡ <span>Opporta</span></div>
+      <div class="sb-tagline">Every Opportunity · One Platform</div>
+    </div>""", unsafe_allow_html=True)
 
-tenders_indexed = len(df_t) if not df_t.empty else 0
-jobs_indexed = len(df_j) if not df_j.empty else 0
-active_class = profile.get('contractor_class', 'Open')
-active_turnover = float(profile.get('turnover_lakhs') or 0)
-
-# Render Custom Clean KPI Grid Block
-st.markdown(f"""
-    <div class="kpi-container">
-        <div class="kpi-box">
-            <div class="kpi-value">{tenders_indexed}</div>
-            <div class="kpi-label">Active Tenders Monitored</div>
-        </div>
-        <div class="kpi-box">
-            <div class="kpi-value">{jobs_indexed}</div>
-            <div class="kpi-label">Live Strategic Positions</div>
-        </div>
-        <div class="kpi-box">
-            <div class="kpi-value">{active_class}</div>
-            <div class="kpi-label">Target Bidding Designation</div>
-        </div>
-        <div class="kpi-box">
-            <div class="kpi-value">₹{active_turnover:.0f} Lakhs</div>
-            <div class="kpi-label">Calibrated Capital Capacity</div>
-        </div>
-    </div>
-""", unsafe_allow_html=True)
-
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "🎯 Prioritized Sourcing Feed",
-    "🏛️ Institutional Positions",
-    "📋 Saved Bid Pipeline",
-    "🧮 AI Qualification Evaluator",
-    "📁 My Documents",
-])
-
-# =====================================================================
-# TAB 1: RADAR TARGET FEED (TENDERS)
-# =====================================================================
-with tab1:
-    if df_t.empty:
-        st.info("Sourcing Matrix Empty. Run the data synchronization system pipeline (`python ingest.py`).")
-    else:
-        scored = []
-        for _, r in df_t.iterrows():
-            rec = r.to_dict()
-            if not core.state_match(rec, profile):
-                continue
-            if query and query not in f"{rec.get('title','')} {rec.get('organization','')}".lower():
-                continue
-            s, reasons, eligible = core.score_tender_for_user(rec, profile)
-            scored.append((s, eligible, reasons, rec))
-        scored.sort(key=lambda x: (x[1], x[0]), reverse=True)
-
-        hide_ineligible = st.checkbox("Apply Strict Exclusion Filter (Hide Disqualified Opportunities)", value=False)
-        shown = 0
-        
-        for s, eligible, reasons, rec in scored:
-            if hide_ineligible and not eligible:
-                continue
-            shown += 1
-            
-            # Setup score css classes
-            score_class = "fit-high" if s >= 80 else ("fit-mid" if s >= 60 else "fit-low")
-            eligibility_text = "Qualified" if eligible else "Review Disqualification"
-            eligibility_class = "eligible-true" if eligible else "eligible-false"
-            dl = days_left(rec.get("deadline"))
-            dl_txt = f" · ⏳ {dl} days remaining" if dl is not None else ""
-
-            # Beautiful, uniform collapsible expander block simulating modern list cards
-            with st.expander(f"💼 Match Assessment: {s}% · {rec.get('title','Untitled Opportunity')} ({rec.get('organization','Global Feed Node')}{dl_txt})"):
-                # Structural columns inside the expander
-                st.markdown(f"""
-                <div style="margin-bottom: 1rem;">
-                    <span class="score-badge {score_class}">Match Score: {s}%</span>
-                    <span class="eligibility-tag {eligibility_class}">{eligibility_text}</span>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                c1, c2, c3 = st.columns(3)
-                val = rec.get("value_text") or (f"₹ {rec.get('value_lakhs')} Lakhs" if pd.notna(rec.get('value_lakhs')) else "Not Stated")
-                c1.metric("Estimated Engagement Value", val)
-                c2.metric("Closing Deadline", rec.get('deadline','—'))
-                c3.metric("Required Compliance Class", rec.get('contractor_class') or 'Open Market')
-                
-                if rec.get("description"):
-                    st.markdown("**Procurement Scope Summary:**")
-                    st.caption(rec["description"])
-                
-                st.markdown("**Engine Evaluation Signals:**")
-                for reason in reasons:
-                    st.markdown(f"  • {reason}")
-                
-                st.markdown("---")
-                b1, b2 = st.columns([1, 1])
-                if b1.button("➕ Stage to Bid Pipeline", key=f"save_{rec.get('source_id')}"):
-                    accounts.save_tender(email, rec.get("source_id"))
-                    st.toast("Record pinned to project tracking pipeline dashboard.")
-                url = rec.get("document_url")
-                if isinstance(url, str) and url.startswith("http"):
-                    b2.link_button("🔗 Launch Official Procurement Source", url)
-                    
-        if shown == 0:
-            st.warning("No procurement matches found. Broaden your active sector selection framework or district limits.")
-
-# =====================================================================
-# TAB 2: LIVE INSTITUTIONAL JOBS INDEX
-# =====================================================================
-with tab2:
-    st.caption("Browse direct government human capital opportunities indexed from target administrative sectors.")
-    if df_j.empty:
-        st.info("System Data Layer Empty. Run the data ingestion engine pipeline.")
-    else:
-        fj = df_j[df_j["state"].isin(profile.get("states", []))] if "state" in df_j else df_j
-        cats = ["All"] + sorted(fj.get("category", pd.Series(dtype=str)).dropna().unique())
+    if not st.session_state.authenticated:
+        st.markdown('<div class="auth-panel">', unsafe_allow_html=True)
+        st.markdown('<div class="auth-label">Secure Sign In</div>', unsafe_allow_html=True)
+        auth_email = st.text_input("Email", key="auth_e",
+                                   label_visibility="collapsed",
+                                   placeholder="contractor@firm.com")
+        auth_pw = st.text_input("Password", type="password", key="auth_pw",
+                                label_visibility="collapsed",
+                                placeholder="Password")
         c1, c2 = st.columns(2)
-        sel_cat = c1.selectbox("Filter by Category Verticals", cats)
-        dlist = ["All"] + sorted(fj.get("district", pd.Series(dtype=str)).dropna().unique())
-        sel_d = c2.selectbox("Filter by Local Administrative Node", dlist)
-        
-        if sel_cat != "All":
-            fj = fj[fj["category"] == sel_cat]
-        if sel_d != "All" and "district" in fj:
-            fj = fj[fj["district"] == sel_d]
-            
-        if fj.empty:
-            st.warning("No active career listings match the selected tracking parameters.")
-            
-        for _, r in fj.iterrows():
-            vac = f" · 👥 {int(r['vacancies'])} Open Openings" if pd.notna(r.get("vacancies")) else ""
-            with st.expander(f"💼 {r.get('title','Position Profile')} · {r.get('category','General Pool')}{vac}"):
-                a, b = st.columns(2)
-                a.markdown(f"**Deploying Institution/Department:**\n\n`{r.get('department','—')}`")
-                a.markdown(f"**Closing Application Window:**\n\n`{r.get('deadline','—')}`")
-                b.markdown(f"**Target Allocation Base:**\n\n`{r.get('district') or 'State-wide Vector'}, {r.get('state','')}`")
-                if r.get("qualification"):
-                    st.info(f"🎓 Mandatory Criteria: {r['qualification']}")
-
-    # -----------------------------------------------------------------
-    # RESUME ANALYZER
-    # -----------------------------------------------------------------
-    if not df_j.empty:
-        st.markdown("---")
-        st.markdown("### 📄 Match My Resume")
-        st.caption(
-            "Upload your resume and pick a job — we'll check how well your "
-            "qualifications match the stated requirements."
-        )
-
-        ru_col, rd_col = st.columns([1, 1])
-        with ru_col:
-            resume_file = st.file_uploader(
-                "Resume (PDF or TXT)",
-                type=["pdf", "txt"],
-                key="resume_upload_jobs",
-            )
-        with rd_col:
-            all_jobs_list = [r.to_dict() for _, r in df_j.iterrows()]
-            job_display = [
-                f"{r.get('title','Untitled')[:55]} · {(r.get('department') or '')[:35]}"
-                for r in all_jobs_list
-            ]
-            resume_job_idx = st.selectbox(
-                "Job to check against",
-                range(len(all_jobs_list)),
-                format_func=lambda i: job_display[i],
-                key="resume_job_sel",
-            ) if all_jobs_list else None
-
-        check_resume = st.button("🔍 Check Match", type="primary", key="resume_check")
-
-        if check_resume:
-            if resume_file is None:
-                st.error("Please upload your resume first.")
-            elif resume_job_idx is None:
-                st.error("No jobs available to match against.")
+        if c1.button("Login", use_container_width=True):
+            ok, msg = accounts.login_user(auth_email, auth_pw)
+            if ok:
+                st.session_state.authenticated = True
+                st.session_state.email = auth_email.strip().lower()
+                st.rerun()
             else:
-                with st.spinner("Analysing resume…"):
-                    _rt = extract_text([resume_file])
-                    _rjob = all_jobs_list[resume_job_idx]
-                    _rr = evaluator.evaluate_resume_for_job(_rjob, _rt)
-                st.session_state["_resume_result"] = _rr
-                st.session_state["_resume_job"]    = _rjob
-
-        rr   = st.session_state.get("_resume_result")
-        rjob = st.session_state.get("_resume_job")
-        if rr and rjob:
-            pct = rr["match_pct"]
-            n_met   = len(rr["met"])
-            n_total = n_met + len(rr["missing"]) + len(rr["unknown"])
-
-            if pct >= 75:
-                bg, fg = "#DCFCE7", "#15803D"
-            elif pct >= 50:
-                bg, fg = "#FEF3C7", "#B45309"
+                st.error(msg)
+        if c2.button("Register", use_container_width=True):
+            ok, msg = accounts.register_user(auth_email, auth_pw)
+            if ok:
+                st.success(msg)
             else:
-                bg, fg = "#FEE2E2", "#B91C1C"
-
-            st.markdown(f"""
-            <div style="text-align:center;padding:1.5rem;background:{bg};
-                        border-radius:12px;margin:1rem 0">
-                <div style="font-size:3.5rem;font-weight:900;color:{fg};
-                            line-height:1">{pct}%</div>
-                <div style="font-size:1rem;color:{fg};margin-top:0.5rem">
-                    Resume Match Score</div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown(
-                f"**Your resume matches {n_met} of {n_total} requirements** "
-                f"for *{rjob.get('title','')}*."
-            )
-            st.write(rr["verdict"])
-
-            if rr["met"]:
-                st.markdown("**Requirements satisfied:**")
-                for item in rr["met"]:
-                    st.success(f"✅  {item}")
-
-            if rr["missing"]:
-                st.markdown("**Not found in resume:**")
-                for item in rr["missing"]:
-                    st.error(f"❌  {item}")
-
-            if rr["unknown"]:
-                st.markdown("**Could not verify:**")
-                for item in rr["unknown"]:
-                    st.warning(f"❔  {item}")
-
-            st.caption(
-                "⚠️  This checks stated qualifications only, not a selection guarantee. "
-                "Always verify eligibility against the official notification."
-            )
-
-            apply_url = rjob.get("document_url")
-            if isinstance(apply_url, str) and apply_url.startswith("http"):
-                st.link_button("📋 Apply Now / View Official Notification", apply_url)
-
-# =====================================================================
-# TAB 3: STRATEGIC PROJECT MANAGEMENT PIPELINE
-# =====================================================================
-with tab3:
-    saved = accounts.list_saved(email)
-    if not saved:
-        st.info("Your active bid staging vault is empty. Pin items to this pipeline from the main sourcing feed.")
+                st.error(msg)
+        st.markdown('</div>', unsafe_allow_html=True)
     else:
-        lookup = {r["source_id"]: r for _, r in df_t.iterrows()} if not df_t.empty else {}
-        st.success(f"Pipeline Management System: Tracking **{len(saved)}** operational targets.")
-        for s in saved:
-            rec = lookup.get(s["source_id"], {})
-            title = rec.get("title", s["source_id"])
-            with st.expander(f"📌 Staged Bid Target: {title} · Status Tracking Flag: [{s.get('status','Interested Mode')}]"):
-                if rec.get("deadline"):
-                    st.markdown(f"**Submissions Envelope Window Deadline:** `{rec['deadline']}`")
-                url = rec.get("document_url")
-                if isinstance(url, str) and url.startswith("http"):
-                    st.link_button("🔗 Direct Procurement Source Gateway", url)
-
-# =====================================================================
-# TAB 4: ADVANCED CRITERIA MATRIX CHECKER (AI EVALUATOR)
-# =====================================================================
-with tab4:
-    st.caption("Cross-examine current credential packages against complex mandatory tender requirements.")
-    kind = st.radio("Select Target Examination Scope Profile:", ["Tender", "Job"], horizontal=True)
-    source = df_t if kind == "Tender" else df_j
-
-    if source.empty:
-        st.info("No active profiles loaded to initialize checking matrix.")
-    else:
-        in_state = source[source["state"].isin(profile.get("states", []))] if "state" in source else source
-        in_state = in_state.reset_index(drop=True)
-        labels = [f"{r.get('title','Untitled Opportunity')} · {r.get('organization', r.get('department',''))}"
-                  for _, r in in_state.iterrows()]
-        pick = st.selectbox(f"Select Target Evaluation Node:", range(len(labels)),
-                            format_func=lambda i: labels[i]) if labels else None
-
-        # --- Vault document pre-inclusion ---
-        vault_docs = accounts.list_documents(email)
-        if vault_docs:
-            st.markdown("**📁 Include from Document Vault:**")
-            vault_sel = st.multiselect(
-                "vault_pick",
-                options=[d["doc_id"] for d in vault_docs],
-                default=[d["doc_id"] for d in vault_docs],
-                format_func=lambda did: next(
-                    (f"{d['name']}  ·  {d['filename']}" for d in vault_docs if d["doc_id"] == did), did
-                ),
-                label_visibility="collapsed",
-            )
-        else:
-            vault_sel = []
-            st.caption("💡 Upload certificates in **📁 My Documents** to auto-include them here.")
-
-        uploads = st.file_uploader(
-            "Additional credentials (PDF / TXT) — supplements your vault:",
-            type=["pdf", "txt"], accept_multiple_files=True)
-
-        if pick is not None and st.button("🧮 Execute High-Fidelity Readiness Evaluation"):
-            rec = in_state.iloc[pick].to_dict()
-            vault_text = "\n".join(
-                extract_bytes_text(
-                    next(d["filename"] for d in vault_docs if d["doc_id"] == did),
-                    accounts.get_document_bytes(email, did) or b"",
-                )
-                for did in vault_sel
-            )
-            doc_text = vault_text + "\n" + extract_text(uploads)
-            if kind == "Tender":
-                result = evaluator.evaluate_tender(rec, profile, doc_text)
-            else:
-                result = evaluator.evaluate_job(rec, profile, doc_text)
-
-            pct = result["readiness_pct"]
-            color = "🟢" if pct >= 80 else ("🟡" if pct >= 50 else "🔴")
-            st.metric("Corporate Mandatory Readiness Index", f"{pct}%")
-            st.progress(pct / 100)
-            st.markdown(f"### {color} Analysis Output")
-            st.write(result['verdict'])
-
-            if result["met"]:
-                st.markdown("**✅ Verified / Satisfied Conditions:**")
-                for x in result["met"]:
-                    st.success(x)
-            if result["missing"]:
-                st.markdown("**❌ Missing / Unfulfilled Sourcing Gaps:**")
-                for x in result["missing"]:
-                    st.error(x)
-            if result["unknown"]:
-                st.markdown("**❔ Unverified Assertions (Upload supplemental balance sheets or logs to clarify):**")
-                for x in result["unknown"]:
-                    st.warning(x)
-
-# =====================================================================
-# TAB 5: DOCUMENT VAULT
-# =====================================================================
-_VAULT_LABELS = [
-    "GST Registration",
-    "Contractor Registration / License",
-    "PAN Card",
-    "ISO Certification",
-    "Turnover / Financial Statement",
-    "Experience / Completion Certificate",
-    "EMD / Bank Guarantee",
-    "Safety / DGMS Pass",
-    "Drug / Equipment License",
-    "Other",
-]
-
-with tab5:
-    st.caption(
-        "Upload your certificates once — they are auto-included in every eligibility evaluation. "
-        "Labels map directly to the criteria the evaluator checks."
-    )
-
-    vault_all = accounts.list_documents(email)
-    total_kb = sum(d.get("size_bytes", 0) for d in vault_all) / 1024
-
-    m1, m2 = st.columns(2)
-    m1.metric("Documents Stored", len(vault_all))
-    m2.metric("Total Size", f"{total_kb:.1f} KB")
-
-    st.markdown("---")
-    st.markdown("**Upload New Document**")
-
-    with st.form("vault_upload_form", clear_on_submit=True):
-        fc1, fc2 = st.columns([1, 2])
-        label_pick = fc1.selectbox("Document Type", _VAULT_LABELS)
-        custom_label = fc1.text_input("Custom label (overrides above)", placeholder="e.g. MSME Certificate")
-        vault_file = fc2.file_uploader(
-            "Certificate / Document file",
-            type=["pdf", "txt"],
-            help="PDF or plain-text format accepted.",
-        )
-        if st.form_submit_button("💾 Add to Vault"):
-            if vault_file is None:
-                st.error("Please select a file before saving.")
-            else:
-                final_label = custom_label.strip() if custom_label.strip() else label_pick
-                accounts.save_document(
-                    email,
-                    name=final_label,
-                    filename=vault_file.name,
-                    content=vault_file.read(),
-                    mime_type=vault_file.type or "application/octet-stream",
-                )
-                st.success(f"'{final_label}' saved to your vault.")
+        st.markdown('<div class="sb-nav-label">Navigation</div>', unsafe_allow_html=True)
+        pages = [
+            "🏠  Dashboard", "🔍  Explore", "🤖  AI Workspace",
+            "💼  Jobs", "📄  Documents", "🔔  Alerts", "📊  Analytics", "👤  Profile",
+        ]
+        for p in pages:
+            is_active = st.session_state.current_page == p
+            if st.button(p, use_container_width=True,
+                         type="primary" if is_active else "secondary"):
+                st.session_state.current_page = p
                 st.rerun()
 
-    st.markdown("---")
-    if not vault_all:
-        st.info("Your vault is empty. Upload certificates above and they will be auto-included in evaluations.")
+        st.markdown(f"""
+        <div class="session-badge">
+          <div class="session-live"><span class="live-dot"></span>SECURE SESSION</div>
+          <div class="session-email">{st.session_state.email}</div>
+        </div>""", unsafe_allow_html=True)
+
+        if st.button("⏏  Log Out", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.email = ""
+            st.rerun()
+
+# ── GLOBAL CONTEXT ────────────────────────────────────────────────────────────
+email   = st.session_state.email
+profile = accounts.get_profile(email) if email else dict(core.DEFAULT_PROFILE)
+if profile is None:
+    profile = dict(core.DEFAULT_PROFILE)
+cname = profile.get("company_name") or (
+    email.split("@")[0].title() if email else "Guest")
+
+def get_scored(df: pd.DataFrame, prof: dict) -> list:
+    if df.empty: return []
+    out = []
+    for _, r in df.iterrows():
+        rec = r.to_dict()
+        if not core.state_match(rec, prof): continue
+        s, reasons, eligible = core.score_tender_for_user(rec, prof)
+        out.append((s, eligible, reasons, rec))
+    return sorted(out, key=lambda x: (x[1], x[0]), reverse=True)
+
+scored          = get_scored(df_t, profile) if st.session_state.authenticated else []
+eligible_count  = sum(1 for _, e, _, _ in scored if e)
+high_conf_count = sum(1 for s, _, _, _ in scored if s >= 80)
+closing_soon    = sum(1 for _, _, _, r in scored
+                      if (dl := days_left(r.get("deadline"))) is not None and 0 <= dl <= 7)
+total_value     = df_t["value_lakhs"].fillna(0).sum() if not df_t.empty and "value_lakhs" in df_t else 0
+
+page = st.session_state.current_page
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── DASHBOARD ─────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+if "Dashboard" in page:
+    if not st.session_state.authenticated:
+        st.markdown(f"""
+        <div class="hero">
+          <div class="hero-eyebrow">
+            <span class="hero-pulse"></span>
+            LIVE · AI-Powered · CG + UP · Real-Time Intelligence
+          </div>
+          <h1 class="hero-h1">Every Opportunity.<br><em>One Platform.</em></h1>
+          <p class="hero-sub">
+            India's most advanced tender and government job intelligence system
+            for Chhattisgarh & Uttar Pradesh contractors.
+            Sign in on the left to access your personalized intelligence feed.
+          </p>
+          <div class="hero-cta-row">
+            <div class="hero-pill">📋 {len(df_t)} Active Tenders</div>
+            <div class="hero-pill">💼 {len(df_j)} Open Jobs</div>
+            <div class="hero-pill">🌏 CG &amp; UP Coverage</div>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
     else:
-        st.markdown(f"**{len(vault_all)} document(s) in vault**")
-        for doc in vault_all:
-            size_kb = doc.get("size_bytes", 0) / 1024
-            date_str = (doc.get("uploaded_at") or "")[:10]
-            with st.expander(f"📄 {doc['name']}  ·  {doc['filename']}  ·  {size_kb:.1f} KB  ·  {date_str}"):
-                if st.button("🗑️ Remove from Vault", key=f"del_{doc['doc_id']}"):
-                    accounts.delete_document(email, doc["doc_id"])
-                    st.toast(f"'{doc['name']}' removed.")
+        today_str = date.today().strftime("%A, %d %B %Y")
+
+        # ── Briefing Banner ──
+        st.markdown(f"""
+        <div class="brief">
+          <div class="brief-row">
+            <div>
+              <div class="brief-greeting">Good day, {cname}</div>
+              <div class="brief-sub">Intelligence briefing · {today_str}</div>
+              <div class="brief-stats">
+                <div class="bstat"><span class="live-dot"></span> Live Feed</div>
+                <div class="bstat">🎯 <b>{len(scored)}</b> matched to you</div>
+                <div class="bstat">✅ <b>{eligible_count}</b> you qualify for</div>
+                <div class="bstat">🔥 <b>{high_conf_count}</b> high confidence</div>
+                <div class="bstat">⏰ <b>{closing_soon}</b> closing in 7 days</div>
+                <div class="bstat">💰 Total ₹<b>{total_value/100:.1f}Cr</b></div>
+              </div>
+            </div>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        # ── KPI Grid ──
+        kpi_data = [
+            (str(len(df_t)),           "Active Tenders",     "Live listings",       "📋", False),
+            (str(len(df_j)),           "Open Jobs",          "Across CG + UP",      "💼", False),
+            (str(eligible_count),      "You Qualify",        "Hard criteria pass",  "✅", False),
+            (str(high_conf_count),     "High Confidence",    "Score ≥ 80",          "🎯", False),
+            (str(closing_soon),        "Closing Soon",       "Within 7 days",       "⏰", True),
+            (f"₹{total_value/100:.1f}Cr","Market Value",    "All active tenders",  "💰", False),
+        ]
+        cols = st.columns(6)
+        for col, (num, lbl, sub, icon, warn) in zip(cols, kpi_data):
+            sub_cls = "warn" if warn and int(closing_soon) > 0 else ""
+            col.markdown(f"""<div class="kpi">
+              <div class="kpi-icon">{icon}</div>
+              <div class="kpi-num">{num}</div>
+              <div class="kpi-lbl">{lbl}</div>
+              <div class="kpi-sub {sub_cls}">{sub}</div>
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        col_main, col_side = st.columns([3, 1])
+
+        with col_main:
+            st.markdown("""<div class="sec-hd">
+              <span class="sec-title">🎯 Top Matches For You</span>
+              <div class="sec-divider"></div>
+            </div>""", unsafe_allow_html=True)
+
+            if scored:
+                for s, eligible, reasons, rec in scored[:8]:
+                    rc     = ring_cls(s)
+                    dl     = days_left(rec.get("deadline"))
+                    dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
+                    val    = _v(rec.get("value_text")) or (
+                        f"₹{float(rec.get('value_lakhs',0)):.0f}L" if rec.get("value_lakhs") else "—")
+                    elig_cls   = "tag-green" if eligible else "tag-warn"
+                    elig_txt   = "✅ Eligible" if eligible else "⚠ Review"
+                    district   = _v(rec.get("district"), "State-wide")
+                    color      = score_color(s)
+
+                    st.markdown(f"""<div class="ocard">
+                      <div class="ocard-row">
+                        <div class="ocard-body">
+                          <div class="ocard-title">{safe_str(rec.get('title'))}</div>
+                          <div class="ocard-org">🏛 {safe_str(rec.get('organization'), 60)} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
+                          <div class="ocard-tags">
+                            <span class="tag tag-val">💰 {val}</span>
+                            <span class="tag tag-dl">{dl_txt}</span>
+                            <span class="tag tag-loc">📍 {district}</span>
+                            <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
+                            <span class="tag {elig_cls}">{elig_txt}</span>
+                          </div>
+                        </div>
+                        <div class="ring {rc}" style="color:{color};border-color:{color}">{s}</div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    with st.expander(f"Details — {safe_str(rec.get('title'), 50)}"):
+                        dc1, dc2 = st.columns(2)
+                        dc1.write(f"**Organization:** {_v(rec.get('organization'))}")
+                        dc1.write(f"**Category:** {_v(rec.get('category'))}")
+                        dc1.write(f"**District:** {district}")
+                        dc1.write(f"**State:** {_v(rec.get('state'))}")
+                        dc2.write(f"**Value:** {val}")
+                        dc2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
+                        dc2.write(f"**Source ID:** {_v(rec.get('source_id'))}")
+                        if reasons:
+                            st.markdown("**Match reasons:**")
+                            for r in reasons:
+                                st.caption(f"• {r}")
+                        doc_url = rec.get("document_url")
+                        if doc_url and str(doc_url) not in ("nan","None","—"):
+                            st.markdown(f"[📄 Open Tender Document]({doc_url})")
+                        if st.button("➕ Save to Pipeline", key=f"d_save_{rec.get('source_id')}"):
+                            accounts.save_tender(email, rec.get("source_id"))
+                            st.toast("✓ Saved to pipeline")
+            else:
+                st.markdown("""<div class="ocard" style="text-align:center;padding:32px;color:#475569">
+                  <div style="font-size:2rem;margin-bottom:12px">📋</div>
+                  <div style="font-size:.88rem;font-weight:600;color:#64748B">Complete your Profile to see personalized matches</div>
+                  <div style="font-size:.77rem;color:#334155;margin-top:6px">Set your contractor class, sectors, and target districts</div>
+                </div>""", unsafe_allow_html=True)
+
+        with col_side:
+            st.markdown("""<div class="sec-hd">
+              <span class="sec-title">⚡ Quick Filters</span>
+            </div>""", unsafe_allow_html=True)
+            qf_items = [
+                ("⛏️", "Coal & Mining"),    ("🏗️", "Civil Infrastructure"),
+                ("💡", "Electrical & Energy"), ("🚰", "Water & Irrigation"),
+                ("🏥", "Medical Procurement"), ("💻", "IT Services"),
+                ("🚛", "Transport"),          ("🏙️", "Municipal Projects"),
+            ]
+            for emoji, name in qf_items:
+                if st.button(f"{emoji}  {name}", use_container_width=True, key=f"qf_{name}"):
+                    st.session_state.explore_category = name
+                    st.session_state.current_page     = "🔍  Explore"
                     st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── EXPLORE ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Explore" in page:
+    st.markdown("""<div class="sec-hd">
+      <span class="sec-title">🔍 Explore Opportunities</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    # Build live category list
+    all_cats = (["All"] + sorted(df_t["category"].dropna().unique().tolist())
+                if not df_t.empty and "category" in df_t else ["All"])
+
+    # Filters
+    st.markdown('<div class="filter-row">', unsafe_allow_html=True)
+    f1, f2, f3, f4 = st.columns([3, 1.5, 1.5, 1.5])
+    with f1:
+        new_search = st.text_input("Search", value=st.session_state.explore_search,
+                                   placeholder="Search title, org, district, scope of work...",
+                                   label_visibility="collapsed", key="ex_search")
+        st.session_state.explore_search = new_search.lower()
+    with f2:
+        if st.session_state.explore_category not in all_cats:
+            st.session_state.explore_category = "All"
+        st.session_state.explore_category = st.selectbox(
+            "Category", all_cats,
+            index=all_cats.index(st.session_state.explore_category),
+            label_visibility="collapsed", key="ex_cat")
+    with f3:
+        states_opts = ["All", "Chhattisgarh", "Uttar Pradesh"]
+        if st.session_state.explore_state not in states_opts:
+            st.session_state.explore_state = "All"
+        prev_state = st.session_state.explore_state
+        st.session_state.explore_state = st.selectbox(
+            "State", states_opts,
+            index=states_opts.index(st.session_state.explore_state),
+            label_visibility="collapsed", key="ex_state")
+        if st.session_state.explore_state != prev_state:
+            st.session_state.explore_district = "All"
+    with f4:
+        # Dynamic district list based on selected state
+        sel_state = st.session_state.explore_state
+        if sel_state == "All":
+            dist_opts = ["All"] + sorted(set(CG_DISTRICTS + UP_DISTRICTS))
+        else:
+            dist_opts = ["All"] + _districts_for_state(sel_state)
+
+        if st.session_state.explore_district not in dist_opts:
+            st.session_state.explore_district = "All"
+        st.session_state.explore_district = st.selectbox(
+            "District", dist_opts,
+            index=dist_opts.index(st.session_state.explore_district),
+            label_visibility="collapsed", key="ex_dist")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Apply filters
+    q    = st.session_state.explore_search
+    fcat = st.session_state.explore_category
+    fst  = st.session_state.explore_state
+    fdst = st.session_state.explore_district
+
+    rows = []
+    for _, r in df_t.iterrows():
+        rec      = r.to_dict()
+        haystack = f"{_v(rec.get('title'))} {_v(rec.get('organization'))} {_v(rec.get('district'))} {_v(rec.get('description'))}".lower()
+        if q and q not in haystack: continue
+        if fst  != "All" and _v(rec.get("state")) != fst: continue
+        if fcat != "All" and fcat.lower() not in _v(rec.get("category","")).lower(): continue
+        if fdst != "All" and _v(rec.get("district","")).lower() != fdst.lower(): continue
+        if st.session_state.authenticated:
+            s, _, eligible = core.score_tender_for_user(rec, profile)
+            rows.append((s, eligible, rec))
+        else:
+            rows.append((int(rec.get("ai_score") or 0), True, rec))
+
+    rows.sort(key=lambda x: x[0], reverse=True)
+
+    # Results header
+    count_col, _ = st.columns([1, 3])
+    with count_col:
+        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:18px">{len(rows)} results found</div>',
+                    unsafe_allow_html=True)
+
+    if not st.session_state.authenticated:
+        st.info("🔐 Sign in to see your personalized AI fit score for each tender.")
+
+    if not rows:
+        st.markdown("""<div class="ocard" style="text-align:center;padding:40px;color:#475569">
+          <div style="font-size:2rem;margin-bottom:12px">🔍</div>
+          <div style="font-size:.9rem;font-weight:600;color:#64748B">No tenders match your filters</div>
+          <div style="font-size:.77rem;color:#334155;margin-top:6px">Try broadening your search or changing the state/district</div>
+        </div>""", unsafe_allow_html=True)
+
+    for s, eligible, rec in rows[:80]:
+        rc       = ring_cls(s)
+        dl       = days_left(rec.get("deadline"))
+        dl_txt   = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
+        val      = _v(rec.get("value_text")) or (f"₹{float(rec.get('value_lakhs',0)):.0f}L" if rec.get("value_lakhs") else "—")
+        elig_cls = "tag-green" if eligible else "tag-warn"
+        elig_txt = "✅ Eligible" if eligible else "⚠ Review"
+        district = _v(rec.get("district"), "State-wide")
+        color    = score_color(s)
+
+        st.markdown(f"""<div class="ocard">
+          <div class="ocard-row">
+            <div class="ocard-body">
+              <div class="ocard-title">{safe_str(rec.get('title'), 115)}</div>
+              <div class="ocard-org">🏛 {safe_str(rec.get('organization'), 55)} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
+              <div class="ocard-tags">
+                <span class="tag tag-val">💰 {val}</span>
+                <span class="tag tag-dl">{dl_txt}</span>
+                <span class="tag tag-loc">📍 {district}</span>
+                <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
+                <span class="tag {elig_cls}">{elig_txt}</span>
+              </div>
+            </div>
+            <div class="ring {rc}" style="color:{color};border-color:{color}">{s}</div>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+        with st.expander(f"Details · Save — {safe_str(rec.get('title'), 55)}"):
+            dc1, dc2 = st.columns(2)
+            dc1.write(f"**Organization:** {_v(rec.get('organization'))}")
+            dc1.write(f"**Category:** {_v(rec.get('category'))}")
+            dc1.write(f"**District:** {district}")
+            dc1.write(f"**State:** {_v(rec.get('state'))}")
+            dc2.write(f"**Estimated Value:** {val}")
+            dc2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
+            dc2.write(f"**Contractor Class:** {_v(rec.get('contractor_class'))}")
+            if rec.get("description"):
+                st.write(_v(rec.get("description")))
+            doc_url = rec.get("document_url")
+            if doc_url and str(doc_url) not in ("nan","None","—",""):
+                st.markdown(f"[📄 Open Official Document / Portal]({doc_url})")
+            if st.session_state.authenticated:
+                if st.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}"):
+                    accounts.save_tender(email, rec.get("source_id"))
+                    st.toast("✓ Saved to your pipeline")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── AI WORKSPACE ──────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Workspace" in page:
+    if not st.session_state.authenticated:
+        st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
+          <div style="font-size:2rem;margin-bottom:12px">🔐</div>
+          <div style="font-size:.9rem;font-weight:600;color:#64748B">Sign in to access the AI Workspace</div>
+        </div>""", unsafe_allow_html=True)
+        st.stop()
+
+    has_ai = bool(
+        os.getenv("GEMINI_API_KEY") or _secret("GEMINI_API_KEY") or
+        os.getenv("ANTHROPIC_API_KEY") or _secret("ANTHROPIC_API_KEY")
+    )
+
+    st.markdown("""<div class="terminal-hd">
+      <div class="terminal-label">AI INTELLIGENCE WORKSPACE</div>
+      <div class="terminal-title">Tender Evaluator · Resume Analyzer · Bid Generator</div>
+      <div class="terminal-sub">AI-powered eligibility analysis, resume matching, and automated bid document generation</div>
+    </div>""", unsafe_allow_html=True)
+
+    if not has_ai:
+        st.info("⚡ Add GEMINI_API_KEY to .env to enable full AI capabilities. Keyword-based analysis is active now.")
+
+    tab1, tab2, tab3 = st.tabs(["🔍  AI Evaluator", "📄  Resume Analyzer", "📝  Bid Generator"])
+
+    # ── Tab 1: AI Tender Evaluator ─────────────────────────────────────────────
+    with tab1:
+        st.markdown("""<div class="sec-hd">
+          <span class="sec-title">AI Tender Evaluator</span>
+          <span class="sec-badge">Document Ready Check</span>
+          <div class="sec-divider"></div>
+        </div>""", unsafe_allow_html=True)
+
+        if df_t.empty:
+            st.warning("No tender data available. Run ingest.py first.")
+        else:
+            # ── Searchable tender picker ──────────────────────────────────────
+            eval_q = st.text_input(
+                "Search tender by name, organisation or district",
+                placeholder="e.g. road construction, CSPDCL, Raipur...",
+                key="eval_search_q",
+                label_visibility="collapsed",
+            )
+            search_lower = eval_q.strip().lower()
+
+            # Filter rows
+            if search_lower:
+                mask = df_t.apply(
+                    lambda r: search_lower in f"{r.get('title','')} {r.get('organization','')} {r.get('district','')}".lower(),
+                    axis=1,
+                )
+                df_filtered = df_t[mask].reset_index(drop=True)
+            else:
+                df_filtered = df_t.reset_index(drop=True)
+
+            match_count = len(df_filtered)
+            st.caption(f"{match_count} tender{'s' if match_count != 1 else ''} match — select one below")
+
+            if df_filtered.empty:
+                st.warning("No tenders match your search. Try different keywords.")
+            else:
+                titles_f = df_filtered["title"].fillna("Untitled").tolist()
+                sel_idx  = st.selectbox(
+                    "Pick tender",
+                    range(len(titles_f)),
+                    format_func=lambda i: safe_str(titles_f[i], 110),
+                    key="eval_sel",
+                    label_visibility="collapsed",
+                )
+                selected_tender = df_filtered.iloc[sel_idx].to_dict()
+
+                val_t = _v(selected_tender.get("value_text")) or (
+                    f"₹{float(selected_tender.get('value_lakhs',0)):.0f}L"
+                    if selected_tender.get("value_lakhs") else "—")
+                doc_url = _v(selected_tender.get("document_url"), "")
+                pdf_tag  = '<span class="tag tag-green">📄 PDF Available</span>' if doc_url else ""
+                pdf_link = (
+                    f'<a href="{doc_url}" target="_blank" style="font-size:.75rem;color:#6366F1;'
+                    f'text-decoration:none;display:inline-flex;align-items:center;gap:5px;'
+                    f'padding:6px 12px;border:1px solid rgba(99,102,241,.25);border-radius:8px;'
+                    f'background:rgba(99,102,241,.06)">⬇️ Download Official Tender PDF / Notice</a>'
+                ) if doc_url else ""
+
+                st.markdown(f"""<div class="ocard" style="margin:10px 0 18px">
+                  <div class="ocard-title">{safe_str(selected_tender.get('title'), 130)}</div>
+                  <div class="ocard-org">🏛 {_v(selected_tender.get('organization'))} &nbsp;·&nbsp;
+                    {_v(selected_tender.get('state'))} &nbsp;·&nbsp; {_v(selected_tender.get('category'))}</div>
+                  <div class="ocard-tags" style="margin-bottom:10px">
+                    <span class="tag tag-val">💰 {val_t}</span>
+                    <span class="tag tag-dl">📅 Deadline: {_v(selected_tender.get('deadline'))}</span>
+                    <span class="tag tag-loc">📍 {_v(selected_tender.get('district'), 'State-wide')}</span>
+                    {pdf_tag}
+                  </div>
+                  {pdf_link}
+                </div>""", unsafe_allow_html=True)
+
+                uploaded_docs = st.file_uploader(
+                    "Upload your firm documents for compliance check (GST, registration, certs) — optional",
+                    type=["pdf","txt","png","jpg","jpeg"],
+                    accept_multiple_files=True, key="eval_docs")
+
+                doc_text = ""
+                if uploaded_docs:
+                    for f in uploaded_docs:
+                        if f.name.lower().endswith(".pdf"):
+                            doc_text += " " + _read_pdf_text(f)
+                        else:
+                            try: doc_text += " " + f.read().decode("utf-8", errors="ignore")
+                            except Exception: pass
+                    st.caption(f"✓ Parsed {len(doc_text):,} chars from {len(uploaded_docs)} file(s)")
+
+                if st.button("🤖 Run Eligibility Analysis", use_container_width=True, key="eval_btn"):
+                    with st.spinner("Analyzing requirements against your profile and documents..."):
+                        result = evaluator.evaluate_tender(selected_tender, profile, doc_text)
+
+                    pct   = result["readiness_pct"]
+                    color = score_color(pct)
+                    st.markdown(f"""<div class="res-panel">
+                      <div style="display:flex;align-items:center;gap:24px">
+                        <div style="text-align:center;flex-shrink:0">
+                          <div class="res-score" style="color:{color}">{pct}%</div>
+                          <div class="res-label">Document Ready</div>
+                          <div class="readiness-bar" style="width:70px;margin:8px auto 0">
+                            <div class="readiness-fill" style="width:{pct}%;background:{color}"></div>
+                          </div>
+                        </div>
+                        <div class="res-verdict">{result['verdict']}</div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    r1, r2, r3 = st.columns(3)
+                    with r1:
+                        if result["met"]:
+                            st.success(f"✅ Requirements Met ({len(result['met'])})")
+                            for item in result["met"]: st.caption(f"• {item}")
+                    with r2:
+                        if result["missing"]:
+                            st.error(f"❌ Missing ({len(result['missing'])})")
+                            for item in result["missing"]: st.caption(f"• {item}")
+                    with r3:
+                        if result["unknown"]:
+                            st.warning(f"⚠️ Unverified ({len(result['unknown'])})")
+                            for item in result["unknown"]: st.caption(f"• {item}")
+                            if not uploaded_docs:
+                                st.caption("Upload your documents above to verify these items.")
+
+    # ── Tab 2: Resume Analyzer ─────────────────────────────────────────────────
+    with tab2:
+        st.markdown("""<div class="sec-hd">
+          <span class="sec-title">Resume Analyzer</span>
+          <span class="sec-badge">Job Match Check</span>
+          <div class="sec-divider"></div>
+        </div>""", unsafe_allow_html=True)
+
+        if df_j.empty:
+            st.warning("No job data available. Run ingest.py first.")
+        else:
+            job_list = df_j["title"].fillna("Untitled").tolist()
+            job_idx  = st.selectbox("Select job posting",
+                                    range(len(job_list)),
+                                    format_func=lambda i: safe_str(job_list[i], 100),
+                                    key="ra_job")
+            selected_job = df_j.iloc[job_idx].to_dict()
+
+            st.markdown(f"""<div class="jcard" style="margin:10px 0 18px">
+              <div class="jcard-title">{safe_str(selected_job.get('title'), 100)}</div>
+              <div class="jcard-dept">{_v(selected_job.get('department'))} &nbsp;·&nbsp;
+                {_v(selected_job.get('state'))} &nbsp;·&nbsp;
+                Vacancies: {_v(selected_job.get('vacancies'))}</div>
+              <div style="font-size:.77rem;color:#475569;line-height:1.5">
+                {safe_str(selected_job.get('qualification'), 220)}
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+            resume_file = st.file_uploader(
+                "Upload your resume (PDF or TXT)",
+                type=["pdf","txt"], key="ra_resume")
+            resume_text = ""
+            if resume_file:
+                resume_text = (_read_pdf_text(resume_file)
+                               if resume_file.name.lower().endswith(".pdf")
+                               else resume_file.read().decode("utf-8", errors="ignore"))
+                st.caption(f"✓ Parsed {len(resume_text):,} characters from resume")
+
+            if st.button("🤖 Analyze Resume Match", use_container_width=True, key="ra_btn"):
+                if not resume_text:
+                    st.warning("Please upload your resume first.")
+                else:
+                    with st.spinner("AI is matching your resume against job requirements..."):
+                        result = evaluator.evaluate_resume_for_job(selected_job, resume_text)
+
+                    pct   = result["readiness_pct"]
+                    color = score_color(pct)
+                    st.markdown(f"""<div class="res-panel">
+                      <div style="display:flex;align-items:center;gap:24px">
+                        <div style="text-align:center;flex-shrink:0">
+                          <div class="res-score" style="color:{color}">{pct}%</div>
+                          <div class="res-label">Resume Match</div>
+                          <div class="readiness-bar" style="width:70px;margin:8px auto 0">
+                            <div class="readiness-fill" style="width:{pct}%;background:{color}"></div>
+                          </div>
+                        </div>
+                        <div class="res-verdict">{result['verdict']}</div>
+                      </div>
+                    </div>""", unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    r1, r2, r3 = st.columns(3)
+                    with r1:
+                        if result["met"]:
+                            st.success(f"✅ Matched ({len(result['met'])})")
+                            for item in result["met"]: st.caption(f"• {item}")
+                    with r2:
+                        if result["missing"]:
+                            st.error(f"❌ Missing ({len(result['missing'])})")
+                            for item in result["missing"]: st.caption(f"• {item}")
+                    with r3:
+                        if result["unknown"]:
+                            st.warning(f"⚠️ Could not verify ({len(result['unknown'])})")
+                            for item in result["unknown"]: st.caption(f"• {item}")
+
+    # ── Tab 3: Bid Generator ──────────────────────────────────────────────────
+    with tab3:
+        st.markdown("""<div class="sec-hd">
+          <span class="sec-title">Bid Document Generator</span>
+          <span class="sec-badge">AI-Powered</span>
+          <div class="sec-divider"></div>
+        </div>""", unsafe_allow_html=True)
+
+        if not has_ai:
+            st.warning("⚡ Add GEMINI_API_KEY to .env to enable AI extraction and bid generation.")
+
+        b1, b2 = st.columns(2)
+        with b1:
+            st.markdown("**Step 1 — Select or upload tender document**")
+
+            # Option A: pick from live data (has document URL)
+            bid_q = st.text_input("Search from live tenders (by name/org)",
+                                  placeholder="e.g. road, CSPDCL, Raipur...",
+                                  key="bid_search_q",
+                                  label_visibility="collapsed")
+            bid_q_lower = bid_q.strip().lower()
+            if not df_t.empty:
+                df_bid_f = df_t[df_t.apply(
+                    lambda r: bid_q_lower in f"{r.get('title','')} {r.get('organization','')} {r.get('district','')}".lower(),
+                    axis=1,
+                )].reset_index(drop=True) if bid_q_lower else df_t.reset_index(drop=True)
+
+                if not df_bid_f.empty:
+                    bid_titles = df_bid_f["title"].fillna("Untitled").tolist()
+                    bid_pick   = st.selectbox("Select a tender", range(len(bid_titles)),
+                                              format_func=lambda i: safe_str(bid_titles[i], 100),
+                                              key="bid_from_list",
+                                              label_visibility="collapsed")
+                    picked_rec    = df_bid_f.iloc[bid_pick].to_dict()
+                    picked_url    = _v(picked_rec.get("document_url"), "")
+                    picked_title  = safe_str(picked_rec.get("title"), 80)
+
+                    if picked_url:
+                        st.markdown(
+                            f'<a href="{picked_url}" target="_blank" style="font-size:.75rem;'
+                            f'color:#6366F1;text-decoration:none;display:inline-flex;align-items:center;'
+                            f'gap:5px;padding:6px 12px;border:1px solid rgba(99,102,241,.25);'
+                            f'border-radius:8px;background:rgba(99,102,241,.06);margin-bottom:8px">'
+                            f'⬇️ Download Official Tender PDF / Notice</a>',
+                            unsafe_allow_html=True)
+                        if st.button("✅ Use this tender for bid generation", key="bid_use_live",
+                                     use_container_width=True):
+                            st.session_state.bid_tender = picked_rec
+                            st.toast(f"✓ Loaded: {picked_title}")
+                    else:
+                        st.caption("No direct PDF URL for this tender — upload manually below.")
+
+            st.markdown("**— or upload PDF manually —**")
+            tender_pdf = st.file_uploader(
+                "Tender notice / NIT document",
+                type=["pdf","jpg","jpeg","png"], key="bid_tender_pdf",
+                label_visibility="collapsed")
+
+        with b2:
+            st.markdown("**Step 2 — Add your firm documents** (optional)")
+            vault_files = st.file_uploader(
+                "GST cert, registration, experience certs",
+                type=["pdf","txt","jpg","jpeg","png"],
+                accept_multiple_files=True, key="bid_vault_docs",
+                label_visibility="collapsed")
+
+        vault_texts: list[str] = []
+        for vf in (vault_files or []):
+            t = (_read_pdf_text(vf) if vf.name.lower().endswith(".pdf")
+                 else vf.read().decode("utf-8", errors="ignore"))
+            if t.strip(): vault_texts.append(t)
+
+        if tender_pdf and st.button("🔍 Extract Tender Details", use_container_width=True, key="bid_extract"):
+            with st.spinner("Reading tender document with AI..."):
+                import bid_engine
+                st.session_state.bid_tender = bid_engine.extract_tender(
+                    tender_pdf.read(), tender_pdf.type or "application/pdf")
+            st.success("✓ Extraction complete — review and edit below.")
+
+        if st.session_state.get("bid_tender"):
+            t = st.session_state.bid_tender
+            if t.get("_extraction_failed"):
+                st.error("AI extraction failed — fill in the details below manually.")
+
+            st.markdown("---")
+            st.markdown("**Step 3 — Confirm extracted tender details**")
+            with st.form("bid_tender_form"):
+                bc1, bc2 = st.columns(2)
+                with bc1:
+                    t["title"]        = st.text_input("Tender Title",      _v(t.get("title"),""))
+                    t["tender_no"]    = st.text_input("Tender Number",     _v(t.get("tender_no"),""))
+                    t["organization"] = st.text_input("Issuing Authority", _v(t.get("organization"),""))
+                    t["state"]        = st.text_input("State",             _v(t.get("state"),""))
+                    t["district"]     = st.text_input("District",          _v(t.get("district"),""))
+                    t["category"]     = st.text_input("Work Category",     _v(t.get("category"),""))
+                with bc2:
+                    t["value_text"]   = st.text_input("Estimated Value",   _v(t.get("value_text"),""))
+                    t["deadline"]     = st.text_input("Deadline (YYYY-MM-DD)", _v(t.get("deadline"),""))
+                    t["emd"]          = st.text_input("EMD Amount",        _v(t.get("emd"),""))
+                    t["contractor_class"]        = st.text_input("Required Class", _v(t.get("contractor_class"),""))
+                    t["required_turnover_lakhs"] = st.text_input("Required Turnover (Lakhs)", str(t.get("required_turnover_lakhs") or ""))
+                    t["required_experience_years"] = st.text_input("Required Experience (Years)", str(t.get("required_experience_years") or ""))
+                t["scope_of_work"]        = st.text_area("Scope of Work", _v(t.get("scope_of_work"),""), height=80)
+                t["eligibility_criteria"] = st.text_area("Eligibility / Qualification", _v(t.get("eligibility_criteria"),""), height=70)
+                docs_raw = st.text_area("Required Documents (one per line)", "\n".join(t.get("required_documents") or []), height=80)
+                if st.form_submit_button("✅ Confirm Details", use_container_width=True):
+                    t["required_documents"] = [d.strip() for d in docs_raw.splitlines() if d.strip()]
+                    st.session_state.bid_tender = t
+                    st.success("✓ Details confirmed.")
+
+            # Readiness
+            st.markdown("---")
+            st.markdown("**Step 4 — Readiness Check**")
+            import bid_engine
+            readiness = bid_engine.readiness_check(st.session_state.bid_tender, profile, vault_texts)
+            pct   = readiness["overall_pct"]
+            color = score_color(pct)
+
+            st.markdown(f"""<div class="res-panel" style="margin-bottom:18px">
+              <div style="display:flex;align-items:center;gap:24px">
+                <div style="text-align:center;flex-shrink:0">
+                  <div class="res-score" style="color:{color}">{pct}%</div>
+                  <div class="res-label">Bid Ready</div>
+                  <div class="readiness-bar" style="width:70px;margin:8px auto 0">
+                    <div class="readiness-fill" style="width:{pct}%;background:{color}"></div>
+                  </div>
+                </div>
+                <div class="res-verdict">
+                  {'All stated requirements met — proceed to generate your bid.' if readiness['ready']
+                   else f"{len(readiness['missing'])} requirement(s) need attention before submission."}
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+            rr1, rr2, rr3 = st.columns(3)
+            with rr1:
+                if readiness["met"]:
+                    st.success(f"✅ Met ({len(readiness['met'])})")
+                    for item in readiness["met"]: st.caption(f"• {item}")
+            with rr2:
+                if readiness["missing"]:
+                    st.error(f"❌ Missing ({len(readiness['missing'])})")
+                    for item in readiness["missing"]: st.caption(f"• {item}")
+            with rr3:
+                if readiness["warnings"]:
+                    st.warning(f"⚠️ Warnings ({len(readiness['warnings'])})")
+                    for item in readiness["warnings"]: st.caption(f"• {item}")
+
+            st.markdown("---")
+            st.markdown("**Step 5 — Generate Bid Document**")
+            if not has_ai:
+                st.info("Add GEMINI_API_KEY to .env to generate the AI-written bid document.")
+            else:
+                if st.button("🤖 Generate Bid Document (.docx)", use_container_width=True, key="bid_gen"):
+                    with st.spinner("AI is writing your bid — this takes ~30 seconds..."):
+                        bid_content = bid_engine.generate_bid_content(
+                            st.session_state.bid_tender, profile, vault_texts)
+                    if bid_content:
+                        with st.spinner("Compiling Word document..."):
+                            docx_bytes = bid_engine.build_docx(
+                                bid_content, st.session_state.bid_tender, profile)
+                        title_raw = st.session_state.bid_tender.get("title") or "bid"
+                        safe_name = "".join(c if c.isalnum() or c in " _-" else "_"
+                                            for c in title_raw[:40]).strip()
+                        st.success("✓ Bid document ready!")
+                        st.download_button(
+                            "⬇️ Download Bid Document (.docx)",
+                            data=docx_bytes,
+                            file_name=f"Bid_{safe_name}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True)
+                    else:
+                        st.error("Generation failed. Check your GEMINI_API_KEY and try again.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── JOBS ──────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Jobs" in page:
+    st.markdown("""<div class="sec-hd">
+      <span class="sec-title">💼 Government Job Board</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    if df_j.empty:
+        st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
+          <div style="font-size:2rem;margin-bottom:12px">💼</div>
+          <div style="font-size:.9rem;color:#64748B">No job data. Run ingest.py to fetch live listings.</div>
+        </div>""", unsafe_allow_html=True)
+    else:
+        # Job KPIs
+        jk1, jk2, jk3, jk4 = st.columns(4)
+        jk1.markdown(f'<div class="stat-card"><div class="stat-num">{len(df_j)}</div><div class="stat-lbl">Total Jobs</div></div>', unsafe_allow_html=True)
+        cg_jobs = int((df_j["state"] == "Chhattisgarh").sum()) if "state" in df_j else 0
+        up_jobs = int((df_j["state"] == "Uttar Pradesh").sum()) if "state" in df_j else 0
+        jk2.markdown(f'<div class="stat-card"><div class="stat-num">{cg_jobs}</div><div class="stat-lbl">CG Jobs</div></div>', unsafe_allow_html=True)
+        jk3.markdown(f'<div class="stat-card"><div class="stat-num">{up_jobs}</div><div class="stat-lbl">UP Jobs</div></div>', unsafe_allow_html=True)
+        total_vac = 0
+        try:
+            total_vac = int(pd.to_numeric(df_j["vacancies"], errors="coerce").fillna(0).sum())
+        except Exception: pass
+        jk4.markdown(f'<div class="stat-card"><div class="stat-num">{total_vac:,}</div><div class="stat-lbl">Total Vacancies</div></div>', unsafe_allow_html=True)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Job filters
+        st.markdown('<div class="filter-row">', unsafe_allow_html=True)
+        jf1, jf2, jf3 = st.columns([3, 1.5, 1.5])
+        with jf1:
+            jsearch = st.text_input("Search jobs", placeholder="Title, department, qualification...",
+                                    label_visibility="collapsed", key="jsearch").lower()
+        with jf2:
+            jstates = ["All", "Chhattisgarh", "Uttar Pradesh"]
+            jstate  = st.selectbox("State", jstates, label_visibility="collapsed", key="jstate")
+        with jf3:
+            jcats = ["All"] + sorted(df_j["category"].dropna().unique().tolist()) if "category" in df_j else ["All"]
+            jcat  = st.selectbox("Category", jcats, label_visibility="collapsed", key="jcat")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        jobs_filtered = []
+        for _, r in df_j.iterrows():
+            rec = r.to_dict()
+            hay = f"{_v(rec.get('title'))} {_v(rec.get('department'))} {_v(rec.get('qualification'))} {_v(rec.get('description'))}".lower()
+            if jsearch and jsearch not in hay: continue
+            if jstate != "All" and _v(rec.get("state")) != jstate: continue
+            if jcat   != "All" and jcat.lower() not in _v(rec.get("category","")).lower(): continue
+            jobs_filtered.append(rec)
+
+        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(jobs_filtered)} postings</div>',
+                    unsafe_allow_html=True)
+
+        for rec in jobs_filtered[:100]:
+            dl     = days_left(rec.get("deadline"))
+            dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "Open")
+            vac    = _v(rec.get("vacancies"))
+            try: vac_num = int(float(vac)); vac_txt = f"{vac_num:,} posts"
+            except Exception: vac_txt = vac if vac != "—" else ""
+
+            st.markdown(f"""<div class="jcard">
+              <div class="jcard-row">
+                <div class="jcard-body">
+                  <div class="jcard-title">{safe_str(rec.get('title'), 100)}</div>
+                  <div class="jcard-dept">{_v(rec.get('department'))} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
+                  <div class="ocard-tags">
+                    <span class="tag tag-dl">{dl_txt}</span>
+                    {'<span class="tag tag-loc">👥 ' + vac_txt + '</span>' if vac_txt else ''}
+                    <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
+                    {'<span class="tag tag-val">💰 ' + _v(rec.get('salary')) + '</span>' if _v(rec.get('salary')) != '—' else ''}
+                  </div>
+                </div>
+                {'<div class="jvac">' + vac_txt + '</div>' if vac_txt else ''}
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+            with st.expander(f"Details · Resume Match — {safe_str(rec.get('title'), 55)}"):
+                jd1, jd2 = st.columns(2)
+                jd1.write(f"**Department:** {_v(rec.get('department'))}")
+                jd1.write(f"**Qualification:** {_v(rec.get('qualification'))}")
+                jd1.write(f"**Category:** {_v(rec.get('category'))}")
+                jd2.write(f"**Salary:** {_v(rec.get('salary'))}")
+                jd2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
+                jd2.write(f"**Vacancies:** {_v(rec.get('vacancies'))}")
+                if _v(rec.get("description")) != "—":
+                    st.write(_v(rec.get("description")))
+                doc_url = _v(rec.get("document_url") or rec.get("apply_link"))
+                if doc_url != "—":
+                    st.markdown(f"[📄 Official Notification / Apply]({doc_url})")
+
+                if st.session_state.authenticated:
+                    st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
+                    st.markdown("**Quick Resume Match**")
+                    resume_up = st.file_uploader("Upload resume", type=["pdf","txt"],
+                                                 key=f"jr_{rec.get('source_id')}")
+                    if resume_up:
+                        rtext = (_read_pdf_text(resume_up)
+                                 if resume_up.name.lower().endswith(".pdf")
+                                 else resume_up.read().decode("utf-8", errors="ignore"))
+                        if st.button("⚡ Analyze Match", key=f"jra_{rec.get('source_id')}"):
+                            with st.spinner("Analyzing..."):
+                                res = evaluator.evaluate_resume_for_job(rec, rtext)
+                            pct   = res["readiness_pct"]
+                            color = score_color(pct)
+                            st.markdown(f"""<div class="res-panel">
+                              <b style="color:{color};font-size:1.5rem">{pct}%</b>
+                              &nbsp; <span style="color:#94A3B8;font-size:.85rem">{res['verdict']}</span>
+                            </div>""", unsafe_allow_html=True)
+                            if res["met"]:    st.success("Met: " + " · ".join(res["met"]))
+                            if res["missing"]:st.error("Missing: " + " · ".join(res["missing"]))
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── DOCUMENTS ─────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Documents" in page:
+    if not st.session_state.authenticated:
+        st.warning("Sign in to access your secure document vault.")
+        st.stop()
+
+    st.markdown("""<div class="sec-hd">
+      <span class="sec-title">📄 Secure Document Vault</span>
+      <span class="sec-badge-green">Encrypted</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    with st.expander("⬆️ Upload New Document", expanded=True):
+        up1, up2 = st.columns(2)
+        with up1:
+            doc_name = st.text_input("Document label",
+                                     placeholder="e.g. GST Registration, Experience Certificate")
+        with up2:
+            doc_file = st.file_uploader("Select file", type=["pdf","jpg","jpeg","png","txt"],
+                                        key="vault_upload")
+        if st.button("⬆️ Upload to Vault", use_container_width=True) and doc_file and doc_name:
+            with st.spinner("Uploading securely..."):
+                doc_id = accounts.save_document(email, doc_name, doc_file.name,
+                                                doc_file.read(), doc_file.type or "application/octet-stream")
+            if doc_id:
+                st.success(f"✓ '{doc_name}' uploaded successfully.")
+                st.rerun()
+            else:
+                st.error("Upload failed. Check console logs.")
+
+    st.markdown("""<div class="sec-hd" style="margin-top:28px">
+      <span class="sec-title">My Documents</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    docs = accounts.list_documents(email)
+    if docs:
+        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:14px">{len(docs)} documents</div>',
+                    unsafe_allow_html=True)
+        for doc in docs:
+            size_kb = round(doc.get("size_bytes", 0) / 1024, 1)
+            mime    = doc.get("mime_type","")
+            icon    = "📄" if "pdf" in mime else "🖼️" if "image" in mime else "📁"
+            uploaded = str(doc.get("uploaded_at",""))[:10]
+            st.markdown(f"""<div class="doc-card">
+              <div class="doc-icon">{icon}</div>
+              <div style="flex:1;min-width:0">
+                <div class="doc-name">{doc.get('name','—')}</div>
+                <div class="doc-meta">{doc.get('filename','—')} &nbsp;·&nbsp; {size_kb} KB &nbsp;·&nbsp; {uploaded}</div>
+              </div>
+              <span class="tag tag-cat" style="flex-shrink:0">{mime.split('/')[-1].upper()[:8]}</span>
+            </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""<div class="ocard" style="text-align:center;padding:36px">
+          <div style="font-size:2rem;margin-bottom:12px">📂</div>
+          <div style="font-size:.88rem;color:#64748B">No documents uploaded yet</div>
+          <div style="font-size:.76rem;color:#334155;margin-top:6px">
+            Upload your GST cert, experience proofs, contractor registration, and bid documents above.
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── ALERTS ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Alerts" in page:
+    if not st.session_state.authenticated:
+        st.warning("Sign in to view your alert history.")
+        st.stop()
+
+    st.markdown("""<div class="sec-hd">
+      <span class="sec-title">🔔 Alert History</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    log_path = Path(__file__).parent / "data" / "alert_log.json"
+    user_logs = []
+    if log_path.exists():
+        try:
+            all_logs  = json.loads(log_path.read_text(encoding="utf-8"))
+            user_logs = [e for e in all_logs if e.get("email","").lower() == email.lower()]
+        except Exception: pass
+
+    if user_logs:
+        tender_lookup = ({r["source_id"]: r for _, r in df_t.iterrows()}
+                         if not df_t.empty else {})
+        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(user_logs)} alerts dispatched</div>',
+                    unsafe_allow_html=True)
+
+        for entry in sorted(user_logs, key=lambda x: x.get("sent_at",""), reverse=True)[:50]:
+            sid    = entry.get("source_id","")
+            tender = tender_lookup.get(sid, {})
+            title  = safe_str(tender.get("title") or sid, 90)
+            sent   = str(entry.get("sent_at",""))[:10]
+            org    = _v(tender.get("organization"))
+            rtype  = entry.get("record_type","tender").title()
+            st.markdown(f"""<div class="alert-item">
+              <div class="alert-title">{title}</div>
+              <div style="font-size:.73rem;color:#475569;margin:4px 0 8px">{org}</div>
+              <div class="ocard-tags">
+                <span class="tag tag-dl">📧 Sent {sent}</span>
+                <span class="tag tag-cat">{rtype}</span>
+              </div>
+            </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
+          <div style="font-size:2rem;margin-bottom:12px">🔔</div>
+          <div style="font-size:.9rem;color:#64748B;font-weight:600">No alerts sent yet</div>
+          <div style="font-size:.77rem;color:#334155;margin-top:8px;line-height:1.6">
+            Alerts are emailed each time the pipeline runs and finds new matches for your profile.<br>
+            Complete your Profile → add RESEND_API_KEY to .env → run: <code>python ingest.py</code>
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── ANALYTICS ─────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Analytics" in page:
+    import plotly.express as px
+    import plotly.graph_objects as go
+
+    # Shared dark layout for every chart
+    _LAYOUT = dict(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(8,15,34,0.6)",
+        font=dict(family="Inter, sans-serif", color="#94A3B8", size=11),
+        margin=dict(l=8, r=8, t=8, b=8),
+        xaxis=dict(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(color="#64748B")),
+        yaxis=dict(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(color="#64748B")),
+        hoverlabel=dict(bgcolor="#0B1329", bordercolor="#6366F1",
+                        font=dict(color="#F1F5F9", size=12)),
+        showlegend=False,
+    )
+
+    def _bar(series, color="#6366F1", horizontal=False):
+        df_p = series.reset_index()
+        df_p.columns = ["label", "count"]
+        if horizontal:
+            fig = px.bar(df_p, x="count", y="label", orientation="h",
+                         color_discrete_sequence=[color])
+            fig.update_layout(**_LAYOUT, yaxis=dict(
+                autorange="reversed", gridcolor="rgba(255,255,255,0.04)",
+                tickfont=dict(color="#64748B")))
+        else:
+            fig = px.bar(df_p, x="label", y="count", color_discrete_sequence=[color])
+            fig.update_layout(**_LAYOUT)
+        fig.update_traces(marker_line_width=0, hovertemplate="%{y}<extra></extra>" if horizontal
+                          else "%{x}: <b>%{y}</b><extra></extra>")
+        return fig
+
+    def _chart_card(title, fig):
+        st.markdown(f'<div class="chart-card"><div class="chart-title">{title}</div></div>',
+                    unsafe_allow_html=True)
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+    st.markdown("""<div class="sec-hd">
+      <span class="sec-title">📊 Market Intelligence</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    if df_t.empty:
+        st.warning("No data available. Run ingest.py first.")
+    else:
+        # ── KPI row ──
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Total Tenders", len(df_t))
+        m2.metric("Total Jobs",    len(df_j))
+        m3.metric("CG Tenders",   int((df_t["state"] == "Chhattisgarh").sum()) if "state" in df_t else 0)
+        m4.metric("UP Tenders",   int((df_t["state"] == "Uttar Pradesh").sum()) if "state" in df_t else 0)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # ── Row 1: category charts ──
+        a1, a2 = st.columns(2)
+        with a1:
+            if "category" in df_t:
+                _chart_card("Tenders by Category",
+                            _bar(df_t["category"].fillna("Other").value_counts().head(10),
+                                 color="#6366F1", horizontal=True))
+        with a2:
+            if not df_j.empty and "category" in df_j:
+                _chart_card("Jobs by Category",
+                            _bar(df_j["category"].fillna("General").value_counts().head(10),
+                                 color="#06B6D4", horizontal=True))
+
+        # ── Row 2: state + deadline ──
+        a3, a4 = st.columns(2)
+        with a3:
+            if "state" in df_t:
+                state_counts = df_t["state"].fillna("Unknown").value_counts()
+                colors = ["#6366F1" if s == "Chhattisgarh" else "#10B981"
+                          for s in state_counts.index]
+                fig_s = go.Figure(go.Bar(
+                    x=state_counts.index.tolist(),
+                    y=state_counts.values.tolist(),
+                    marker_color=colors,
+                    hovertemplate="%{x}: <b>%{y}</b><extra></extra>",
+                ))
+                fig_s.update_layout(**_LAYOUT)
+                _chart_card("Tenders by State", fig_s)
+
+        with a4:
+            if "deadline" in df_t:
+                df_dl = df_t[["deadline"]].copy()
+                df_dl["deadline"] = pd.to_datetime(df_dl["deadline"], errors="coerce")
+                today_dt = pd.Timestamp(date.today())
+                cutoff   = today_dt + pd.Timedelta(days=60)
+                df_dl    = df_dl[(df_dl["deadline"] >= today_dt) & (df_dl["deadline"] <= cutoff)]
+                if not df_dl.empty:
+                    df_dl["week"] = df_dl["deadline"].dt.to_period("W").astype(str)
+                    _chart_card("Deadline Distribution (Next 60 Days)",
+                                _bar(df_dl["week"].value_counts().sort_index(),
+                                     color="#F59E0B"))
+                else:
+                    st.info("No tenders closing in the next 60 days.")
+
+        # ── Row 3: districts + orgs ──
+        st.markdown("<br>", unsafe_allow_html=True)
+        a5, a6 = st.columns(2)
+        with a5:
+            if "district" in df_t:
+                dist_counts = df_t["district"].dropna().value_counts().head(15)
+                if not dist_counts.empty:
+                    _chart_card("Top Districts by Tender Count",
+                                _bar(dist_counts, color="#10B981", horizontal=True))
+        with a6:
+            if "organization" in df_t:
+                org_counts = df_t["organization"].dropna().value_counts().head(10)
+                _chart_card("Top Organizations by Tender Count",
+                            _bar(org_counts, color="#8B5CF6", horizontal=True))
+            st.markdown('</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── PROFILE ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Profile" in page:
+    if not st.session_state.authenticated:
+        st.warning("Sign in to access your firm profile.")
+        st.stop()
+
+    st.markdown("""<div class="sec-hd">
+      <span class="sec-title">👤 Firm Intelligence Profile</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    with st.form("profile_form"):
+        st.markdown('<div class="profile-section-title">Company Identity</div>', unsafe_allow_html=True)
+        pf1, pf2 = st.columns(2)
+        with pf1:
+            company  = st.text_input("Company / Firm Name",
+                                     value=_v(profile.get("company_name"),""),
+                                     placeholder="Sharma Constructions Pvt. Ltd.")
+            turnover = st.number_input("Annual Turnover (₹ Lakhs)", min_value=0.0, step=10.0,
+                                       value=float(profile.get("turnover_lakhs") or 0))
+        with pf2:
+            classes = ["Class A", "Class B", "Class C", "Class D", "Open"]
+            cur_cls = _v(profile.get("contractor_class"), "Class C")
+            idx_cls = classes.index(cur_cls) if cur_cls in classes else 2
+            cls = st.selectbox("Contractor Registration Class", classes, index=idx_cls)
+            exp = st.number_input("Years of Experience", min_value=0, step=1,
+                                  value=int(profile.get("experience_years") or 0))
+
+        st.markdown('<div class="profile-section-title" style="margin-top:16px">Sector & Geography Targeting</div>',
+                    unsafe_allow_html=True)
+        ps1, ps2 = st.columns(2)
+        with ps1:
+            sectors = st.multiselect("Sectors you bid in", SECTORS,
+                                     default=[s for s in (profile.get("sectors") or []) if s in SECTORS])
+            target_states = st.multiselect("Target States",
+                                           ["Chhattisgarh", "Uttar Pradesh"],
+                                           default=profile.get("states", ["Chhattisgarh", "Uttar Pradesh"]))
+        with ps2:
+            # Dynamic district list based on selected target states
+            avail_dists: list[str] = []
+            for ts in target_states:
+                avail_dists.extend(_districts_for_state(ts))
+            avail_dists = sorted(set(avail_dists)) if avail_dists else sorted(set(CG_DISTRICTS + UP_DISTRICTS))
+
+            saved_dists = [d for d in (profile.get("districts") or []) if d in avail_dists]
+            districts = st.multiselect("Target Districts (leave blank = all districts)",
+                                       avail_dists, default=saved_dists)
+
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.form_submit_button("💾 Save Firm Profile", use_container_width=True):
+            accounts.save_profile(email, {
+                "company_name":     company,
+                "turnover_lakhs":   turnover,
+                "contractor_class": cls,
+                "experience_years": exp,
+                "sectors":          sectors,
+                "states":           target_states,
+                "districts":        districts,
+            })
+            st.success("✓ Profile saved. AI scores will update on next page load.")
+            st.rerun()
+
+    # ── Saved Pipeline ──
+    st.markdown("""<div class="sec-hd" style="margin-top:36px">
+      <span class="sec-title">📋 My Saved Pipeline</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    saved = accounts.list_saved(email)
+    if saved:
+        tender_lookup = ({r["source_id"]: r for _, r in df_t.iterrows()}
+                         if not df_t.empty else {})
+        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:14px">{len(saved)} saved</div>',
+                    unsafe_allow_html=True)
+        for s in saved:
+            rec    = tender_lookup.get(s.get("source_id",""), {})
+            title  = safe_str(rec.get("title", s.get("source_id","—")), 80)
+            org    = _v(rec.get("organization"))
+            status = _v(s.get("status"), "interested")
+            val    = _v(rec.get("value_text"))
+            dl     = days_left(rec.get("deadline"))
+            dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ""
+            st.markdown(f"""<div class="pipe-card">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:.87rem;font-weight:600;color:#E2E8F0;margin-bottom:3px">📌 {title}</div>
+                <div style="font-size:.72rem;color:#475569">{org}</div>
+                <div class="ocard-tags" style="margin-top:8px">
+                  <span class="tag tag-cat">Status: {status}</span>
+                  {f'<span class="tag tag-val">{val}</span>' if val != "—" else ""}
+                  {f'<span class="tag tag-dl">{dl_txt}</span>' if dl_txt else ""}
+                </div>
+              </div>
+            </div>""", unsafe_allow_html=True)
+    else:
+        st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
+          <div style="font-size:2rem;margin-bottom:10px">📋</div>
+          <div style="font-size:.86rem;color:#64748B">No saved tenders yet</div>
+          <div style="font-size:.75rem;color:#334155;margin-top:6px">
+            Use the Explore page to save tenders to your pipeline.
+          </div>
+        </div>""", unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── FOOTER ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+st.markdown("""<div style="text-align:center;padding:48px 0 24px;color:#1E293B;font-size:.65rem;
+  letter-spacing:.15em;font-weight:600;text-transform:uppercase;font-family:'JetBrains Mono',monospace">
+  ⚡ OPPORTA · EVERY OPPORTUNITY · ONE PLATFORM · CG + UP
+</div>""", unsafe_allow_html=True)

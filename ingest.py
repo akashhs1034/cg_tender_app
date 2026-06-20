@@ -14,6 +14,7 @@ Run:  python ingest.py
 
 from __future__ import annotations
 
+import argparse
 import os
 import re
 import csv
@@ -118,12 +119,13 @@ def run_live_scrapers():
     jobs: list[dict] = []
     counts: OrderedDict[str, int] = OrderedDict()
 
-    from scrapers import cg_eproc, up_etender, cppp_state, cg_jobs, up_jobs, cg_vyapam, up_upsssc
+    from scrapers import cg_eproc, up_etender, cppp_state, cg_jobs, up_jobs, cg_vyapam, up_upsssc, cspdcl
 
     _TENDER_SCRAPERS = [
         ("cg_eproc     (eproc.cgstate.gov.in)      ", cg_eproc.scrape),
         ("up_etender   (etender.up.nic.in)         ", up_etender.scrape),
         ("cppp_state   (eprocure.gov.in/cppp)      ", cppp_state.scrape),
+        ("cspdcl       (cspdcl.co.in/cseb)         ", cspdcl.scrape),
     ]
     _JOB_SCRAPERS = [
         ("cg_jobs      (psc.cg.gov.in)             ", cg_jobs.scrape),
@@ -171,18 +173,29 @@ def write_local(tenders, jobs):
 
 
 def push_supabase(tenders, jobs):
-    url, key = os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY")
+    url = os.getenv("SUPABASE_URL")
+    # Prefer service_role key for ingest (bypasses RLS); fall back to anon key
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
     if not (url and key):
         print("   Supabase keys not set — skipping cloud push (local CSVs are ready).")
         return
-    from supabase import create_client
-    sb = create_client(url, key)
-    for table, rows in [("tenders", tenders), ("jobs", jobs)]:
-        if not rows:
-            continue
-        # upsert on source_id avoids the duplicate-row problem the old scripts had
-        sb.table(table).upsert(rows, on_conflict="source_id").execute()
-        print(f"   upserted {len(rows)} rows -> {table}")
+    using_service = bool(os.getenv("SUPABASE_SERVICE_KEY"))
+    if not using_service:
+        print("   Note: using anon key — add SUPABASE_SERVICE_KEY to .env to bypass RLS.")
+    try:
+        from supabase import create_client
+        sb = create_client(url, key)
+        for table, rows in [("tenders", tenders), ("jobs", jobs)]:
+            if not rows:
+                continue
+            # Chunk upserts to avoid request-size limits
+            chunk = 200
+            for i in range(0, len(rows), chunk):
+                sb.table(table).upsert(rows[i:i+chunk], on_conflict="source_id").execute()
+            print(f"   upserted {len(rows)} rows -> {table}")
+    except Exception as e:
+        print(f"   Supabase push failed: {e}")
+        print("   Local CSVs are up-to-date — app will use them as fallback.")
 
 
 def _print_scraper_summary(counts: dict, total_tenders: int, total_jobs: int) -> None:
@@ -206,24 +219,57 @@ def _print_scraper_summary(counts: dict, total_tenders: int, total_jobs: int) ->
 
 
 def main():
-    print("=== Opporta ingestion ===")
-    print("1. Loading seed data…")
+    ap = argparse.ArgumentParser(description="Opporta ingestion pipeline")
+    ap.add_argument(
+        "--dry-run", action="store_true",
+        help="Scrape and deduplicate but do not write CSV, push to Supabase, or send emails.",
+    )
+    ap.add_argument(
+        "--no-alerts", action="store_true",
+        help="Normal pipeline run (write + push) but skip sending email alerts.",
+    )
+    args = ap.parse_args()
+
+    if args.dry_run:
+        print("=== Opporta ingestion [DRY RUN -- no writes, no emails] ===")
+    else:
+        print("=== Opporta ingestion ===")
+
+    print("1. Loading seed data...")
     t1, j1 = load_master_leads()
     t2 = load_master_tenders()
 
-    print("2. Running live scrapers…")
+    print("2. Running live scrapers...")
     t3, j3, scraper_counts = run_live_scrapers()
 
     tenders = dedup(t1 + t2 + t3)
-    jobs = dedup(j1 + j3)
+    jobs    = dedup(j1 + j3)
 
     _print_scraper_summary(scraper_counts, len(tenders), len(jobs))
 
-    print("3. Writing local fallback…")
-    write_local(tenders, jobs)
+    if args.dry_run:
+        print("3. [DRY RUN] Skipping CSV write.")
+        print("4. [DRY RUN] Skipping Supabase push.")
+    else:
+        print("3. Writing local fallback...")
+        write_local(tenders, jobs)
+        print("4. Pushing to cloud...")
+        push_supabase(tenders, jobs)
 
-    print("4. Pushing to cloud…")
-    push_supabase(tenders, jobs)
+    if args.dry_run or args.no_alerts:
+        label = "DRY RUN" if args.dry_run else "--no-alerts"
+        print(f"5. [{label}] Skipping email alerts.")
+    else:
+        print("5. Sending email alerts...")
+        from alerts import send_alerts
+        import logging
+        logging.basicConfig(level=logging.INFO, format="   %(message)s")
+        n = send_alerts(tenders)
+        if n:
+            print(f"   {n} digest email(s) queued.")
+        else:
+            print("   No new matches to alert (or RESEND_API_KEY not set).")
+
     print("=== done ===")
 
 

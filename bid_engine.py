@@ -33,12 +33,11 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
 
     full_prompt = prompt + "\n\nReturn ONLY valid raw JSON. No markdown fences."
 
-    # ---- Gemini path ----
+    # ---- Gemini path (google-genai SDK v2+) ----
     if gemini_key:
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            from google import genai as _genai
+            _client = _genai.Client(api_key=gemini_key)
 
             parts: list = []
             if doc_bytes:
@@ -51,7 +50,7 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
                 }})
             parts.append(full_prompt)
 
-            resp = model.generate_content(parts)
+            resp = _client.models.generate_content(model="gemini-2.0-flash", contents=parts)
             text = resp.text.strip()
             text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
             return json.loads(text)

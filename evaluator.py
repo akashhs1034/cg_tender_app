@@ -25,12 +25,11 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
     gemini_key    = os.getenv("GEMINI_API_KEY")
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
 
-    # ---- Gemini path ----
+    # ---- Gemini path (google-genai SDK v2+) ----
     if gemini_key:
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            from google import genai as _genai
+            _client = _genai.Client(api_key=gemini_key)
 
             parts: list = []
             if document_bytes:
@@ -41,7 +40,7 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
                 }})
             parts.append(full_prompt)
 
-            resp = model.generate_content(parts)
+            resp = _client.models.generate_content(model="gemini-2.0-flash", contents=parts)
             text = resp.text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
             return json.loads(text)
         except Exception as e:

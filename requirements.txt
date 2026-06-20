@@ -21,7 +21,7 @@ requests>=2.32
 plotly>=5.20
 
 # AI evaluator + bid generation
-google-generativeai>=0.8  # Gemini API (preferred — set GEMINI_API_KEY in .env)
+google-genai>=2.0         # Gemini API (preferred — set GEMINI_API_KEY in .env)
 anthropic>=0.40           # Claude fallback (set ANTHROPIC_API_KEY in .env)
 pdfplumber>=0.11          # app.py uses pdfplumber.open() — not pypdf
 python-docx>=1.0          # bid_engine.py: build Word bid documents

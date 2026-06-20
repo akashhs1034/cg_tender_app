@@ -44,10 +44,11 @@ jobs:
 
       - name: Run ingestion pipeline
         env:
-          SUPABASE_URL:   ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY:   ${{ secrets.SUPABASE_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          FROM_EMAIL:     ${{ secrets.FROM_EMAIL }}
-          APP_URL:        ${{ secrets.APP_URL }}
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY:       ${{ secrets.GEMINI_API_KEY }}
+          RESEND_API_KEY:       ${{ secrets.RESEND_API_KEY }}
+          FROM_EMAIL:           ${{ secrets.FROM_EMAIL }}
+          APP_URL:              ${{ secrets.APP_URL }}
         run: python ingest.py

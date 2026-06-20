@@ -400,15 +400,16 @@ _DOC_KEYWORDS = {
 
 _DEGREE_PATTERNS = [
     ("B.Tech / B.E. (Engineering)", ["b.tech", "b.e.", "btech", "bachelor of engineering", "be (", "b.e in", "b.tech in"]),
-    ("B.Sc / B.A. / B.Com (Graduate)", ["b.sc", "b.a.", "b.com", "bachelor of", "bsc", "ba ", "b.com", "graduate", "graduation"]),
+    ("MBA / PGDM",    ["mba", "pgdm", "master of business", "bba", "bachelor of business"]),
+    ("MCA",           ["mca", "master of computer"]),
     ("M.Tech / M.E.", ["m.tech", "m.e.", "mtech", "master of engineering"]),
-    ("MBA / PGDM", ["mba", "pgdm", "master of business"]),
-    ("MCA", ["mca", "master of computer"]),
-    ("12th / Intermediate", ["12th", "intermediate", "higher secondary", "hsc", "+2", "class xii"]),
-    ("Diploma", ["diploma"]),
     ("B.Ed (Teacher Training)", ["b.ed", "bed ", "bachelor of education"]),
-    ("MBBS / Medical Degree", ["mbbs", "md ", "ms (medicine)", "bachelor of medicine"]),
-    ("GNM / B.Sc Nursing", ["gnm", "b.sc nursing", "bsc nursing", "general nursing"]),
+    ("MBBS / Medical Degree",   ["mbbs", "md ", "ms (medicine)", "bachelor of medicine"]),
+    ("GNM / B.Sc Nursing",      ["gnm", "b.sc nursing", "bsc nursing", "general nursing"]),
+    ("12th / Intermediate",     ["12th", "intermediate", "higher secondary", "hsc", "+2", "class xii"]),
+    ("Diploma",                 ["diploma"]),
+    # Keep this last — broad keywords must not override specific patterns above
+    ("B.Sc / B.A. / B.Com (Graduate)", ["b.sc", "b.a.", "b.com", "bsc", "b.com", "graduate", "graduation", "bachelor of arts", "bachelor of science", "bachelor of commerce"]),
 ]
 
 _SKILL_CAT_MAP = {
@@ -655,6 +656,7 @@ def _keyword_resume_eval(job: dict, resume_text: str) -> dict:
     reqs  = _resume_reqs(job)
     facts = _resume_facts(resume_text)
     met, missing, unknown = [], [], []
+    domain_skills_missing = False
 
     for req in reqs:
         kind, target = req["kind"], req.get("target")
@@ -665,7 +667,10 @@ def _keyword_resume_eval(job: dict, resume_text: str) -> dict:
             continue
 
         if kind == "degree":
-            found = any(kw in facts["raw"] for kw in (target or []))
+            # Match against extracted degree labels, not raw text, to avoid
+            # false positives like MBA matching "bachelor" for a nursing job.
+            candidate_degree_text = " ".join(facts["degrees"]).lower()
+            found = any(kw in candidate_degree_text for kw in (target or []))
             (met if found else missing).append(label)
         elif kind == "experience":
             (met if facts["experience_years"] >= target else missing).append(label)
@@ -678,20 +683,32 @@ def _keyword_resume_eval(job: dict, resume_text: str) -> dict:
                 met.append(f"{label} (found: {', '.join(found_skills[:3])})")
             else:
                 missing.append(label)
+                domain_skills_missing = True  # critical gap — core competency absent
 
     total = len(met) + len(missing) + len(unknown)
     match_pct = round(100 * len(met) / total) if total else 0
 
+    # Domain skills represent the job's core competency. Missing them is a hard
+    # disqualifier regardless of how many other boxes are ticked — cap at 35%.
+    if domain_skills_missing:
+        match_pct = min(match_pct, 35)
+
+    cat = _s(job.get("category")) or "this field"
     if not missing and not unknown:
         verdict = "Your resume appears to satisfy all stated requirements."
     elif len(met) == 0:
-        verdict = "The resume doesn't clearly match the requirements for this role."
+        verdict = "Your resume does not appear to match the requirements for this role."
+    elif domain_skills_missing:
+        verdict = (
+            f"Your background may meet some basic criteria, but the core {cat} "
+            f"domain skills are not found in your resume — this is a critical gap "
+            f"that would likely disqualify the application."
+        )
     elif not missing:
-        verdict = "Some requirements couldn't be verified from the text."
+        verdict = "Some requirements couldn't be verified from the resume text."
     else:
         verdict = f"Partial match — {len(met)} of {total} requirements found in your resume."
 
-    # Map internal match_pct to external readiness_pct to prevent app.py KeyError crash
     return {"readiness_pct": match_pct, "met": met, "missing": missing, "unknown": unknown, "verdict": verdict}
 
 def _llm_resume_eval(job: dict, resume_text: str) -> dict | None:

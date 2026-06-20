@@ -20,7 +20,7 @@ st.set_page_config(
     page_title="Opporta · Intelligence Platform",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
@@ -300,24 +300,97 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#475569!
   .kpi-grid{grid-template-columns:repeat(3,1fr)!important}
   .metric-row{grid-template-columns:repeat(2,1fr)!important}
 }
+
+/* ── Tablet (768px) ── */
 @media (max-width:768px){
-  .block-container{padding:0 1rem 2rem!important}
-  .kpi-grid{grid-template-columns:repeat(2,1fr)!important}
+  .block-container{padding:0 .75rem 5rem!important}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px!important}
   .metric-row{grid-template-columns:repeat(2,1fr)!important}
-  .hero-h1{font-size:2.2rem!important}
-  .brief{padding:18px 20px!important}
-  .brief-stats{gap:6px!important}
+  .hero{padding:36px 12px 28px!important}
+  .hero-h1{font-size:2rem!important;letter-spacing:-.03em!important}
+  .hero-sub{font-size:.85rem!important}
+  .brief{padding:16px 18px!important}
+  .brief-row{flex-direction:column!important;gap:10px!important}
+  .brief-stats{gap:5px!important}
   .bstat{padding:5px 10px!important;font-size:.7rem!important}
-  .ocard-row{flex-direction:column!important;gap:10px!important}
-  .ring{width:42px!important;height:42px!important;font-size:.7rem!important}
+  .ocard-row{flex-direction:column!important;gap:8px!important}
+  .jcard-row{flex-direction:column!important;gap:8px!important}
+  .ring{width:40px!important;height:40px!important;font-size:.68rem!important}
+  .jvac{align-self:flex-start!important}
   .filter-row>div{flex-direction:column!important}
-  section[data-testid="stSidebar"]{min-width:220px!important}
+  section[data-testid="stSidebar"]{min-width:200px!important}
+  .score-grid{grid-template-columns:repeat(3,1fr)!important}
+  .kpi-num{font-size:1.6rem!important}
+  .ocard{padding:14px 16px!important}
+  .jcard{padding:13px 16px!important}
+  .profile-card{padding:18px 16px!important}
+  .terminal-hd{padding:16px 18px!important}
 }
+
+/* ── Mobile (480px) ── */
 @media (max-width:480px){
-  .kpi-grid{grid-template-columns:1fr 1fr!important}
-  .hero-h1{font-size:1.8rem!important}
-  .hero-sub{font-size:.88rem!important}
-  .kpi-num{font-size:1.5rem!important}
+  .block-container{padding:0 .5rem 5rem!important}
+  .kpi-grid{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .score-grid{grid-template-columns:repeat(2,1fr)!important}
+  .metric-row{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .hero{padding:28px 8px 20px!important}
+  .hero-eyebrow{font-size:.62rem!important;padding:5px 12px!important}
+  .hero-h1{font-size:1.7rem!important;line-height:1.1!important}
+  .hero-sub{font-size:.8rem!important;margin-bottom:24px!important}
+  .kpi-num{font-size:1.4rem!important}
+  .kpi{padding:16px 14px 14px!important;border-radius:14px!important}
+  .ocard{padding:12px 14px!important;margin-bottom:8px!important}
+  .jcard{padding:12px 14px!important}
+  .ocard-title{font-size:.84rem!important}
+  .jcard-title{font-size:.83rem!important}
+  .brief{padding:14px!important;border-radius:14px!important}
+  .brief-greeting{font-size:1.1rem!important}
+  .ring{width:38px!important;height:38px!important;font-size:.66rem!important}
+  .profile-card{padding:14px 12px!important;border-radius:14px!important}
+  .terminal-hd{padding:14px!important}
+  .res-panel{padding:16px!important}
+  .res-score{font-size:2.4rem!important}
+  .doc-card{padding:12px 14px!important}
+  .stTabs [data-baseweb="tab"]{font-size:.75rem!important;padding:7px 12px!important}
+  .stButton>button{font-size:.8rem!important;padding:10px 14px!important;min-height:44px!important}
+  .stTextInput>div>div>input,.stNumberInput>div>div>input{font-size:.88rem!important;padding:12px 12px!important;min-height:44px!important}
+  .stSelectbox>div>div{min-height:44px!important}
+  label{font-size:.7rem!important}
+}
+
+/* ── Tab scrolling on all small screens ── */
+@media (max-width:768px){
+  .stTabs [data-baseweb="tab-list"]{
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    flex-wrap:nowrap!important;
+    -webkit-overflow-scrolling:touch!important;
+    scrollbar-width:none!important;
+    padding:4px!important;
+    gap:3px!important;
+  }
+  .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar{display:none!important}
+  .stTabs [data-baseweb="tab"]{
+    white-space:nowrap!important;
+    flex-shrink:0!important;
+    font-size:.76rem!important;
+    padding:7px 14px!important;
+  }
+}
+
+/* ── Bottom safe area for mobile browsers ── */
+@media (max-width:768px){
+  .block-container{padding-bottom:6rem!important}
+}
+
+/* ── Touch-friendly minimum tap targets ── */
+@media (hover:none) and (pointer:coarse){
+  .stButton>button{min-height:44px!important;font-size:.85rem!important}
+  .stSelectbox>div>div{min-height:44px!important}
+  .stTextInput>div>div>input{min-height:44px!important;font-size:16px!important}
+  .stTextArea>div>textarea{font-size:16px!important}
+  .stNumberInput>div>div>input{min-height:44px!important;font-size:16px!important}
+  section[data-testid="stSidebar"] .stButton>button{min-height:48px!important;font-size:.85rem!important}
 }
 
 /* ── Plotly dark theme overrides ── */

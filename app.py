@@ -508,7 +508,7 @@ with st.sidebar:
     else:
         st.markdown('<div class="sb-nav-label">Navigation</div>', unsafe_allow_html=True)
         pages = [
-            "🏠  Dashboard", "🔍  Explore", "🤖  AI Workspace",
+            "🏠  Dashboard", "🔍  Explore", "⚡  Opporta Workspace",
             "💼  Jobs", "📄  Documents", "🔔  Alerts", "📊  Analytics", "👤  Profile",
         ]
         for p in pages:
@@ -847,7 +847,7 @@ elif "Workspace" in page:
     if not st.session_state.authenticated:
         st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
           <div style="font-size:2rem;margin-bottom:12px">🔐</div>
-          <div style="font-size:.9rem;font-weight:600;color:#64748B">Sign in to access the AI Workspace</div>
+          <div style="font-size:.9rem;font-weight:600;color:#64748B">Sign in to access Opporta Workspace</div>
         </div>""", unsafe_allow_html=True)
         st.stop()
 
@@ -857,21 +857,31 @@ elif "Workspace" in page:
     )
 
     st.markdown("""<div class="terminal-hd">
-      <div class="terminal-label">AI INTELLIGENCE WORKSPACE</div>
-      <div class="terminal-title">Tender Evaluator · Resume Analyzer · Bid Generator</div>
-      <div class="terminal-sub">AI-powered eligibility analysis, resume matching, and automated bid document generation</div>
+      <div class="terminal-label">⚡ OPPORTA WORKSPACE · Powered by AI</div>
+      <div class="terminal-title">Tender Evaluator · Resume Analyzer · Bid Drafter</div>
+      <div class="terminal-sub">We evaluate your documents, score eligibility, and draft bid paperwork — accurate analysis, no outcome guarantees.</div>
     </div>""", unsafe_allow_html=True)
 
-    if not has_ai:
-        st.info("⚡ Add GEMINI_API_KEY to .env to enable full AI capabilities. Keyword-based analysis is active now.")
+    st.markdown(
+        '<div style="background:rgba(99,102,241,.05);border:1px solid rgba(99,102,241,.15);border-radius:10px;'
+        'padding:10px 16px;font-size:.75rem;color:#64748B;margin-bottom:18px;line-height:1.6">'
+        '&#9432;&nbsp; <b style="color:#818CF8">What Opporta Workspace does:</b> evaluates tender documents against '
+        'your profile, scores 6 key dimensions, checks document readiness, drafts bid paperwork. &nbsp;'
+        '<b style="color:#F59E0B">What it does not do:</b> predict award outcomes or guarantee you will win the tender. '
+        'Final award decisions are made solely by the government authority.'
+        '</div>',
+        unsafe_allow_html=True)
 
-    tab1, tab2, tab3 = st.tabs(["🔍  AI Evaluator", "📄  Resume Analyzer", "📝  Bid Generator"])
+    if not has_ai:
+        st.info("⚡ Add GEMINI_API_KEY to .env to enable AI document reading. Rule-based scoring is active.")
+
+    tab1, tab2, tab3 = st.tabs(["🔍  Tender Evaluator", "📄  Resume Analyzer", "📝  Bid Drafter"])
 
     # ── Tab 1: AI Tender Evaluator ─────────────────────────────────────────────
     with tab1:
         st.markdown("""<div class="sec-hd">
-          <span class="sec-title">AI Tender Evaluator</span>
-          <span class="sec-badge">Document Ready Check</span>
+          <span class="sec-title">Tender Document Evaluator</span>
+          <span class="sec-badge">Eligibility &amp; Document Scoring</span>
           <div class="sec-divider"></div>
         </div>""", unsafe_allow_html=True)
 
@@ -956,8 +966,8 @@ elif "Workspace" in page:
                             except Exception: pass
                     st.caption(f"✓ Parsed {len(doc_text):,} chars from {len(uploaded_docs)} file(s)")
 
-                if st.button("🤖 Run Full Intelligence Analysis", use_container_width=True, key="eval_btn"):
-                    with st.spinner("Running 6-dimension analysis + profitability + document check..."):
+                if st.button("📊 Evaluate Documents & Score Eligibility", use_container_width=True, key="eval_btn"):
+                    with st.spinner("Scoring documents across 6 dimensions — profitability, eligibility, document readiness..."):
                         _t_clean = evaluator._clean(selected_tender)
                         result   = evaluator.evaluate_tender(_t_clean, profile, doc_text)
                         scores   = evaluator.score_opportunity(_t_clean, profile)
@@ -973,14 +983,19 @@ elif "Workspace" in page:
                     pct   = result["readiness_pct"]
                     color = score_color(pct)
                     n_missing = len(result["missing"])
-                    if n_missing == 0 and len(result["unknown"]) == 0:
-                        elig_cls  = "elig-yes";     elig_txt = "✅ ELIGIBLE — All requirements met"
+                    n_unknown = len(result["unknown"])
+                    if n_missing == 0 and n_unknown == 0:
+                        elig_cls  = "elig-yes"
+                        elig_txt  = "✅ DOCUMENTS COMPLETE — All stated criteria appear satisfied in your profile"
                     elif n_missing == 0:
-                        elig_cls  = "elig-partial"; elig_txt = "⚠ PARTIAL — Upload documents to confirm unverified items"
+                        elig_cls  = "elig-partial"
+                        elig_txt  = f"⚠ UNVERIFIED ITEMS ({n_unknown}) — Upload firm documents above to confirm these criteria"
                     elif n_missing <= 2:
-                        elig_cls  = "elig-partial"; elig_txt = f"⚠ PARTIAL — {n_missing} requirement(s) need attention"
+                        elig_cls  = "elig-partial"
+                        elig_txt  = f"⚠ GAPS FOUND — {n_missing} criterion/criteria not satisfied based on your current profile"
                     else:
-                        elig_cls  = "elig-no";      elig_txt = f"❌ NOT ELIGIBLE — {n_missing} requirement(s) not met"
+                        elig_cls  = "elig-no"
+                        elig_txt  = f"❌ SIGNIFICANT GAPS — {n_missing} requirements not met; review before applying"
 
                     ev_verdict_e = _html.escape(result["verdict"])
                     st.markdown(
@@ -1173,8 +1188,8 @@ elif "Workspace" in page:
     # ── Tab 3: Bid Generator ──────────────────────────────────────────────────
     with tab3:
         st.markdown("""<div class="sec-hd">
-          <span class="sec-title">Bid Document Generator</span>
-          <span class="sec-badge">AI-Powered</span>
+          <span class="sec-title">Bid Document Drafter</span>
+          <span class="sec-badge">Prepares Paperwork Only</span>
           <div class="sec-divider"></div>
         </div>""", unsafe_allow_html=True)
 
@@ -1313,12 +1328,13 @@ elif "Workspace" in page:
                     for item in readiness["warnings"]: st.caption(f"• {item}")
 
             st.markdown("---")
-            st.markdown("**Step 5 — Generate Bid Document**")
+            st.markdown("**Step 5 — Draft Bid Document**")
             if not has_ai:
-                st.info("Add GEMINI_API_KEY to .env to generate the AI-written bid document.")
+                st.info("Add GEMINI_API_KEY to .env to enable AI-assisted bid drafting.")
             else:
-                if st.button("🤖 Generate Bid Document (.docx)", use_container_width=True, key="bid_gen"):
-                    with st.spinner("AI is writing your bid — this takes ~30 seconds..."):
+                st.caption("⚠️ This drafts a bid document template based on your inputs. Review, verify, and sign before official submission. Opporta does not guarantee tender award.")
+                if st.button("📝 Draft Bid Document (.docx)", use_container_width=True, key="bid_gen"):
+                    with st.spinner("Drafting bid document — this takes ~30 seconds..."):
                         bid_content = bid_engine.generate_bid_content(
                             st.session_state.bid_tender, profile, vault_texts)
                     if bid_content:
@@ -1328,7 +1344,7 @@ elif "Workspace" in page:
                         title_raw = st.session_state.bid_tender.get("title") or "bid"
                         safe_name = "".join(c if c.isalnum() or c in " _-" else "_"
                                             for c in title_raw[:40]).strip()
-                        st.success("✓ Bid document ready!")
+                        st.success("✓ Draft ready — review all details before official submission.")
                         st.download_button(
                             "⬇️ Download Bid Document (.docx)",
                             data=docx_bytes,

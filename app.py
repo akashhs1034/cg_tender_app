@@ -374,11 +374,23 @@ def load_table(name: str) -> pd.DataFrame:
             from supabase import create_client
             rows = create_client(url, key).table(name).select("*").execute().data
             if rows:
-                return pd.DataFrame(rows)
+                df = pd.DataFrame(rows)
+                return _drop_expired(df)
         except Exception:
             pass
     local = Path(__file__).parent / "data" / f"{name}.csv"
-    return pd.read_csv(local) if local.exists() else pd.DataFrame()
+    if local.exists():
+        return _drop_expired(pd.read_csv(local))
+    return pd.DataFrame()
+
+def _drop_expired(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove rows whose deadline has passed. Rows with no deadline are kept."""
+    if "deadline" not in df.columns:
+        return df
+    today = pd.Timestamp(date.today())
+    dl = pd.to_datetime(df["deadline"], errors="coerce")
+    keep = dl.isna() | (dl >= today)
+    return df[keep].reset_index(drop=True)
 
 def days_left(d) -> int | None:
     dd = core.parse_date(d)

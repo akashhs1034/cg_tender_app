@@ -18,6 +18,7 @@ import argparse
 import os
 import re
 import csv
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -219,9 +220,28 @@ def push_supabase(tenders, jobs):
             for i in range(0, len(rows), chunk):
                 sb.table(table).upsert(rows[i:i+chunk], on_conflict="source_id").execute()
             print(f"   upserted {len(rows)} rows -> {table}")
+        _cleanup_expired(sb)
     except Exception as e:
         print(f"   Supabase push failed: {e}")
         print("   Local CSVs are up-to-date — app will use them as fallback.")
+
+
+def _cleanup_expired(sb):
+    """Delete records whose deadline passed more than 3 days ago from Supabase."""
+    from datetime import timedelta
+    cutoff = (date.today() - timedelta(days=3)).isoformat()
+    for table in ("tenders", "jobs"):
+        try:
+            resp = (sb.table(table)
+                      .delete()
+                      .lt("deadline", cutoff)
+                      .not_.is_("deadline", "null")
+                      .execute())
+            deleted = len(resp.data) if resp.data else 0
+            if deleted:
+                print(f"   cleaned {deleted} expired rows from {table}")
+        except Exception as e:
+            print(f"   cleanup warning ({table}): {e}")
 
 
 def _print_scraper_summary(counts: dict, total_tenders: int, total_jobs: int) -> None:

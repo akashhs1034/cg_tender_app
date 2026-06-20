@@ -97,22 +97,34 @@ def _infer_district(text: str) -> str | None:
 
 
 def _fetch_html() -> str | None:
-    try:
-        r = requests.get(_PORTAL, headers=_HEADERS, timeout=30, verify=True)
-        r.raise_for_status()
-        return r.text
-    except requests.exceptions.SSLError:
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            try:
-                r = requests.get(_PORTAL, headers=_HEADERS, timeout=30, verify=False)
+    # Try static HTTP first (fast)
+    for verify in (True, False):
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                r = requests.get(_PORTAL, headers=_HEADERS, timeout=30, verify=verify)
                 r.raise_for_status()
-                return r.text
-            except Exception as e:
-                print(f"   secl: fetch failed (no-verify) — {e}")
-                return None
+                html = r.text
+                # Accept only if it looks like it has table data
+                if "<table" in html.lower() and len(html) > 3000:
+                    return html
+        except Exception:
+            pass
+
+    # Playwright fallback — ASP.NET portal may need JS to render the grid
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless=True)
+            page = browser.new_page()
+            page.set_extra_http_headers({"User-Agent": _HEADERS["User-Agent"]})
+            page.goto(_PORTAL, wait_until="networkidle", timeout=40000)
+            page.wait_for_timeout(3000)
+            html = page.content()
+            browser.close()
+            return html if html and len(html) > 3000 else None
     except Exception as e:
-        print(f"   secl: fetch failed — {e}")
+        print(f"   secl: playwright fallback failed — {e}")
         return None
 
 

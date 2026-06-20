@@ -17,6 +17,9 @@ playwright>=1.45
 beautifulsoup4>=4.12
 requests>=2.32
 
+# Charts
+plotly>=5.20
+
 # AI evaluator + bid generation
 google-generativeai>=0.8  # Gemini API (preferred — set GEMINI_API_KEY in .env)
 anthropic>=0.40           # Claude fallback (set ANTHROPIC_API_KEY in .env)

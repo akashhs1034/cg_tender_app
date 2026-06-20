@@ -119,13 +119,39 @@ def run_live_scrapers():
     jobs: list[dict] = []
     counts: OrderedDict[str, int] = OrderedDict()
 
-    from scrapers import cg_eproc, up_etender, cppp_state, cg_jobs, up_jobs, cg_vyapam, up_upsssc, cspdcl
+    from scrapers import (
+        cg_eproc, up_etender, cppp_state, cg_jobs, up_jobs,
+        cg_vyapam, up_upsssc, cspdcl,
+        gem, secl, pwd_cg, uppcl,
+    )
+
+    # cppp_cg: reuse cppp_state module with CG env override
+    import os as _os
+    def _cppp_cg_scrape():
+        prev = _os.environ.get("CPPP_STATE")
+        _os.environ["CPPP_STATE"] = "Chhattisgarh"
+        try:
+            # re-import to pick up new env var
+            import importlib
+            import scrapers.cppp_state as _cppp
+            importlib.reload(_cppp)
+            return _cppp.scrape()
+        finally:
+            if prev is None:
+                _os.environ.pop("CPPP_STATE", None)
+            else:
+                _os.environ["CPPP_STATE"] = prev
 
     _TENDER_SCRAPERS = [
         ("cg_eproc     (eproc.cgstate.gov.in)      ", cg_eproc.scrape),
         ("up_etender   (etender.up.nic.in)         ", up_etender.scrape),
-        ("cppp_state   (eprocure.gov.in/cppp)      ", cppp_state.scrape),
+        ("cppp_up      (eprocure.gov.in/cppp - UP) ", cppp_state.scrape),
+        ("cppp_cg      (eprocure.gov.in/cppp - CG) ", _cppp_cg_scrape),
         ("cspdcl       (cspdcl.co.in/cseb)         ", cspdcl.scrape),
+        ("secl         (secl-cil.in)               ", secl.scrape),
+        ("pwd_cg       (pwd.cg.gov.in)             ", pwd_cg.scrape),
+        ("uppcl        (uppclonline.com)            ", uppcl.scrape),
+        ("gem          (gem.gov.in)                ", gem.scrape),
     ]
     _JOB_SCRAPERS = [
         ("cg_jobs      (psc.cg.gov.in)             ", cg_jobs.scrape),

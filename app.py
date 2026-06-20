@@ -9,7 +9,12 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import core, accounts, evaluator
+import core, accounts, evaluator, pdf_proxy
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def _cached_pdf(url: str):
+    """Fetch a tender PDF server-side; cache for 1 h to avoid re-downloading."""
+    return pdf_proxy.fetch_pdf(url)
 
 st.set_page_config(
     page_title="Opporta · Intelligence Platform",
@@ -206,6 +211,51 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .readiness-bar{background:#0B1329;border-radius:100px;height:6px;margin-top:8px;overflow:hidden}
 .readiness-fill{height:100%;border-radius:100px;transition:width .5s ease}
 
+/* Score Grid (6-dimension panel) */
+.score-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:18px}
+.score-card{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:12px;padding:12px 10px;text-align:center;position:relative;overflow:hidden}
+.score-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.score-card.hi::before{background:linear-gradient(90deg,#10B981,#059669)}
+.score-card.md::before{background:linear-gradient(90deg,#F59E0B,#D97706)}
+.score-card.lo::before{background:linear-gradient(90deg,#EF4444,#DC2626)}
+.score-val{font-size:1.5rem;font-weight:900;line-height:1;letter-spacing:-.04em}
+.score-lbl{font-size:.58rem;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-top:5px}
+.score-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:7px;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:2px;transition:width .5s ease}
+
+/* HIGH PRIORITY badge */
+.hp-badge{display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,rgba(245,158,11,.15),rgba(239,68,68,.1));border:1px solid rgba(245,158,11,.35);border-radius:8px;padding:6px 14px;font-size:.72rem;font-weight:800;color:#F59E0B;letter-spacing:.05em;text-transform:uppercase;margin-bottom:14px}
+
+/* Eligibility badge */
+.elig-yes{background:rgba(16,185,129,.1);color:#10B981;border:1px solid rgba(16,185,129,.25);border-radius:8px;padding:8px 18px;font-size:.78rem;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+.elig-no{background:rgba(239,68,68,.1);color:#F87171;border:1px solid rgba(239,68,68,.25);border-radius:8px;padding:8px 18px;font-size:.78rem;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+.elig-partial{background:rgba(245,158,11,.1);color:#F59E0B;border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:8px 18px;font-size:.78rem;font-weight:700;display:inline-flex;align-items:center;gap:6px}
+
+/* Profit panel */
+.profit-panel{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+.profit-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.8rem}
+.profit-row:last-child{border-bottom:none}
+.profit-label{color:#475569;font-weight:500}
+.profit-val{color:#E2E8F0;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:.78rem}
+.profit-rating{font-size:.8rem;font-weight:800;padding:6px 14px;border-radius:8px;display:inline-block;margin-top:12px}
+
+/* Checklist */
+.checklist-item{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.8rem;color:#94A3B8}
+.checklist-item:last-child{border-bottom:none}
+.chk-icon{font-size:.85rem;flex-shrink:0;width:18px;text-align:center}
+.chk-label{flex:1}
+.chk-status{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:4px}
+.chk-req{background:rgba(99,102,241,.08);color:#818CF8}
+.chk-opt{background:rgba(71,85,105,.08);color:#475569}
+
+/* Step list */
+.step-item{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.79rem;color:#94A3B8;line-height:1.5}
+.step-item:last-child{border-bottom:none}
+.step-num{background:rgba(99,102,241,.1);color:#818CF8;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:800;flex-shrink:0;height:fit-content;margin-top:2px}
+
+@media (max-width:900px){.score-grid{grid-template-columns:repeat(3,1fr)!important}}
+@media (max-width:480px){.score-grid{grid-template-columns:repeat(2,1fr)!important}}
+
 /* Filter Row */
 .filter-row{background:linear-gradient(135deg,#060C1A,#080F22);border:1px solid rgba(99,102,241,.1);border-radius:14px;padding:14px 18px;margin-bottom:20px}
 
@@ -351,6 +401,16 @@ def safe_str(text, length=90) -> str:
     t = _v(text, "Untitled")
     return t[:length] + ("..." if len(t) > length else "")
 
+import re as _re, html as _html
+def _esc(val, fallback="—") -> str:
+    """Return HTML-escaped version of _v() — safe to embed in HTML templates."""
+    return _html.escape(_v(val, fallback))
+
+def _plain(val) -> str:
+    """Strip HTML tags from scraped text so st.write() doesn't show raw markup."""
+    s = _v(val, "")
+    return _re.sub(r"<[^>]+>", " ", s).strip()
+
 def score_color(pct: int) -> str:
     return "#10B981" if pct >= 70 else "#F59E0B" if pct >= 40 else "#EF4444"
 
@@ -361,6 +421,45 @@ def _read_pdf_text(file) -> str:
             return " ".join(p.extract_text() or "" for p in pdf.pages)
     except Exception:
         return ""
+
+def _pdf_widget(doc_url: str, source_id: str, compact: bool = False):
+    """
+    In-app tender document downloader.
+    - First click: fetches the file server-side (cached 1h).
+    - Second click: browser downloads the file directly from our app.
+    Falls back to a portal link if the file cannot be retrieved.
+    """
+    if not doc_url or str(doc_url) in ("nan", "None", "—", ""):
+        return
+    sid   = str(source_id)[:20].replace(" ", "_")
+    ready = st.session_state.get(f"pdfr_{sid}", False)
+
+    if not ready:
+        btn_lbl = "⬇️ Download Document" if compact else "⬇️ Download Tender Document (In-App)"
+        if st.button(btn_lbl, key=f"pfb_{sid}", use_container_width=not compact):
+            st.session_state[f"pdfr_{sid}"] = True
+            st.rerun()
+    else:
+        with st.spinner("Fetching document from government server…"):
+            data, mime, fname = _cached_pdf(doc_url)
+        if data:
+            st.download_button(
+                label="📥 Save to Device",
+                data=data,
+                file_name=fname or "tender_document.pdf",
+                mime=mime or "application/pdf",
+                key=f"pfd_{sid}",
+                use_container_width=not compact,
+            )
+            st.caption(f"📄 {fname}")
+        else:
+            st.caption("Document not directly downloadable from portal — use the link below.")
+            st.markdown(
+                f'<a href="{doc_url}" target="_blank" style="font-size:.75rem;color:#6366F1;'
+                f'text-decoration:none">🔗 Open on Government Portal ↗</a>',
+                unsafe_allow_html=True,
+            )
+            st.session_state[f"pdfr_{sid}"] = False
 
 def _districts_for_state(state: str) -> list[str]:
     return STATE_DISTRICTS.get(state, CG_DISTRICTS + UP_DISTRICTS)
@@ -571,7 +670,7 @@ if "Dashboard" in page:
                                 st.caption(f"• {r}")
                         doc_url = rec.get("document_url")
                         if doc_url and str(doc_url) not in ("nan","None","—"):
-                            st.markdown(f"[📄 Open Tender Document]({doc_url})")
+                            _pdf_widget(doc_url, rec.get("source_id",""))
                         if st.button("➕ Save to Pipeline", key=f"d_save_{rec.get('source_id')}"):
                             accounts.save_tender(email, rec.get("source_id"))
                             st.toast("✓ Saved to pipeline")
@@ -731,7 +830,7 @@ elif "Explore" in page:
                 st.write(_v(rec.get("description")))
             doc_url = rec.get("document_url")
             if doc_url and str(doc_url) not in ("nan","None","—",""):
-                st.markdown(f"[📄 Open Official Document / Portal]({doc_url})")
+                _pdf_widget(doc_url, rec.get("source_id",""))
             if st.session_state.authenticated:
                 if st.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}"):
                     accounts.save_tender(email, rec.get("source_id"))
@@ -814,26 +913,29 @@ elif "Workspace" in page:
                     f"₹{float(selected_tender.get('value_lakhs',0)):.0f}L"
                     if selected_tender.get("value_lakhs") else "—")
                 doc_url = _v(selected_tender.get("document_url"), "")
-                pdf_tag  = '<span class="tag tag-green">📄 PDF Available</span>' if doc_url else ""
-                pdf_link = (
-                    f'<a href="{doc_url}" target="_blank" style="font-size:.75rem;color:#6366F1;'
-                    f'text-decoration:none;display:inline-flex;align-items:center;gap:5px;'
-                    f'padding:6px 12px;border:1px solid rgba(99,102,241,.25);border-radius:8px;'
-                    f'background:rgba(99,102,241,.06)">⬇️ Download Official Tender PDF / Notice</a>'
-                ) if doc_url else ""
+                pdf_tag = '<span class="tag tag-green">&#128196; PDF Available</span>' if doc_url else ""
 
-                st.markdown(f"""<div class="ocard" style="margin:10px 0 18px">
-                  <div class="ocard-title">{safe_str(selected_tender.get('title'), 130)}</div>
-                  <div class="ocard-org">🏛 {_v(selected_tender.get('organization'))} &nbsp;·&nbsp;
-                    {_v(selected_tender.get('state'))} &nbsp;·&nbsp; {_v(selected_tender.get('category'))}</div>
-                  <div class="ocard-tags" style="margin-bottom:10px">
-                    <span class="tag tag-val">💰 {val_t}</span>
-                    <span class="tag tag-dl">📅 Deadline: {_v(selected_tender.get('deadline'))}</span>
-                    <span class="tag tag-loc">📍 {_v(selected_tender.get('district'), 'State-wide')}</span>
-                    {pdf_tag}
-                  </div>
-                  {pdf_link}
-                </div>""", unsafe_allow_html=True)
+                _title_e  = _html.escape(safe_str(selected_tender.get('title'), 130))
+                _org_e    = _html.escape(_v(selected_tender.get('organization')))
+                _state_e  = _html.escape(_v(selected_tender.get('state')))
+                _cat_e    = _html.escape(_v(selected_tender.get('category')))
+                _dl_e     = _html.escape(_v(selected_tender.get('deadline')))
+                _dist_e   = _html.escape(_v(selected_tender.get('district'), 'State-wide'))
+                _val_e    = _html.escape(val_t)
+                tcard_html = (
+                    f'<div class="ocard" style="margin:10px 0 12px">'
+                    f'<div class="ocard-title">{_title_e}</div>'
+                    f'<div class="ocard-org">&#127963; {_org_e} &nbsp;&middot;&nbsp; {_state_e} &nbsp;&middot;&nbsp; {_cat_e}</div>'
+                    f'<div class="ocard-tags" style="margin-bottom:6px">'
+                    f'<span class="tag tag-val">&#x20B9; {_val_e}</span>'
+                    f'<span class="tag tag-dl">&#128197; Deadline: {_dl_e}</span>'
+                    f'<span class="tag tag-loc">&#128205; {_dist_e}</span>'
+                    f'{pdf_tag}'
+                    f'</div></div>'
+                )
+                st.markdown(tcard_html, unsafe_allow_html=True)
+                if doc_url:
+                    _pdf_widget(doc_url, selected_tender.get("source_id","eval"), compact=True)
 
                 uploaded_docs = st.file_uploader(
                     "Upload your firm documents for compliance check (GST, registration, certs) — optional",
@@ -850,41 +952,144 @@ elif "Workspace" in page:
                             except Exception: pass
                     st.caption(f"✓ Parsed {len(doc_text):,} chars from {len(uploaded_docs)} file(s)")
 
-                if st.button("🤖 Run Eligibility Analysis", use_container_width=True, key="eval_btn"):
-                    with st.spinner("Analyzing requirements against your profile and documents..."):
-                        result = evaluator.evaluate_tender(selected_tender, profile, doc_text)
+                if st.button("🤖 Run Full Intelligence Analysis", use_container_width=True, key="eval_btn"):
+                    with st.spinner("Running 6-dimension analysis + profitability + document check..."):
+                        _t_clean = evaluator._clean(selected_tender)
+                        result   = evaluator.evaluate_tender(_t_clean, profile, doc_text)
+                        scores   = evaluator.score_opportunity(_t_clean, profile)
+                        profit   = evaluator.profitability_analysis(_t_clean, profile)
+                        checklist = evaluator.submission_checklist(_t_clean, doc_text)
+                        hi_pri   = evaluator.is_high_priority(_t_clean)
 
+                    # ── HIGH PRIORITY badge ───────────────────────────────
+                    if hi_pri:
+                        st.markdown('<div class="hp-badge">&#9889; HIGH PRIORITY OPPORTUNITY — Coal / Logistics / Transport Sector</div>', unsafe_allow_html=True)
+
+                    # ── Eligibility verdict ───────────────────────────────
                     pct   = result["readiness_pct"]
                     color = score_color(pct)
-                    st.markdown(f"""<div class="res-panel">
-                      <div style="display:flex;align-items:center;gap:24px">
-                        <div style="text-align:center;flex-shrink:0">
-                          <div class="res-score" style="color:{color}">{pct}%</div>
-                          <div class="res-label">Document Ready</div>
-                          <div class="readiness-bar" style="width:70px;margin:8px auto 0">
-                            <div class="readiness-fill" style="width:{pct}%;background:{color}"></div>
-                          </div>
-                        </div>
-                        <div class="res-verdict">{result['verdict']}</div>
-                      </div>
-                    </div>""", unsafe_allow_html=True)
+                    n_missing = len(result["missing"])
+                    if n_missing == 0 and len(result["unknown"]) == 0:
+                        elig_cls  = "elig-yes";     elig_txt = "✅ ELIGIBLE — All requirements met"
+                    elif n_missing == 0:
+                        elig_cls  = "elig-partial"; elig_txt = "⚠ PARTIAL — Upload documents to confirm unverified items"
+                    elif n_missing <= 2:
+                        elig_cls  = "elig-partial"; elig_txt = f"⚠ PARTIAL — {n_missing} requirement(s) need attention"
+                    else:
+                        elig_cls  = "elig-no";      elig_txt = f"❌ NOT ELIGIBLE — {n_missing} requirement(s) not met"
 
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    r1, r2, r3 = st.columns(3)
-                    with r1:
-                        if result["met"]:
-                            st.success(f"✅ Requirements Met ({len(result['met'])})")
-                            for item in result["met"]: st.caption(f"• {item}")
-                    with r2:
-                        if result["missing"]:
-                            st.error(f"❌ Missing ({len(result['missing'])})")
-                            for item in result["missing"]: st.caption(f"• {item}")
-                    with r3:
-                        if result["unknown"]:
-                            st.warning(f"⚠️ Unverified ({len(result['unknown'])})")
-                            for item in result["unknown"]: st.caption(f"• {item}")
-                            if not uploaded_docs:
-                                st.caption("Upload your documents above to verify these items.")
+                    ev_verdict_e = _html.escape(result["verdict"])
+                    st.markdown(
+                        f'<div class="{elig_cls}" style="margin-bottom:16px">{elig_txt}</div>'
+                        f'<div style="font-size:.82rem;color:#64748B;margin-bottom:18px">{ev_verdict_e}</div>',
+                        unsafe_allow_html=True)
+
+                    # ── 6-Dimension Score Grid ────────────────────────────
+                    _SCORE_META = [
+                        ("lead",          "Lead Score",        "Overall opportunity quality"),
+                        ("profit",        "Profit Score",      "Margin & revenue potential"),
+                        ("qualification", "Qualify Score",     "Probability you qualify"),
+                        ("competition",   "Competition Risk",  "Higher = more competition"),
+                        ("payment",       "Payment Trust",     "Dept. payment reliability"),
+                        ("strategic",     "Strategic Value",   "Long-term business value"),
+                    ]
+                    score_cards = ""
+                    for key, lbl, _ in _SCORE_META:
+                        sv, _ = scores[key]
+                        cls  = "hi" if sv >= 70 else "md" if sv >= 45 else "lo"
+                        col_s = "#10B981" if sv >= 70 else "#F59E0B" if sv >= 45 else "#F87171"
+                        score_cards += (
+                            f'<div class="score-card {cls}">'
+                            f'<div class="score-val" style="color:{col_s}">{sv}</div>'
+                            f'<div class="score-lbl">{lbl}</div>'
+                            f'<div class="score-bar"><div class="score-bar-fill" style="width:{sv}%;background:{col_s}"></div></div>'
+                            f'</div>'
+                        )
+                    st.markdown(f'<div class="score-grid">{score_cards}</div>', unsafe_allow_html=True)
+
+                    # ── Score reasoning in expander ───────────────────────
+                    with st.expander("View score reasoning"):
+                        for key, lbl, desc in _SCORE_META:
+                            sv, reasons = scores[key]
+                            st.markdown(f"**{lbl}** — {sv}/100 _{desc}_")
+                            for r in reasons: st.caption(f"  • {r}")
+
+                    st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
+
+                    # ── Profitability Analysis ────────────────────────────
+                    st.markdown('<div class="chart-title">&#x1F4B0; Profitability Analysis</div>', unsafe_allow_html=True)
+                    pr = profit
+                    if pr["revenue"] > 0:
+                        p_html = (
+                            f'<div class="profit-panel">'
+                            f'<div class="profit-row"><span class="profit-label">Potential Revenue</span><span class="profit-val">&#x20B9;{pr["revenue"]:.1f}L</span></div>'
+                            f'<div class="profit-row"><span class="profit-label">Est. Operating Cost</span><span class="profit-val">&#x20B9;{pr["op_cost"]:.1f}L</span></div>'
+                            f'<div class="profit-row"><span class="profit-label">Gross Margin ({pr["margin_pct"]}%)</span><span class="profit-val" style="color:{pr["color"]}">&#x20B9;{pr["gross_margin"]:.1f}L</span></div>'
+                            f'<div class="profit-row"><span class="profit-label">Working Capital Needed</span><span class="profit-val">&#x20B9;{pr["working_cap"]:.1f}L</span></div>'
+                            f'<div class="profit-row"><span class="profit-label">Cash Flow Risk</span><span class="profit-val">{_html.escape(pr["cf_risk"])}</span></div>'
+                            f'<div style="margin-top:12px"><span class="profit-rating" style="background:{pr["color"]}22;color:{pr["color"]};border:1px solid {pr["color"]}44">{pr["rating"]}</span></div>'
+                            f'</div>'
+                        )
+                        st.markdown(p_html, unsafe_allow_html=True)
+                    else:
+                        st.caption("Tender value not available — profitability estimate not possible.")
+
+                    st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
+
+                    # ── Document Checklist ────────────────────────────────
+                    cl1, cl2 = st.columns(2)
+                    with cl1:
+                        st.markdown('<div class="chart-title">&#x1F4CB; Required Documents</div>', unsafe_allow_html=True)
+                        chk_html = '<div class="profit-panel">'
+                        for item in checklist["always"]:
+                            icon  = "✅" if item["status"] == "present" else "❓" if item["status"] == "unknown" else "❌"
+                            color_i = "#10B981" if item["status"] == "present" else "#64748B" if item["status"] == "unknown" else "#F87171"
+                            chk_html += (
+                                f'<div class="checklist-item">'
+                                f'<span class="chk-icon">{icon}</span>'
+                                f'<span class="chk-label">{_html.escape(item["label"])}</span>'
+                                f'<span class="chk-status chk-req" style="color:{color_i}">Required</span>'
+                                f'</div>'
+                            )
+                        chk_html += '</div>'
+                        st.markdown(chk_html, unsafe_allow_html=True)
+
+                    with cl2:
+                        st.markdown('<div class="chart-title">&#x1F4CC; Conditional Documents</div>', unsafe_allow_html=True)
+                        cond_html = '<div class="profit-panel">'
+                        for item in checklist["conditional"]:
+                            icon  = "✅" if item["status"] == "present" else "❓" if item["status"] in ("unknown","check") else "❌"
+                            color_i = "#10B981" if item["status"] == "present" else "#475569"
+                            badge_cls = "chk-req" if item["required"] else "chk-opt"
+                            badge_txt = "Required" if item["required"] else "Optional"
+                            cond_html += (
+                                f'<div class="checklist-item">'
+                                f'<span class="chk-icon">{icon}</span>'
+                                f'<span class="chk-label">{_html.escape(item["label"])}</span>'
+                                f'<span class="chk-status {badge_cls}">{badge_txt}</span>'
+                                f'</div>'
+                            )
+                        cond_html += '</div>'
+                        st.markdown(cond_html, unsafe_allow_html=True)
+
+                    if not uploaded_docs:
+                        st.caption("Upload your firm documents above to verify ✅ which items you already have.")
+
+                    st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
+
+                    # ── Submission Steps ──────────────────────────────────
+                    st.markdown('<div class="chart-title">&#x1F9FE; Ready-to-Submit Checklist</div>', unsafe_allow_html=True)
+                    steps_html = '<div class="profit-panel">'
+                    for step in checklist["steps"]:
+                        num, text = step.split(". ", 1)
+                        steps_html += (
+                            f'<div class="step-item">'
+                            f'<span class="step-num">{num}</span>'
+                            f'<span>{_html.escape(text)}</span>'
+                            f'</div>'
+                        )
+                    steps_html += '</div>'
+                    st.markdown(steps_html, unsafe_allow_html=True)
 
     # ── Tab 2: Resume Analyzer ─────────────────────────────────────────────────
     with tab2:
@@ -999,19 +1204,13 @@ elif "Workspace" in page:
                     picked_title  = safe_str(picked_rec.get("title"), 80)
 
                     if picked_url:
-                        st.markdown(
-                            f'<a href="{picked_url}" target="_blank" style="font-size:.75rem;'
-                            f'color:#6366F1;text-decoration:none;display:inline-flex;align-items:center;'
-                            f'gap:5px;padding:6px 12px;border:1px solid rgba(99,102,241,.25);'
-                            f'border-radius:8px;background:rgba(99,102,241,.06);margin-bottom:8px">'
-                            f'⬇️ Download Official Tender PDF / Notice</a>',
-                            unsafe_allow_html=True)
+                        _pdf_widget(picked_url, picked_rec.get("source_id","bid"))
                         if st.button("✅ Use this tender for bid generation", key="bid_use_live",
                                      use_container_width=True):
                             st.session_state.bid_tender = picked_rec
                             st.toast(f"✓ Loaded: {picked_title}")
                     else:
-                        st.caption("No direct PDF URL for this tender — upload manually below.")
+                        st.caption("No document URL for this tender — upload PDF manually below.")
 
             st.markdown("**— or upload PDF manually —**")
             tender_pdf = st.file_uploader(
@@ -1182,6 +1381,9 @@ elif "Jobs" in page:
         jobs_filtered = []
         for _, r in df_j.iterrows():
             rec = r.to_dict()
+            dl_check = days_left(rec.get("deadline"))
+            if dl_check is not None and dl_check < 0:
+                continue  # skip expired
             hay = f"{_v(rec.get('title'))} {_v(rec.get('department'))} {_v(rec.get('qualification'))} {_v(rec.get('description'))}".lower()
             if jsearch and jsearch not in hay: continue
             if jstate != "All" and _v(rec.get("state")) != jstate: continue
@@ -1193,40 +1395,51 @@ elif "Jobs" in page:
 
         for rec in jobs_filtered[:100]:
             dl     = days_left(rec.get("deadline"))
-            dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "Open")
+            dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else "Open"
             vac    = _v(rec.get("vacancies"))
-            try: vac_num = int(float(vac)); vac_txt = f"{vac_num:,} posts"
-            except Exception: vac_txt = vac if vac != "—" else ""
+            try:
+                vac_num = int(float(vac))
+                vac_txt = f"{vac_num:,} posts"
+            except Exception:
+                vac_txt = vac if vac != "—" else ""
 
-            st.markdown(f"""<div class="jcard">
-              <div class="jcard-row">
-                <div class="jcard-body">
-                  <div class="jcard-title">{safe_str(rec.get('title'), 100)}</div>
-                  <div class="jcard-dept">{_v(rec.get('department'))} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
-                  <div class="ocard-tags">
-                    <span class="tag tag-dl">{dl_txt}</span>
-                    {'<span class="tag tag-loc">👥 ' + vac_txt + '</span>' if vac_txt else ''}
-                    <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
-                    {'<span class="tag tag-val">💰 ' + _v(rec.get('salary')) + '</span>' if _v(rec.get('salary')) != '—' else ''}
-                  </div>
-                </div>
-                {'<div class="jvac">' + vac_txt + '</div>' if vac_txt else ''}
-              </div>
-            </div>""", unsafe_allow_html=True)
+            salary_v  = _esc(rec.get("salary"))
+            cat_v     = _esc(rec.get("category"), "General")
+            dept_v    = _esc(rec.get("department"))
+            state_v   = _esc(rec.get("state"))
+            title_v   = _html.escape(safe_str(rec.get("title"), 100))
+
+            vac_tag   = f'<span class="tag tag-loc">&#128101; {vac_txt}</span>' if vac_txt else ""
+            sal_tag   = f'<span class="tag tag-val">&#x20B9; {salary_v}</span>' if salary_v != "—" else ""
+            jvac_div  = f'<div class="jvac">{vac_txt}</div>' if vac_txt else ""
+
+            card_html = (
+                f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
+                f'<div class="jcard-title">{title_v}</div>'
+                f'<div class="jcard-dept">{dept_v} &nbsp;&middot;&nbsp; {state_v}</div>'
+                f'<div class="ocard-tags">'
+                f'<span class="tag tag-dl">{dl_txt}</span>'
+                f'{vac_tag}'
+                f'<span class="tag tag-cat">{cat_v}</span>'
+                f'{sal_tag}'
+                f'</div></div>{jvac_div}</div></div>'
+            )
+            st.markdown(card_html, unsafe_allow_html=True)
 
             with st.expander(f"Details · Resume Match — {safe_str(rec.get('title'), 55)}"):
                 jd1, jd2 = st.columns(2)
-                jd1.write(f"**Department:** {_v(rec.get('department'))}")
-                jd1.write(f"**Qualification:** {_v(rec.get('qualification'))}")
-                jd1.write(f"**Category:** {_v(rec.get('category'))}")
-                jd2.write(f"**Salary:** {_v(rec.get('salary'))}")
+                jd1.write(f"**Department:** {_plain(rec.get('department'))}")
+                jd1.write(f"**Qualification:** {_plain(rec.get('qualification'))}")
+                jd1.write(f"**Category:** {_plain(rec.get('category'))}")
+                jd2.write(f"**Salary:** {_plain(rec.get('salary'))}")
                 jd2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
                 jd2.write(f"**Vacancies:** {_v(rec.get('vacancies'))}")
-                if _v(rec.get("description")) != "—":
-                    st.write(_v(rec.get("description")))
+                desc = _plain(rec.get("description"))
+                if desc:
+                    st.caption(desc[:600] + ("…" if len(desc) > 600 else ""))
                 doc_url = _v(rec.get("document_url") or rec.get("apply_link"))
                 if doc_url != "—":
-                    st.markdown(f"[📄 Official Notification / Apply]({doc_url})")
+                    _pdf_widget(doc_url, rec.get("source_id","j"), compact=True)
 
                 if st.session_state.authenticated:
                     st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
@@ -1377,12 +1590,11 @@ elif "Analytics" in page:
         plot_bgcolor="rgba(8,15,34,0.6)",
         font=dict(family="Inter, sans-serif", color="#94A3B8", size=11),
         margin=dict(l=8, r=8, t=8, b=8),
-        xaxis=dict(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(color="#64748B")),
-        yaxis=dict(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(color="#64748B")),
         hoverlabel=dict(bgcolor="#0B1329", bordercolor="#6366F1",
                         font=dict(color="#F1F5F9", size=12)),
         showlegend=False,
     )
+    _AXIS = dict(gridcolor="rgba(255,255,255,0.04)", tickfont=dict(color="#64748B"))
 
     def _bar(series, color="#6366F1", horizontal=False):
         df_p = series.reset_index()
@@ -1390,12 +1602,12 @@ elif "Analytics" in page:
         if horizontal:
             fig = px.bar(df_p, x="count", y="label", orientation="h",
                          color_discrete_sequence=[color])
-            fig.update_layout(**_LAYOUT, yaxis=dict(
-                autorange="reversed", gridcolor="rgba(255,255,255,0.04)",
-                tickfont=dict(color="#64748B")))
+            fig.update_layout(**_LAYOUT,
+                              yaxis=dict(autorange="reversed", **_AXIS),
+                              xaxis=dict(**_AXIS))
         else:
             fig = px.bar(df_p, x="label", y="count", color_discrete_sequence=[color])
-            fig.update_layout(**_LAYOUT)
+            fig.update_layout(**_LAYOUT, yaxis=dict(**_AXIS))
         fig.update_traces(marker_line_width=0, hovertemplate="%{y}<extra></extra>" if horizontal
                           else "%{x}: <b>%{y}</b><extra></extra>")
         return fig
@@ -1565,18 +1777,19 @@ elif "Profile" in page:
             status = _v(s.get("status"), "interested")
             val    = _v(rec.get("value_text"))
             dl     = days_left(rec.get("deadline"))
-            dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ""
-            st.markdown(f"""<div class="pipe-card">
-              <div style="flex:1;min-width:0">
-                <div style="font-size:.87rem;font-weight:600;color:#E2E8F0;margin-bottom:3px">📌 {title}</div>
-                <div style="font-size:.72rem;color:#475569">{org}</div>
-                <div class="ocard-tags" style="margin-top:8px">
-                  <span class="tag tag-cat">Status: {status}</span>
-                  {f'<span class="tag tag-val">{val}</span>' if val != "—" else ""}
-                  {f'<span class="tag tag-dl">{dl_txt}</span>' if dl_txt else ""}
-                </div>
-              </div>
-            </div>""", unsafe_allow_html=True)
+            dl_txt   = f"&#9201; {dl}d left" if dl is not None and dl >= 0 else ""
+            val_tag  = f'<span class="tag tag-val">{_html.escape(val)}</span>' if val != "—" else ""
+            dl_tag   = f'<span class="tag tag-dl">{dl_txt}</span>' if dl_txt else ""
+            pcard_html = (
+                f'<div class="pipe-card"><div style="flex:1;min-width:0">'
+                f'<div style="font-size:.87rem;font-weight:600;color:#E2E8F0;margin-bottom:3px">&#128204; {_html.escape(title)}</div>'
+                f'<div style="font-size:.72rem;color:#475569">{_html.escape(org)}</div>'
+                f'<div class="ocard-tags" style="margin-top:8px">'
+                f'<span class="tag tag-cat">Status: {_html.escape(status)}</span>'
+                f'{val_tag}{dl_tag}'
+                f'</div></div></div>'
+            )
+            st.markdown(pcard_html, unsafe_allow_html=True)
     else:
         st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
           <div style="font-size:2rem;margin-bottom:10px">📋</div>

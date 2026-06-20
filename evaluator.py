@@ -85,6 +85,305 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
     return None
 
 # ---------------------------------------------------------------------------
+# HIGH PRIORITY sector detection
+# ---------------------------------------------------------------------------
+_PRIORITY_KW = [
+    "coal", "coal transportation", "loading", "unloading", "railway siding",
+    "dumper hiring", "truck hiring", "vehicle hiring", "manpower supply",
+    "security services", "housekeeping", "mining", "freight movement",
+    "material transportation", "logistics", "warehousing", "transport",
+    "industrial transportation", "road construction",
+]
+
+def is_high_priority(tender: dict) -> bool:
+    text = (f"{tender.get('title','')} {tender.get('category','')} "
+            f"{tender.get('description','')} {tender.get('organization','')}").lower()
+    return any(kw in text for kw in _PRIORITY_KW)
+
+
+# ---------------------------------------------------------------------------
+# 6-Dimension Opportunity Scoring
+# ---------------------------------------------------------------------------
+_HIGH_RELIABILITY_ORGS = [
+    "secl", "cil", "coal india", "ntpc", "bhel", "bpcl", "hpcl", "ongc",
+    "nhpc", "nhai", "ircon", "rites", "central", "cpwd", "national",
+]
+_MED_RELIABILITY_ORGS = [
+    "state", "pwd", "phed", "phd", "cspdcl", "uppcl", "jal", "nagar",
+    "municipal", "district", "collector",
+]
+
+_NICHE_CATS = ["Coal & Mining", "Transport", "Manpower Supply", "Warehousing"]
+_COMMODITY_CATS = ["Civil Infrastructure", "Electrical & Energy", "Water & Irrigation"]
+
+
+def score_opportunity(tender: dict, profile: dict) -> dict:
+    """
+    Return 6 scores (0-100) + reasoning for each dimension.
+    lead, profit, qualification, competition, payment, strategic
+    """
+    title    = _s(tender.get("title"))
+    org      = _s(tender.get("organization")).lower()
+    cat      = _s(tender.get("category"))
+    val      = _sf(tender.get("value_lakhs"))
+    emd_raw  = _s(tender.get("emd"))
+    turnover = _sf(profile.get("turnover_lakhs"))
+    exp_yrs  = _si(profile.get("experience_years"))
+    t_text   = f"{title} {cat} {_s(tender.get('description'))}".lower()
+    high_pri = is_high_priority(tender)
+
+    # ── Lead Score ────────────────────────────────────────────────────────
+    lead = 50
+    lead_r = []
+    if high_pri:
+        lead += 20; lead_r.append("Matches your priority sectors (coal/transport/logistics)")
+    if val > 0:
+        if val <= turnover * 0.3:
+            lead += 15; lead_r.append("Contract size fits your capacity")
+        elif val <= turnover:
+            lead += 8; lead_r.append("Contract is sizeable but reachable")
+        elif val > turnover * 2:
+            lead -= 15; lead_r.append("Contract likely exceeds your capacity")
+    emd_pct = 0.0
+    try:
+        emd_num = core.parse_value_to_lakhs(emd_raw)
+        if emd_num and val:
+            emd_pct = (emd_num / val) * 100
+            if emd_pct <= 2:
+                lead += 8; lead_r.append("Low EMD relative to contract value")
+            elif emd_pct > 5:
+                lead -= 8; lead_r.append("High EMD requirement")
+    except Exception:
+        pass
+    if not tender.get("contractor_class"):
+        lead += 5; lead_r.append("No contractor class restriction stated")
+    lead = max(0, min(100, lead))
+
+    # ── Profitability Score ───────────────────────────────────────────────
+    profit = 45
+    profit_r = []
+    if cat in _NICHE_CATS:
+        profit += 20; profit_r.append(f"{cat} typically carries strong margins")
+    if "coal" in t_text or "mining" in t_text:
+        profit += 12; profit_r.append("Coal/mining contracts often carry 15–25% margins")
+    if "transport" in t_text or "vehicle" in t_text:
+        profit += 8; profit_r.append("Transport/hiring contracts: low overhead, fast cash")
+    if val and val >= 50:
+        profit += 10; profit_r.append("Contract value justifies mobilisation cost")
+    elif val and val < 5:
+        profit -= 10; profit_r.append("Small contract — margin may be tight")
+    if "annual" in t_text or "year" in t_text:
+        profit += 8; profit_r.append("Recurring/annual contract = predictable revenue")
+    profit = max(0, min(100, profit))
+
+    # ── Qualification Probability ─────────────────────────────────────────
+    qual = 60
+    qual_r = []
+    req_rank = core._rank(tender.get("contractor_class"))
+    if req_rank == 0:
+        qual += 15; qual_r.append("No contractor class requirement")
+    elif core._rank(profile.get("contractor_class")) >= req_rank:
+        qual += 12; qual_r.append(f"You meet class requirement ({tender.get('contractor_class')})")
+    else:
+        qual -= 25; qual_r.append(f"Class mismatch — needs {tender.get('contractor_class')}")
+    req_exp = core._exp_years(tender.get("experience"))
+    if req_exp == 0:
+        qual += 8; qual_r.append("No experience barrier")
+    elif exp_yrs >= req_exp:
+        qual += 10; qual_r.append(f"Your {exp_yrs}yr experience meets {req_exp}yr requirement")
+    else:
+        qual -= 15; qual_r.append(f"Experience gap: need {req_exp}yr, have {exp_yrs}yr")
+    if val and turnover and val <= turnover * 2.5:
+        qual += 8; qual_r.append("Turnover likely sufficient for EMD eligibility")
+    qual = max(0, min(100, qual))
+
+    # ── Competition Risk (higher = more competitors = harder to win) ──────
+    comp = 50
+    comp_r = []
+    if cat in _NICHE_CATS:
+        comp -= 20; comp_r.append(f"Niche category ({cat}) = fewer qualified bidders")
+    if cat in _COMMODITY_CATS:
+        comp += 15; comp_r.append(f"{cat} attracts many bidders")
+    if val and val > 500:
+        comp += 15; comp_r.append("High-value contracts attract large firms")
+    elif val and val < 20:
+        comp -= 8; comp_r.append("Small contract — less attractive to large players")
+    if "secl" in org or "coal india" in org or "cil" in org:
+        comp -= 10; comp_r.append("SECL/CIL contracts favour experienced mining contractors")
+    comp = max(0, min(100, comp))
+
+    # ── Payment Reliability ───────────────────────────────────────────────
+    pay = 55
+    pay_r = []
+    if any(x in org for x in _HIGH_RELIABILITY_ORGS):
+        pay = 85; pay_r.append("Central PSU / national body — strong payment track record")
+    elif any(x in org for x in _MED_RELIABILITY_ORGS):
+        pay = 65; pay_r.append("State department — generally reliable, sometimes delayed")
+    else:
+        pay = 55; pay_r.append("Check department's payment history before bidding")
+    if "secl" in org or "cil" in org:
+        pay = 90; pay_r.append("Coal India subsidiaries are known for timely payments")
+    pay = max(0, min(100, pay))
+
+    # ── Strategic Value ───────────────────────────────────────────────────
+    strat = 50
+    strat_r = []
+    if high_pri:
+        strat += 20; strat_r.append("Aligns with your core business sectors")
+    if "secl" in org or "cil" in org:
+        strat += 20; strat_r.append("SECL/CIL vendor empanelment opens repeat business pipeline")
+    if "annual" in t_text or "year" in t_text or "rate" in t_text:
+        strat += 10; strat_r.append("Rate contract / annual order = recurring revenue")
+    if val and val >= 100:
+        strat += 8; strat_r.append("Large contract builds portfolio credentials")
+    strat = max(0, min(100, strat))
+
+    return {
+        "lead":          (lead,   lead_r),
+        "profit":        (profit, profit_r),
+        "qualification": (qual,   qual_r),
+        "competition":   (comp,   comp_r),
+        "payment":       (pay,    pay_r),
+        "strategic":     (strat,  strat_r),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Profitability Analysis
+# ---------------------------------------------------------------------------
+def profitability_analysis(tender: dict, profile: dict) -> dict:
+    """Estimate revenue, cost, margin, working capital for this tender."""
+    val = _sf(tender.get("value_lakhs"))
+    cat = _s(tender.get("category"))
+    t_text = (f"{tender.get('title','')} {tender.get('description','')}").lower()
+
+    # Gross margin % by sector (realistic for Indian Govt contracts)
+    margin_pct = {
+        "Coal & Mining": 20,
+        "Transport": 18,
+        "Manpower Supply": 15,
+        "Warehousing": 17,
+        "Civil Infrastructure": 12,
+        "Electrical & Energy": 13,
+        "Water & Irrigation": 12,
+        "Municipal Projects": 10,
+        "IT Services": 25,
+        "Government Supply": 12,
+    }.get(cat, 12)
+
+    if "coal" in t_text:        margin_pct = max(margin_pct, 20)
+    if "transport" in t_text:   margin_pct = max(margin_pct, 17)
+    if "manpower" in t_text:    margin_pct = max(margin_pct, 14)
+
+    rev        = val if val else 0
+    op_cost    = round(rev * (1 - margin_pct / 100), 1)
+    gross_margin = round(rev - op_cost, 1)
+
+    # Working capital: typically need 15–20% of contract value
+    wc_pct     = 0.15 if margin_pct >= 15 else 0.20
+    working_cap = round(rev * wc_pct, 1)
+
+    # Cash flow risk
+    if rev == 0:
+        cf_risk = "Unknown"
+    elif rev < 10:
+        cf_risk = "Low — small contract, quick recovery"
+    elif rev < 50:
+        cf_risk = "Medium — mobilisation + 30–60 day payment cycle"
+    elif rev >= 50:
+        cf_risk = "Moderate — plan for retention money and running bill gaps"
+
+    if gross_margin > 30:
+        rating = "High Profit Potential"
+        color  = "#10B981"
+    elif gross_margin > 10:
+        rating = "Medium Profit Potential"
+        color  = "#F59E0B"
+    else:
+        rating = "Low Profit Potential"
+        color  = "#F87171"
+
+    return {
+        "revenue":       rev,
+        "op_cost":       op_cost,
+        "gross_margin":  gross_margin,
+        "margin_pct":    margin_pct,
+        "working_cap":   working_cap,
+        "cf_risk":       cf_risk,
+        "rating":        rating,
+        "color":         color,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Full Government Document Submission Checklist
+# ---------------------------------------------------------------------------
+_ALWAYS_REQUIRED = [
+    ("GST Registration Certificate",        ["gst"]),
+    ("PAN Card",                            ["pan"]),
+    ("Digital Signature Certificate (DSC)", ["dsc", "digital signature"]),
+    ("Contractor / Firm Registration",      ["registration", "license", "empanel", "firm"]),
+    ("Turnover Certificates (Last 3 Yrs)",  ["turnover", "financial", "balance sheet", "audited"]),
+    ("Bank Solvency Certificate",           ["solvency", "bank certificate"]),
+    ("EMD / Bid Security",                  ["emd", "earnest money", "bid security"]),
+]
+
+_CONDITIONAL_DOCS = [
+    ("MSME / Udyam Registration",           ["msme", "udyam", "small enterprise"]),
+    ("Experience / Work Completion Certs",  ["experience", "completion certificate", "similar work"]),
+    ("EPF Registration",                    ["epf", "provident fund", "pf "]),
+    ("ESIC Registration",                   ["esic", "esi ", "employee state"]),
+    ("Labour License",                      ["labour license", "labour licence", "contract labour"]),
+    ("Balance Sheets (3 years)",            ["balance sheet", "audited accounts"]),
+    ("Tender Document Fees / DD",           ["tender fee", "document fee", "demand draft", "dd "]),
+    ("Affidavit (non-blacklisted)",         ["blacklist", "affidavit"]),
+]
+
+
+def submission_checklist(tender: dict, doc_text: str = "") -> dict:
+    """
+    Return always-required and conditional documents with present/unknown status.
+    doc_text: text from uploaded documents (for verification).
+    """
+    low = doc_text.lower() if doc_text else ""
+    t_text = (f"{tender.get('requirements','')} {tender.get('description','')} "
+              f"{tender.get('eligibility','')}").lower()
+
+    always = []
+    for label, kws in _ALWAYS_REQUIRED:
+        found = any(kw in low for kw in kws) if low else None
+        always.append({"label": label, "status": "present" if found else ("unknown" if not low else "missing")})
+
+    conditional = []
+    for label, kws in _CONDITIONAL_DOCS:
+        required_in_tender = any(kw in t_text for kw in kws)
+        found_in_docs      = any(kw in low for kw in kws) if low else None
+        if required_in_tender:
+            conditional.append({
+                "label": label,
+                "status": "present" if found_in_docs else ("unknown" if not low else "missing"),
+                "required": True,
+            })
+        else:
+            conditional.append({"label": label, "status": "check", "required": False})
+
+    steps = [
+        "1. Download & read the official NIT / tender document completely",
+        "2. Check eligibility: contractor class, turnover, experience requirements",
+        "3. Pay tender document fee (if any) via DD or online payment",
+        "4. Prepare all required documents — scan as PDFs",
+        "5. Pay EMD via RTGS / NEFT / demand draft (as specified)",
+        "6. Get your DSC (Class 3) ready for digital signing",
+        "7. Register / login on the tender portal",
+        "8. Fill technical bid form completely — attach all documents",
+        "9. Fill financial bid / BOQ — price each line item carefully",
+        "10. Submit before deadline — download acknowledgement receipt",
+    ]
+
+    return {"always": always, "conditional": conditional, "steps": steps}
+
+
+# ---------------------------------------------------------------------------
 # Deterministic Regex Fallbacks & Configuration Maps
 # ---------------------------------------------------------------------------
 _DOC_KEYWORDS = {

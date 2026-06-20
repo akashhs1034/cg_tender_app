@@ -24,20 +24,20 @@ drop policy if exists "mvp documents rw" on documents;
 -- profiles: each user sees and edits only their own profile
 create policy "profiles own row"
     on profiles for all
-    using      (auth.jwt()->>'email' = email)
-    with check (auth.jwt()->>'email' = email);
+    using      (auth.email() = email)
+    with check (auth.email() = email);
 
 -- saved_tenders: each user sees only their own saved tenders
 create policy "saved own rows"
     on saved_tenders for all
-    using      (auth.jwt()->>'email' = email)
-    with check (auth.jwt()->>'email' = email);
+    using      (auth.email() = email)
+    with check (auth.email() = email);
 
 -- documents: each user sees only their own document metadata
 create policy "documents own rows"
     on documents for all
-    using      (auth.jwt()->>'email' = email)
-    with check (auth.jwt()->>'email' = email);
+    using      (auth.email() = email)
+    with check (auth.email() = email);
 
 -- ===========================================================================
 -- STEP 3 — Add job-seeker columns to profiles
@@ -58,5 +58,5 @@ alter table profiles add column if not exists languages             text[]  defa
 --   • Enable RLS on the bucket
 --   • Add a storage policy:
 --       Allowed operations: SELECT, INSERT, DELETE
---       Using expression:   (storage.foldername(name))[1] = auth.jwt()->>'email'
+--       Using expression:   (storage.foldername(name))[1] = auth.email()
 -- This ensures users can only access files in their own email-named folder.

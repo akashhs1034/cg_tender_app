@@ -422,16 +422,20 @@ def _read_pdf_text(file) -> str:
     except Exception:
         return ""
 
-def _pdf_widget(doc_url: str, source_id: str, compact: bool = False):
+def _pdf_widget(doc_url: str, source_id: str, compact: bool = False, ctx: str = ""):
     """
     In-app tender document downloader.
     - First click: fetches the file server-side (cached 1h).
     - Second click: browser downloads the file directly from our app.
     Falls back to a portal link if the file cannot be retrieved.
+
+    ctx: short call-site prefix so keys stay unique when the same source_id
+    appears in multiple tabs/sections rendered in the same Streamlit pass
+    (e.g. AI Evaluator tab and Bid Generator tab both open at once).
     """
     if not doc_url or str(doc_url) in ("nan", "None", "—", ""):
         return
-    sid   = str(source_id)[:20].replace(" ", "_")
+    sid   = (ctx + "_" if ctx else "") + str(source_id)[:20].replace(" ", "_")
     ready = st.session_state.get(f"pdfr_{sid}", False)
 
     if not ready:
@@ -670,7 +674,7 @@ if "Dashboard" in page:
                                 st.caption(f"• {r}")
                         doc_url = rec.get("document_url")
                         if doc_url and str(doc_url) not in ("nan","None","—"):
-                            _pdf_widget(doc_url, rec.get("source_id",""))
+                            _pdf_widget(doc_url, rec.get("source_id",""), ctx="dash")
                         if st.button("➕ Save to Pipeline", key=f"d_save_{rec.get('source_id')}"):
                             accounts.save_tender(email, rec.get("source_id"))
                             st.toast("✓ Saved to pipeline")
@@ -830,7 +834,7 @@ elif "Explore" in page:
                 st.write(_v(rec.get("description")))
             doc_url = rec.get("document_url")
             if doc_url and str(doc_url) not in ("nan","None","—",""):
-                _pdf_widget(doc_url, rec.get("source_id",""))
+                _pdf_widget(doc_url, rec.get("source_id",""), ctx="exp")
             if st.session_state.authenticated:
                 if st.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}"):
                     accounts.save_tender(email, rec.get("source_id"))
@@ -935,7 +939,7 @@ elif "Workspace" in page:
                 )
                 st.markdown(tcard_html, unsafe_allow_html=True)
                 if doc_url:
-                    _pdf_widget(doc_url, selected_tender.get("source_id","eval"), compact=True)
+                    _pdf_widget(doc_url, selected_tender.get("source_id","eval"), compact=True, ctx="ev")
 
                 uploaded_docs = st.file_uploader(
                     "Upload your firm documents for compliance check (GST, registration, certs) — optional",
@@ -1204,7 +1208,7 @@ elif "Workspace" in page:
                     picked_title  = safe_str(picked_rec.get("title"), 80)
 
                     if picked_url:
-                        _pdf_widget(picked_url, picked_rec.get("source_id","bid"))
+                        _pdf_widget(picked_url, picked_rec.get("source_id","bid"), ctx="bid")
                         if st.button("✅ Use this tender for bid generation", key="bid_use_live",
                                      use_container_width=True):
                             st.session_state.bid_tender = picked_rec
@@ -1439,7 +1443,7 @@ elif "Jobs" in page:
                     st.caption(desc[:600] + ("…" if len(desc) > 600 else ""))
                 doc_url = _v(rec.get("document_url") or rec.get("apply_link"))
                 if doc_url != "—":
-                    _pdf_widget(doc_url, rec.get("source_id","j"), compact=True)
+                    _pdf_widget(doc_url, rec.get("source_id","j"), compact=True, ctx="job")
 
                 if st.session_state.authenticated:
                     st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)

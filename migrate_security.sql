@@ -11,6 +11,16 @@
 -- Supabase service-role key (which is never exposed in the app).
 
 -- ===========================================================================
+-- STEP 0 — Ensure all user tables have an email column
+--           (saved_tenders was originally created with user_id, not email)
+-- ===========================================================================
+alter table profiles      add column if not exists email     text;
+alter table saved_tenders add column if not exists email     text;
+alter table saved_tenders add column if not exists source_id text;
+alter table saved_tenders add column if not exists note      text;
+alter table documents     add column if not exists email     text;
+
+-- ===========================================================================
 -- STEP 1 — Drop the permissive MVP policies
 -- ===========================================================================
 drop policy if exists "mvp profiles rw"  on profiles;

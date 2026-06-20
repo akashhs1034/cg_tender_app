@@ -594,7 +594,7 @@ if "Dashboard" in page:
         <div class="hero">
           <div class="hero-eyebrow">
             <span class="hero-pulse"></span>
-            LIVE · AI-Powered · CG + UP · Real-Time Intelligence
+            LIVE · Opporta Intelligence · CG + UP · Real-Time Intelligence
           </div>
           <h1 class="hero-h1">Every Opportunity.<br><em>One Platform.</em></h1>
           <p class="hero-sub">
@@ -814,7 +814,7 @@ elif "Explore" in page:
                     unsafe_allow_html=True)
 
     if not st.session_state.authenticated:
-        st.info("🔐 Sign in to see your personalized AI fit score for each tender.")
+        st.info("🔐 Sign in to see your personalized Opporta Intelligence fit score for each tender.")
 
     if not rows:
         st.markdown("""<div class="ocard" style="text-align:center;padding:40px;color:#475569">
@@ -886,7 +886,7 @@ elif "Workspace" in page:
     )
 
     st.markdown("""<div class="terminal-hd">
-      <div class="terminal-label">⚡ OPPORTA WORKSPACE · Powered by AI</div>
+      <div class="terminal-label">⚡ OPPORTA WORKSPACE · Opporta Intelligence</div>
       <div class="terminal-title">Tender Evaluator · Resume Analyzer · Bid Drafter</div>
       <div class="terminal-sub">We evaluate your documents, score eligibility, and draft bid paperwork — accurate analysis, no outcome guarantees.</div>
     </div>""", unsafe_allow_html=True)
@@ -902,7 +902,7 @@ elif "Workspace" in page:
         unsafe_allow_html=True)
 
     if not has_ai:
-        st.info("⚡ Add GEMINI_API_KEY to .env to enable AI document reading. Rule-based scoring is active.")
+        st.info("⚡ Add GEMINI_API_KEY to .env to enable Opporta Intelligence document reading. Rule-based scoring is active.")
 
     tab1, tab2, tab3 = st.tabs(["🔍  Tender Evaluator", "📄  Resume Analyzer", "📝  Bid Drafter"])
 
@@ -1177,11 +1177,11 @@ elif "Workspace" in page:
                                else resume_file.read().decode("utf-8", errors="ignore"))
                 st.caption(f"✓ Parsed {len(resume_text):,} characters from resume")
 
-            if st.button("🤖 Analyze Resume Match", use_container_width=True, key="ra_btn"):
+            if st.button("⚡ Analyze Resume Match", use_container_width=True, key="ra_btn"):
                 if not resume_text:
                     st.warning("Please upload your resume first.")
                 else:
-                    with st.spinner("AI is matching your resume against job requirements..."):
+                    with st.spinner("Opporta Intelligence is matching your resume against job requirements..."):
                         result = evaluator.evaluate_resume_for_job(selected_job, resume_text)
 
                     pct   = result["readiness_pct"]
@@ -1223,7 +1223,7 @@ elif "Workspace" in page:
         </div>""", unsafe_allow_html=True)
 
         if not has_ai:
-            st.warning("⚡ Add GEMINI_API_KEY to .env to enable AI extraction and bid generation.")
+            st.warning("⚡ Add GEMINI_API_KEY to .env to enable Opporta Intelligence extraction and bid generation.")
 
         b1, b2 = st.columns(2)
         with b1:
@@ -1281,7 +1281,7 @@ elif "Workspace" in page:
             if t.strip(): vault_texts.append(t)
 
         if tender_pdf and st.button("🔍 Extract Tender Details", use_container_width=True, key="bid_extract"):
-            with st.spinner("Reading tender document with AI..."):
+            with st.spinner("Opporta Intelligence reading tender document..."):
                 import bid_engine
                 st.session_state.bid_tender = bid_engine.extract_tender(
                     tender_pdf.read(), tender_pdf.type or "application/pdf")
@@ -1290,7 +1290,7 @@ elif "Workspace" in page:
         if st.session_state.get("bid_tender"):
             t = st.session_state.bid_tender
             if t.get("_extraction_failed"):
-                st.error("AI extraction failed — fill in the details below manually.")
+                st.error("Opporta Intelligence extraction failed — fill in the details below manually.")
 
             st.markdown("---")
             st.markdown("**Step 3 — Confirm extracted tender details**")
@@ -1359,7 +1359,7 @@ elif "Workspace" in page:
             st.markdown("---")
             st.markdown("**Step 5 — Draft Bid Document**")
             if not has_ai:
-                st.info("Add GEMINI_API_KEY to .env to enable AI-assisted bid drafting.")
+                st.info("Add GEMINI_API_KEY to .env to enable Opporta Intelligence bid drafting.")
             else:
                 st.caption("⚠️ This drafts a bid document template based on your inputs. Review, verify, and sign before official submission. Opporta does not guarantee tender award.")
                 if st.button("📝 Draft Bid Document (.docx)", use_container_width=True, key="bid_gen"):
@@ -1521,20 +1521,20 @@ elif "Jobs" in page:
                             st.success("✅ Met: " + " · ".join(_auto["met"][:4]))
                         if _auto["missing"]:
                             st.error("❌ Missing: " + " · ".join(_auto["missing"][:4]))
-                        st.caption("Auto-scored from your Job Seeker Profile. Upload resume below for deeper AI analysis.")
+                        st.caption("Auto-scored from your Job Seeker Profile. Upload resume below for deeper Opporta Intelligence analysis.")
                     else:
                         st.caption("Complete your **Job Seeker Profile** (Profile → Job Seeker Profile tab) for auto-scoring.")
 
                     # Optional resume upload for deeper AI analysis
-                    resume_up = st.file_uploader("Upload resume for AI analysis (optional)",
+                    resume_up = st.file_uploader("Upload resume for Opporta Intelligence analysis (optional)",
                                                  type=["pdf","txt"],
                                                  key=f"jr_{rec.get('source_id')}")
                     if resume_up:
                         rtext = (_read_pdf_text(resume_up)
                                  if resume_up.name.lower().endswith(".pdf")
                                  else resume_up.read().decode("utf-8", errors="ignore"))
-                        if st.button("⚡ Deep AI Analysis", key=f"jra_{rec.get('source_id')}"):
-                            with st.spinner("AI analyzing resume..."):
+                        if st.button("⚡ Deep Analysis", key=f"jra_{rec.get('source_id')}"):
+                            with st.spinner("Opporta Intelligence analyzing resume..."):
                                 res = evaluator.evaluate_resume_for_job(rec, rtext)
                             pct   = res["readiness_pct"]
                             color = score_color(pct)
@@ -1843,7 +1843,7 @@ elif "Profile" in page:
                 "states":           target_states,
                 "districts":        districts,
             }, token=_token)
-            st.success("✓ Profile saved. AI scores will update on next page load.")
+            st.success("✓ Profile saved. Opporta Intelligence scores will update on next page load.")
             st.rerun()
 
       # ── Saved Pipeline (inside Contractor tab) ──
@@ -1949,7 +1949,7 @@ elif "Profile" in page:
         if _js_resume.strip():
             st.markdown('<div class="profile-section-title" style="margin-top:24px">Your Job Eligibility (from profile)</div>',
                         unsafe_allow_html=True)
-            st.caption("Based on your saved profile — upload a resume in the Jobs tab for deeper AI analysis.")
+            st.caption("Based on your saved profile — upload a resume in the Jobs tab for deeper Opporta Intelligence analysis.")
             if not df_j.empty:
                 _preview_jobs = df_j.head(15).to_dict("records")
                 for _j in _preview_jobs:

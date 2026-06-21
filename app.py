@@ -510,11 +510,8 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#7C8AA0!
 </style>""", unsafe_allow_html=True)
 
 # ── CONSTANTS ─────────────────────────────────────────────────────────────────
-SECTORS = [
-    "Civil Works", "Civil Infrastructure", "Electrical & Energy",
-    "Coal & Mining", "Medical Procurement", "Water & Irrigation",
-    "Municipal Projects", "Transport", "Manufacturing", "IT Services",
-]
+# Tender sectors now come from core.CATEGORY_BUCKETS (the normalized buckets),
+# so the old hardcoded SECTORS list was removed.
 
 CG_DISTRICTS = sorted([
     "Raipur","Bilaspur","Durg","Bhilai","Korba","Raigarh","Rajnandgaon",
@@ -681,7 +678,7 @@ def _pdf_widget(doc_url: str, source_id: str, compact: bool = False, ctx: str = 
     st.link_button(
         "🌐 Open Official Procurement Portal",
         url=str(doc_url),
-        use_container_width=not compact,
+        width=("stretch" if not compact else "content"),
     )
 
 def _districts_for_state(state: str) -> list[str]:
@@ -730,7 +727,7 @@ with st.sidebar:
                                 label_visibility="collapsed",
                                 placeholder="Password")
         c1, c2 = st.columns(2)
-        if c1.button("Login", use_container_width=True):
+        if c1.button("Login", width="stretch"):
             ok, msg, token = accounts.login_user(auth_email, auth_pw)
             if ok:
                 st.session_state.authenticated = True
@@ -741,7 +738,7 @@ with st.sidebar:
                 st.warning("📧 Please confirm your email (check inbox/spam), then log in — or wait a moment and retry.")
             else:
                 st.error(msg)
-        if c2.button("Register", use_container_width=True):
+        if c2.button("Register", width="stretch"):
             ok, msg = accounts.register_user(auth_email, auth_pw)
             if ok:
                 lok, _lm, token = accounts.login_user(auth_email, auth_pw)
@@ -770,7 +767,7 @@ with st.sidebar:
         ]
         for p in pages:
             is_active = st.session_state.current_page == p
-            if st.button(p, use_container_width=True,
+            if st.button(p, width="stretch",
                          type="primary" if is_active else "secondary"):
                 st.session_state.current_page = p
                 st.rerun()
@@ -781,7 +778,7 @@ with st.sidebar:
           <div class="session-email">{st.session_state.email}</div>
         </div>""", unsafe_allow_html=True)
 
-        if st.button("⏏  Log Out", use_container_width=True):
+        if st.button("⏏  Log Out", width="stretch"):
             st.session_state.authenticated  = False
             st.session_state.email          = ""
             st.session_state.sb_token       = ""
@@ -893,7 +890,7 @@ if st.session_state.authenticated:
             _is_active = st.session_state.current_page == _pg
             # two trailing spaces + newline → markdown hard break → icon over label
             if _col.button(f"{_icon}  \n{_lbl}", key=f"bnav_{_pg}",
-                           use_container_width=True,
+                           width="stretch",
                            type="primary" if _is_active else "secondary"):
                 st.session_state.current_page = _pg
                 st.rerun()
@@ -930,7 +927,7 @@ if "Dashboard" in page:
 
             _ec, _spacer1, _spacer2 = st.columns([1,1,1])
             with _ec:
-                if st.button("⚡  Enter Dashboard  →", use_container_width=True,
+                if st.button("⚡  Enter Dashboard  →", width="stretch",
                              key="enter_platform"):
                     st.session_state.entered_platform = True
                     st.rerun()
@@ -969,12 +966,12 @@ if "Dashboard" in page:
 
                 # ── Auth mode tabs ──
                 _t1, _t2 = st.columns(2)
-                if _t1.button("🔑  Login", use_container_width=True,
+                if _t1.button("🔑  Login", width="stretch",
                               type="primary" if st.session_state.auth_mode == "login" else "secondary",
                               key="tab_login"):
                     st.session_state.auth_mode = "login"
                     st.rerun()
-                if _t2.button("✨  Create Account", use_container_width=True,
+                if _t2.button("✨  Create Account", width="stretch",
                               type="primary" if st.session_state.auth_mode != "login" else "secondary",
                               key="tab_reg"):
                     st.session_state.auth_mode = "register"
@@ -990,7 +987,7 @@ if "Dashboard" in page:
                     _lp = st.text_input("Password", type="password", key="li_pw",
                                         placeholder="Password",
                                         label_visibility="collapsed")
-                    if st.button("Login  →", use_container_width=True, key="do_login"):
+                    if st.button("Login  →", width="stretch", key="do_login"):
                         if _le and _lp:
                             ok, msg, token = accounts.login_user(_le, _lp)
                             if ok:
@@ -1017,7 +1014,7 @@ if "Dashboard" in page:
                     _rp = st.text_input("Choose password", type="password", key="reg_pw",
                                         placeholder="Choose a password (min 6 chars)",
                                         label_visibility="collapsed")
-                    if st.button("Create Account  →", use_container_width=True, key="do_register"):
+                    if st.button("Create Account  →", width="stretch", key="do_register"):
                         if not (_re and _rp):
                             st.warning("Enter your email and choose a password.")
                         elif len(_rp) < 6:
@@ -1080,14 +1077,14 @@ if "Dashboard" in page:
               </div>
             </div>""", unsafe_allow_html=True)
             _gt1, _gt2, _gt3 = st.columns([1, 1, 1])
-            if _gt1.button("👤  Complete Profile Setup", use_container_width=True, key="gate_profile"):
+            if _gt1.button("👤  Complete Profile Setup", width="stretch", key="gate_profile"):
                 st.session_state.current_page = "👤  Profile"
                 st.rerun()
-            if _gt2.button("📄  Upload to Vault", use_container_width=True, key="gate_vault"):
+            if _gt2.button("📄  Upload to Vault", width="stretch", key="gate_vault"):
                 st.session_state.current_page = "👤  Profile"
                 st.session_state["profile_tab"] = "vault"
                 st.rerun()
-            if _gt3.button("🔍  Browse Tenders Anyway", use_container_width=True, key="gate_browse"):
+            if _gt3.button("🔍  Browse Tenders Anyway", width="stretch", key="gate_browse"):
                 st.session_state.current_page = "📄  Tenders"
                 st.rerun()
 
@@ -1173,7 +1170,7 @@ if "Dashboard" in page:
                         accounts.save_tender(email, rec.get("source_id"), token=_token)
                         st.toast("✓ Saved to pipeline")
 
-            if st.button("📄  See all active tenders  →", use_container_width=True,
+            if st.button("📄  See all active tenders  →", width="stretch",
                          key="dash_see_all_tenders"):
                 st.session_state.current_page = "📄  Tenders"
                 st.rerun()
@@ -1222,13 +1219,13 @@ if "Dashboard" in page:
         # ── Tools launcher (folded modules) ──
         st.markdown("<br>", unsafe_allow_html=True)
         _tl1, _tl2, _tl3 = st.columns(3)
-        if _tl1.button("📊  Market Analytics", use_container_width=True, key="dash_open_analytics"):
+        if _tl1.button("📊  Market Analytics", width="stretch", key="dash_open_analytics"):
             st.session_state.current_page = "📊  Analytics"
             st.rerun()
-        if _tl2.button("⚡  AI Tender Analyzer", use_container_width=True, key="dash_open_ws"):
+        if _tl2.button("⚡  AI Tender Analyzer", width="stretch", key="dash_open_ws"):
             st.session_state.current_page = "⚡  Opporta Workspace"
             st.rerun()
-        if _tl3.button("📄  My Document Vault", use_container_width=True, key="dash_open_vault"):
+        if _tl3.button("📄  My Document Vault", width="stretch", key="dash_open_vault"):
             st.session_state.current_page = "👤  Profile"
             st.session_state["profile_tab"] = "vault"
             st.rerun()
@@ -1257,7 +1254,7 @@ if "Dashboard" in page:
                     f'</div>{_vac_badge}</div></div>',
                     unsafe_allow_html=True,
                 )
-            if st.button("💼  See all government jobs  →", use_container_width=True,
+            if st.button("💼  See all government jobs  →", width="stretch",
                          key="dash_see_all_jobs"):
                 st.session_state.current_page = "💼  Jobs"
                 st.rerun()
@@ -1293,7 +1290,7 @@ if "Dashboard" in page:
                                         accept_multiple_files=True, key="ws_firm_docs",
                                         label_visibility="collapsed")
 
-            if st.button("⚡  Generate Ready-to-Bid File", use_container_width=True, key="ws_generate"):
+            if st.button("⚡  Generate Ready-to-Bid File", width="stretch", key="ws_generate"):
                 if not _ws_tender:
                     st.warning("Upload the tender document first.")
                 elif not _ws_ai:
@@ -1341,7 +1338,7 @@ if "Dashboard" in page:
                                 data=_ws_docx,
                                 file_name=f"OPPORTA_Bid_{safe_str(_ws_t.get('tender_no') or _ws_t.get('title'),'tender')[:30].replace(' ','_')}.docx",
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                use_container_width=True, key="ws_download")
+                                width="stretch", key="ws_download")
                         else:
                             _render_ai_error("Bid drafting did not return content — please try again.")
 
@@ -1397,7 +1394,7 @@ elif "Explore" in page:
                     f'<span class="tag tag-loc">📍 {_esc(_rec.get("district"),"State-wide")}</span>'
                     f'<span class="tag tag-cat">{_esc(_rec.get("category"),"General")}</span></div></div>',
                     unsafe_allow_html=True)
-            if st.button("📄  Open full Tender Portal  →", use_container_width=True, key="exp_to_tenders"):
+            if st.button("📄  Open full Tender Portal  →", width="stretch", key="exp_to_tenders"):
                 st.session_state.explore_search = _xql
                 st.session_state.current_page = "📄  Tenders"
                 st.rerun()
@@ -1412,7 +1409,7 @@ elif "Explore" in page:
                     f'<div class="jcard-title">{_html.escape(safe_str(_rec.get("title"),95))}</div>'
                     f'<div class="jcard-dept">🏛 {_esc(_rec.get("department"))} · {_esc(_rec.get("state"))}</div>'
                     f'</div>{_vb}</div></div>', unsafe_allow_html=True)
-            if st.button("💼  Open full Job Board  →", use_container_width=True, key="exp_to_jobs"):
+            if st.button("💼  Open full Job Board  →", width="stretch", key="exp_to_jobs"):
                 st.session_state.current_page = "💼  Jobs"
                 st.rerun()
 
@@ -1426,15 +1423,15 @@ elif "Explore" in page:
         if _disc:
             _dc = st.columns(4)
             for _i, (_em, _nm) in enumerate(_disc):
-                if _dc[_i % 4].button(f"{_em}  {_nm}", use_container_width=True, key=f"disc_{_nm}"):
+                if _dc[_i % 4].button(f"{_em}  {_nm}", width="stretch", key=f"disc_{_nm}"):
                     st.session_state.explore_category = _nm
                     st.session_state.current_page = "📄  Tenders"
                     st.rerun()
         st.markdown("<br>", unsafe_allow_html=True)
         _pc1, _pc2 = st.columns(2)
-        if _pc1.button("📄  Tender Portal", use_container_width=True, key="exp_portal_t"):
+        if _pc1.button("📄  Tender Portal", width="stretch", key="exp_portal_t"):
             st.session_state.current_page = "📄  Tenders"; st.rerun()
-        if _pc2.button("💼  Job Board", use_container_width=True, key="exp_portal_j"):
+        if _pc2.button("💼  Job Board", width="stretch", key="exp_portal_j"):
             st.session_state.current_page = "💼  Jobs"; st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1719,7 +1716,7 @@ elif "Workspace" in page:
                             except Exception: pass
                     st.caption(f"✓ Parsed {len(doc_text):,} chars from {len(uploaded_docs)} file(s)")
 
-                if st.button("📊 Evaluate Documents & Score Eligibility", use_container_width=True, key="eval_btn"):
+                if st.button("📊 Evaluate Documents & Score Eligibility", width="stretch", key="eval_btn"):
                     with st.spinner("Scoring documents across 6 dimensions — profitability, eligibility, document readiness..."):
                         _t_clean = evaluator._clean(selected_tender)
                         result   = evaluator.evaluate_tender(_t_clean, profile, doc_text)
@@ -1901,7 +1898,7 @@ elif "Workspace" in page:
                                else resume_file.read().decode("utf-8", errors="ignore"))
                 st.caption(f"✓ Parsed {len(resume_text):,} characters from resume")
 
-            if st.button("⚡ Analyze Resume Match", use_container_width=True, key="ra_btn"):
+            if st.button("⚡ Analyze Resume Match", width="stretch", key="ra_btn"):
                 if not resume_text:
                     st.warning("Please upload your resume first.")
                 else:
@@ -1978,7 +1975,7 @@ elif "Workspace" in page:
                     if picked_url:
                         _pdf_widget(picked_url, picked_rec.get("source_id","bid"), ctx="bid")
                         if st.button("✅ Use this tender for bid generation", key="bid_use_live",
-                                     use_container_width=True):
+                                     width="stretch"):
                             st.session_state.bid_tender = picked_rec
                             st.toast(f"✓ Loaded: {picked_title}")
                     else:
@@ -2004,7 +2001,7 @@ elif "Workspace" in page:
                  else vf.read().decode("utf-8", errors="ignore"))
             if t.strip(): vault_texts.append(t)
 
-        if tender_pdf and st.button("🔍 Extract Tender Details", use_container_width=True, key="bid_extract"):
+        if tender_pdf and st.button("🔍 Extract Tender Details", width="stretch", key="bid_extract"):
             core.clear_ai_error()
             with st.spinner("Opporta Intelligence reading tender document..."):
                 import bid_engine
@@ -2042,7 +2039,7 @@ elif "Workspace" in page:
                 t["scope_of_work"]        = st.text_area("Scope of Work", _v(t.get("scope_of_work"),""), height=80)
                 t["eligibility_criteria"] = st.text_area("Eligibility / Qualification", _v(t.get("eligibility_criteria"),""), height=70)
                 docs_raw = st.text_area("Required Documents (one per line)", "\n".join(t.get("required_documents") or []), height=80)
-                if st.form_submit_button("✅ Confirm Details", use_container_width=True):
+                if st.form_submit_button("✅ Confirm Details", width="stretch"):
                     t["required_documents"] = [d.strip() for d in docs_raw.splitlines() if d.strip()]
                     st.session_state.bid_tender = t
                     st.success("✓ Details confirmed.")
@@ -2091,7 +2088,7 @@ elif "Workspace" in page:
                 st.info("Add GEMINI_API_KEY to .env to enable Opporta Intelligence bid drafting.")
             else:
                 st.caption("⚠️ This drafts a bid document template based on your inputs. Review, verify, and sign before official submission. Opporta does not guarantee tender award.")
-                if st.button("📝 Draft Bid Document (.docx)", use_container_width=True, key="bid_gen"):
+                if st.button("📝 Draft Bid Document (.docx)", width="stretch", key="bid_gen"):
                     core.clear_ai_error()
                     with st.spinner("Drafting bid document — this takes ~30 seconds..."):
                         bid_content = bid_engine.generate_bid_content(
@@ -2109,7 +2106,7 @@ elif "Workspace" in page:
                             data=docx_bytes,
                             file_name=f"Bid_{safe_name}.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True)
+                            width="stretch")
                     else:
                         _render_ai_error("Generation failed — please try again.")
 
@@ -2302,7 +2299,7 @@ elif "Documents" in page:
         with up2:
             doc_file = st.file_uploader("Select file", type=["pdf","jpg","jpeg","png","txt"],
                                         key="vault_upload")
-        if st.button("⬆️ Upload to Vault", use_container_width=True) and doc_file and doc_name:
+        if st.button("⬆️ Upload to Vault", width="stretch") and doc_file and doc_name:
             with st.spinner("Uploading securely..."):
                 doc_id = accounts.save_document(email, doc_name, doc_file.name,
                                                 doc_file.read(), doc_file.type or "application/octet-stream",
@@ -2456,7 +2453,7 @@ elif "Analytics" in page:
     def _chart_card(title, fig):
         st.markdown(f'<div class="chart-card"><div class="chart-title">{title}</div></div>',
                     unsafe_allow_html=True)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     st.markdown("""<div class="sec-hd">
       <span class="sec-title">📊 Market Intelligence</span>
@@ -2599,7 +2596,7 @@ elif "Profile" in page:
                                        avail_dists, default=saved_dists)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.form_submit_button("💾 Save Contractor Profile", use_container_width=True):
+        if st.form_submit_button("💾 Save Contractor Profile", width="stretch"):
             accounts.save_profile(email, {
                 "company_name":     company,
                 "turnover_lakhs":   turnover,
@@ -2696,7 +2693,7 @@ elif "Profile" in page:
                 height=90)
 
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.form_submit_button("💾 Save Job Seeker Profile", use_container_width=True):
+            if st.form_submit_button("💾 Save Job Seeker Profile", width="stretch"):
                 skills_list = [s.strip() for s in skills_raw.split(",") if s.strip()]
                 accounts.save_profile(email, {
                     "full_name":            full_name,
@@ -2754,7 +2751,7 @@ elif "Profile" in page:
         _vault_file = st.file_uploader("Select file", type=["pdf", "jpg", "jpeg", "png", "txt", "docx"],
                                        key="vault_file_up")
 
-        if st.button("⬆️  Upload to Vault & Index", use_container_width=True, key="vault_do_upload"):
+        if st.button("⬆️  Upload to Vault & Index", width="stretch", key="vault_do_upload"):
             if _vault_file and _vault_label:
                 _raw = _vault_file.read()
                 # Extraction parser → feed text into the Intelligence core.

@@ -991,8 +991,7 @@ if "Dashboard" in page:
                   <div class="nav-card-icon">{_icon}</div>
                   <div class="nav-card-label">{_lbl}</div>
                 </div>""", unsafe_allow_html=True)
-                if st.button(_lbl, key=f"ncard_{_pg}_{_lbl}", use_container_width=True,
-                             label_visibility="collapsed"):
+                if st.button(_lbl, key=f"ncard_{_pg}_{_lbl}", use_container_width=True):
                     st.session_state.current_page = _pg
                     st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)

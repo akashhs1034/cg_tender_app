@@ -2189,174 +2189,177 @@ elif "Jobs" in page:
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
-    if df_j.empty:
-        st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
-          <div style="font-size:2rem;margin-bottom:12px">💼</div>
-          <div style="font-size:.9rem;color:#64748B">No job data. Run ingest.py to fetch live listings.</div>
-        </div>""", unsafe_allow_html=True)
-    else:
-        # Job KPIs
-        jk1, jk2, jk3, jk4 = st.columns(4)
-        jk1.markdown(f'<div class="stat-card"><div class="stat-num">{len(df_j)}</div><div class="stat-lbl">Total Jobs</div></div>', unsafe_allow_html=True)
-        cg_jobs = int((df_j["state"] == "Chhattisgarh").sum()) if "state" in df_j else 0
-        up_jobs = int((df_j["state"] == "Uttar Pradesh").sum()) if "state" in df_j else 0
-        jk2.markdown(f'<div class="stat-card"><div class="stat-num">{cg_jobs}</div><div class="stat-lbl">CG Jobs</div></div>', unsafe_allow_html=True)
-        jk3.markdown(f'<div class="stat-card"><div class="stat-num">{up_jobs}</div><div class="stat-lbl">UP Jobs</div></div>', unsafe_allow_html=True)
-        total_vac = 0
-        try:
-            total_vac = int(pd.to_numeric(df_j["vacancies"], errors="coerce").fillna(0).sum())
-        except Exception: pass
-        jk4.markdown(f'<div class="stat-card"><div class="stat-num">{total_vac:,}</div><div class="stat-lbl">Total Vacancies</div></div>', unsafe_allow_html=True)
+    jtab1, jtab2 = st.tabs(["💼  Active Job Board", "🏛  Upcoming Exams & Study Matrix"])
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # Job filters
-        st.markdown('<div class="filter-row">', unsafe_allow_html=True)
-        jf1, jf2, jf3 = st.columns([3, 1.5, 1.5])
-        with jf1:
-            jsearch = st.text_input("Search jobs", placeholder="Title, department, qualification...",
-                                    label_visibility="collapsed", key="jsearch").lower()
-        with jf2:
-            jstates = ["All", "Chhattisgarh", "Uttar Pradesh"]
-            jstate  = st.selectbox("State", jstates, label_visibility="collapsed", key="jstate")
-        with jf3:
-            jcats = ["All"] + sorted(df_j["category"].dropna().unique().tolist()) if "category" in df_j else ["All"]
-            jcat  = st.selectbox("Category", jcats, label_visibility="collapsed", key="jcat")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-        jobs_filtered = []
-        for _, r in df_j.iterrows():
-            rec = r.to_dict()
-            dl_check = days_left(rec.get("deadline"))
-            if dl_check is not None and dl_check < 0:
-                continue  # skip expired
-            hay = f"{_v(rec.get('title'))} {_v(rec.get('department'))} {_v(rec.get('qualification'))} {_v(rec.get('description'))}".lower()
-            if jsearch and jsearch not in hay: continue
-            if jstate != "All" and _v(rec.get("state")) != jstate: continue
-            if jcat   != "All" and jcat.lower() not in _v(rec.get("category","")).lower(): continue
-            jobs_filtered.append(rec)
-
-        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(jobs_filtered)} postings</div>',
-                    unsafe_allow_html=True)
-
-        # Strict: show a match % ONLY when a real job-seeker profile exists.
-        _job_prof_text = (_profile_to_resume_text(profile)
-                          if (st.session_state.authenticated and _has_job_profile(profile))
-                          else "")
-        if st.session_state.authenticated and not _job_prof_text:
-            st.info("📡 Add your qualification, degree or skills in Profile → Job Seeker to unlock your match % for every job.")
-
-        for rec in jobs_filtered[:100]:
-            dl     = days_left(rec.get("deadline"))
-            dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else "Open"
-            vac    = _v(rec.get("vacancies"))
+    # ── TAB 1: Active Job Board (live grid + filters) ──
+    with jtab1:
+        if df_j.empty:
+            st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
+              <div style="font-size:2rem;margin-bottom:12px">💼</div>
+              <div style="font-size:.9rem;color:#64748B">No job data. Run ingest.py to fetch live listings.</div>
+            </div>""", unsafe_allow_html=True)
+        else:
+            # Job KPIs
+            jk1, jk2, jk3, jk4 = st.columns(4)
+            jk1.markdown(f'<div class="stat-card"><div class="stat-num">{len(df_j)}</div><div class="stat-lbl">Total Jobs</div></div>', unsafe_allow_html=True)
+            cg_jobs = int((df_j["state"] == "Chhattisgarh").sum()) if "state" in df_j else 0
+            up_jobs = int((df_j["state"] == "Uttar Pradesh").sum()) if "state" in df_j else 0
+            jk2.markdown(f'<div class="stat-card"><div class="stat-num">{cg_jobs}</div><div class="stat-lbl">CG Jobs</div></div>', unsafe_allow_html=True)
+            jk3.markdown(f'<div class="stat-card"><div class="stat-num">{up_jobs}</div><div class="stat-lbl">UP Jobs</div></div>', unsafe_allow_html=True)
+            total_vac = 0
             try:
-                vac_num = int(float(vac))
-                vac_txt = f"{vac_num:,} posts"
-            except Exception:
-                vac_txt = vac if vac != "—" else ""
+                total_vac = int(pd.to_numeric(df_j["vacancies"], errors="coerce").fillna(0).sum())
+            except Exception: pass
+            jk4.markdown(f'<div class="stat-card"><div class="stat-num">{total_vac:,}</div><div class="stat-lbl">Total Vacancies</div></div>', unsafe_allow_html=True)
 
-            salary_v  = _esc(rec.get("salary"))
-            cat_v     = _esc(rec.get("category"), "General")
-            dept_v    = _esc(rec.get("department"))
-            state_v   = _esc(rec.get("state"))
-            title_v   = _html.escape(safe_str(rec.get("title"), 100))
+            st.markdown("<br>", unsafe_allow_html=True)
 
-            vac_tag   = f'<span class="tag tag-loc">&#128101; {vac_txt}</span>' if vac_txt else ""
-            sal_tag   = f'<span class="tag tag-val">&#x20B9; {salary_v}</span>' if salary_v != "—" else ""
-            jvac_div  = f'<div class="jvac">{vac_txt}</div>' if vac_txt else ""
+            # Job filters
+            st.markdown('<div class="filter-row">', unsafe_allow_html=True)
+            jf1, jf2, jf3 = st.columns([3, 1.5, 1.5])
+            with jf1:
+                jsearch = st.text_input("Search jobs", placeholder="Title, department, qualification...",
+                                        label_visibility="collapsed", key="jsearch").lower()
+            with jf2:
+                jstates = ["All", "Chhattisgarh", "Uttar Pradesh"]
+                jstate  = st.selectbox("State", jstates, label_visibility="collapsed", key="jstate")
+            with jf3:
+                jcats = ["All"] + sorted(df_j["category"].dropna().unique().tolist()) if "category" in df_j else ["All"]
+                jcat  = st.selectbox("Category", jcats, label_visibility="collapsed", key="jcat")
+            st.markdown('</div>', unsafe_allow_html=True)
 
-            # Auto eligibility badge from profile
-            match_div = ""
-            if _job_prof_text:
-                _m = evaluator._keyword_resume_eval(rec, _job_prof_text)
-                _p = _m["readiness_pct"]
-                _c = score_color(_p)
-                match_div = (f'<div style="text-align:center;flex-shrink:0;min-width:48px;margin-left:8px">'
-                             f'<div style="font-size:.95rem;font-weight:700;color:{_c}">{_p}%</div>'
-                             f'<div style="font-size:.6rem;color:#64748B">match</div></div>')
+            jobs_filtered = []
+            for _, r in df_j.iterrows():
+                rec = r.to_dict()
+                dl_check = days_left(rec.get("deadline"))
+                if dl_check is not None and dl_check < 0:
+                    continue  # skip expired
+                hay = f"{_v(rec.get('title'))} {_v(rec.get('department'))} {_v(rec.get('qualification'))} {_v(rec.get('description'))}".lower()
+                if jsearch and jsearch not in hay: continue
+                if jstate != "All" and _v(rec.get("state")) != jstate: continue
+                if jcat   != "All" and jcat.lower() not in _v(rec.get("category","")).lower(): continue
+                jobs_filtered.append(rec)
 
-            card_html = (
-                f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
-                f'<div class="jcard-title">{title_v}</div>'
-                f'<div class="jcard-dept">{dept_v} &nbsp;&middot;&nbsp; {state_v}</div>'
-                f'<div class="ocard-tags">'
-                f'<span class="tag tag-dl">{dl_txt}</span>'
-                f'{vac_tag}'
-                f'<span class="tag tag-cat">{cat_v}</span>'
-                f'{sal_tag}'
-                f'</div></div>{match_div}{jvac_div}</div></div>'
-            )
-            st.markdown(card_html, unsafe_allow_html=True)
+            st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(jobs_filtered)} postings</div>',
+                        unsafe_allow_html=True)
 
-            with st.expander(f"Details · Resume Match — {safe_str(rec.get('title'), 55)}"):
-                jd1, jd2 = st.columns(2)
-                jd1.write(f"**Department:** {_plain(rec.get('department'))}")
-                jd1.write(f"**Qualification:** {_plain(rec.get('qualification'))}")
-                jd1.write(f"**Category:** {_plain(rec.get('category'))}")
-                jd2.write(f"**Salary:** {_plain(rec.get('salary'))}")
-                jd2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
-                jd2.write(f"**Vacancies:** {_v(rec.get('vacancies'))}")
-                desc = _plain(rec.get("description"))
-                if desc:
-                    st.caption(desc[:600] + ("…" if len(desc) > 600 else ""))
-                doc_url = _v(rec.get("document_url") or rec.get("apply_link"))
-                if doc_url != "—":
-                    _pdf_widget(doc_url, rec.get("source_id","j"), compact=True, ctx="job")
+            # Strict: show a match % ONLY when a real job-seeker profile exists.
+            _job_prof_text = (_profile_to_resume_text(profile)
+                              if (st.session_state.authenticated and _has_job_profile(profile))
+                              else "")
+            if st.session_state.authenticated and not _job_prof_text:
+                st.info("📡 Add your qualification, degree or skills in Profile → Job Seeker to unlock your match % for every job.")
 
-                if st.session_state.authenticated:
-                    st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
-                    st.markdown("**Job Eligibility Check**")
+            for rec in jobs_filtered[:100]:
+                dl     = days_left(rec.get("deadline"))
+                dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else "Open"
+                vac    = _v(rec.get("vacancies"))
+                try:
+                    vac_num = int(float(vac))
+                    vac_txt = f"{vac_num:,} posts"
+                except Exception:
+                    vac_txt = vac if vac != "—" else ""
 
-                    # Auto-match from saved profile (instant, no upload needed)
-                    _prof_resume = _profile_to_resume_text(profile)
-                    if _prof_resume.strip():
-                        _auto = evaluator._keyword_resume_eval(rec, _prof_resume)
-                        _apct = _auto["readiness_pct"]
-                        _acol = score_color(_apct)
-                        st.markdown(
-                            f'<div class="res-panel" style="padding:10px 16px">'
-                            f'<b style="color:{_acol};font-size:1.3rem">{_apct}%</b>'
-                            f'&nbsp; <span style="color:#94A3B8;font-size:.82rem">Profile match · {_auto["verdict"]}</span>'
-                            f'</div>', unsafe_allow_html=True)
-                        if _auto["met"]:
-                            st.success("✅ Met: " + " · ".join(_auto["met"][:4]))
-                        if _auto["missing"]:
-                            st.error("❌ Missing: " + " · ".join(_auto["missing"][:4]))
-                        st.caption("Auto-scored from your Job Seeker Profile. Upload resume below for deeper Opporta Intelligence analysis.")
-                    else:
-                        st.caption("Complete your **Job Seeker Profile** (Profile → Job Seeker Profile tab) for auto-scoring.")
+                salary_v  = _esc(rec.get("salary"))
+                cat_v     = _esc(rec.get("category"), "General")
+                dept_v    = _esc(rec.get("department"))
+                state_v   = _esc(rec.get("state"))
+                title_v   = _html.escape(safe_str(rec.get("title"), 100))
 
-                    # Optional resume upload for deeper AI analysis
-                    resume_up = st.file_uploader("Upload resume for Opporta Intelligence analysis (optional)",
-                                                 type=["pdf","txt"],
-                                                 key=f"jr_{rec.get('source_id')}")
-                    if resume_up:
-                        rtext = (_read_pdf_text(resume_up)
-                                 if resume_up.name.lower().endswith(".pdf")
-                                 else resume_up.read().decode("utf-8", errors="ignore"))
-                        if st.button("⚡ Deep Analysis", key=f"jra_{rec.get('source_id')}"):
-                            with st.spinner("Opporta Intelligence analyzing resume..."):
-                                res = evaluator.evaluate_resume_for_job(rec, rtext)
-                            pct   = res["readiness_pct"]
-                            color = score_color(pct)
-                            st.markdown(f"""<div class="res-panel">
-                              <b style="color:{color};font-size:1.5rem">{pct}%</b>
-                              &nbsp; <span style="color:#94A3B8;font-size:.85rem">{res['verdict']}</span>
-                            </div>""", unsafe_allow_html=True)
-                            if res["met"]:    st.success("Met: " + " · ".join(res["met"]))
-                            if res["missing"]:st.error("Missing: " + " · ".join(res["missing"]))
+                vac_tag   = f'<span class="tag tag-loc">&#128101; {vac_txt}</span>' if vac_txt else ""
+                sal_tag   = f'<span class="tag tag-val">&#x20B9; {salary_v}</span>' if salary_v != "—" else ""
+                jvac_div  = f'<div class="jvac">{vac_txt}</div>' if vac_txt else ""
 
-    # ── Direct Portals: Upcoming Exams & Material — Official Recruitment Authorities ──
-    st.markdown("<br>", unsafe_allow_html=True)
-    with st.expander("🏛  Upcoming Exams & Material — Official Recruitment Authorities", expanded=False):
+                # Auto eligibility badge from profile
+                match_div = ""
+                if _job_prof_text:
+                    _m = evaluator._keyword_resume_eval(rec, _job_prof_text)
+                    _p = _m["readiness_pct"]
+                    _c = score_color(_p)
+                    match_div = (f'<div style="text-align:center;flex-shrink:0;min-width:48px;margin-left:8px">'
+                                 f'<div style="font-size:.95rem;font-weight:700;color:{_c}">{_p}%</div>'
+                                 f'<div style="font-size:.6rem;color:#64748B">match</div></div>')
+
+                card_html = (
+                    f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
+                    f'<div class="jcard-title">{title_v}</div>'
+                    f'<div class="jcard-dept">{dept_v} &nbsp;&middot;&nbsp; {state_v}</div>'
+                    f'<div class="ocard-tags">'
+                    f'<span class="tag tag-dl">{dl_txt}</span>'
+                    f'{vac_tag}'
+                    f'<span class="tag tag-cat">{cat_v}</span>'
+                    f'{sal_tag}'
+                    f'</div></div>{match_div}{jvac_div}</div></div>'
+                )
+                st.markdown(card_html, unsafe_allow_html=True)
+
+                with st.expander(f"Details · Resume Match — {safe_str(rec.get('title'), 55)}"):
+                    jd1, jd2 = st.columns(2)
+                    jd1.write(f"**Department:** {_plain(rec.get('department'))}")
+                    jd1.write(f"**Qualification:** {_plain(rec.get('qualification'))}")
+                    jd1.write(f"**Category:** {_plain(rec.get('category'))}")
+                    jd2.write(f"**Salary:** {_plain(rec.get('salary'))}")
+                    jd2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
+                    jd2.write(f"**Vacancies:** {_v(rec.get('vacancies'))}")
+                    desc = _plain(rec.get("description"))
+                    if desc:
+                        st.caption(desc[:600] + ("…" if len(desc) > 600 else ""))
+                    doc_url = _v(rec.get("document_url") or rec.get("apply_link"))
+                    if doc_url != "—":
+                        _pdf_widget(doc_url, rec.get("source_id","j"), compact=True, ctx="job")
+
+                    if st.session_state.authenticated:
+                        st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
+                        st.markdown("**Job Eligibility Check**")
+
+                        # Auto-match from saved profile (instant, no upload needed)
+                        _prof_resume = _profile_to_resume_text(profile)
+                        if _prof_resume.strip():
+                            _auto = evaluator._keyword_resume_eval(rec, _prof_resume)
+                            _apct = _auto["readiness_pct"]
+                            _acol = score_color(_apct)
+                            st.markdown(
+                                f'<div class="res-panel" style="padding:10px 16px">'
+                                f'<b style="color:{_acol};font-size:1.3rem">{_apct}%</b>'
+                                f'&nbsp; <span style="color:#94A3B8;font-size:.82rem">Profile match · {_auto["verdict"]}</span>'
+                                f'</div>', unsafe_allow_html=True)
+                            if _auto["met"]:
+                                st.success("✅ Met: " + " · ".join(_auto["met"][:4]))
+                            if _auto["missing"]:
+                                st.error("❌ Missing: " + " · ".join(_auto["missing"][:4]))
+                            st.caption("Auto-scored from your Job Seeker Profile. Upload resume below for deeper Opporta Intelligence analysis.")
+                        else:
+                            st.caption("Complete your **Job Seeker Profile** (Profile → Job Seeker Profile tab) for auto-scoring.")
+
+                        # Optional resume upload for deeper AI analysis
+                        resume_up = st.file_uploader("Upload resume for Opporta Intelligence analysis (optional)",
+                                                     type=["pdf","txt"],
+                                                     key=f"jr_{rec.get('source_id')}")
+                        if resume_up:
+                            rtext = (_read_pdf_text(resume_up)
+                                     if resume_up.name.lower().endswith(".pdf")
+                                     else resume_up.read().decode("utf-8", errors="ignore"))
+                            if st.button("⚡ Deep Analysis", key=f"jra_{rec.get('source_id')}"):
+                                with st.spinner("Opporta Intelligence analyzing resume..."):
+                                    res = evaluator.evaluate_resume_for_job(rec, rtext)
+                                pct   = res["readiness_pct"]
+                                color = score_color(pct)
+                                st.markdown(f"""<div class="res-panel">
+                                  <b style="color:{color};font-size:1.5rem">{pct}%</b>
+                                  &nbsp; <span style="color:#94A3B8;font-size:.85rem">{res['verdict']}</span>
+                                </div>""", unsafe_allow_html=True)
+                                if res["met"]:    st.success("Met: " + " · ".join(res["met"]))
+                                if res["missing"]:st.error("Missing: " + " · ".join(res["missing"]))
+
+    # ── TAB 2: Upcoming Exams & Study Matrix (verified authorities) ──
+    with jtab2:
         st.markdown(
-            '<div class="portal-intro"><b>Official commissions &amp; boards.</b> '
-            '<span>For exam notifications, admit cards, results and application portals, route '
-            'directly to the authoritative recruitment authorities below. Every link opens the '
-            'official portal in a new browser tab.</span></div>', unsafe_allow_html=True)
+            '<div class="portal-intro"><b>Official commissions, exam calendars &amp; study material.</b> '
+            '<span>Every recruitment authority below is the authoritative source for exam '
+            'notifications, schedules, admit cards, syllabi, previous papers and results. Each '
+            'link opens the official portal in a new browser tab.</span></div>', unsafe_allow_html=True)
         for _region, _items in RECRUITMENT_AUTHORITIES.items():
-            _portal_region(_region, "Commissions, boards & recruitment portals", _items, cols=2)
+            _portal_region(_region, "Notifications · schedules · admit cards · results", _items, cols=2)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── DOCUMENTS ─────────────────────────────────────────────────────────────────

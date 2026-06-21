@@ -691,6 +691,31 @@ def _districts_for_state(state: str) -> list[str]:
 df_t = load_table("tenders")
 df_j = load_table("jobs")
 
+# Real categories present in the live data, ordered by how many tenders use them.
+# Filters & the Profile sector picker are built from THESE (not a hardcoded list),
+# so every chip/option actually returns results and matches the scoring engine.
+def _real_categories(df: pd.DataFrame, limit: int | None = None) -> list[str]:
+    if df.empty or "category" not in df:
+        return []
+    cats = df["category"].dropna().astype(str)
+    cats = cats[cats.str.strip() != ""].value_counts().index.tolist()
+    return cats[:limit] if limit else cats
+
+TENDER_CATS_BY_FREQ = _real_categories(df_t)
+
+_CAT_EMOJI = {
+    "civil": "🏗️", "road": "🛣️", "bridge": "🌉", "building": "🏢", "canal": "🚤",
+    "marine": "⚓", "abrasive": "🪨", "pipe": "🚰", "water": "💧", "electric": "💡",
+    "solar": "☀️", "medical": "🏥", "coal": "⛏️", "mining": "⛏️", "transport": "🚛",
+    "it ": "💻", "municipal": "🏙️", "survey": "📐", "manufactur": "🏭", "crane": "🏗️",
+}
+def _emoji_for(cat: str) -> str:
+    low = (cat or "").lower()
+    for kw, em in _CAT_EMOJI.items():
+        if kw in low:
+            return em
+    return "📋"
+
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     _limg = f'<img src="{_LOGO_URI}" style="width:72px;height:72px;display:block;margin:0 auto 8px;border-radius:14px;box-shadow:0 0 24px rgba(0,196,255,.35)">' if _LOGO_URI else ''
@@ -1400,20 +1425,17 @@ elif "Explore" in page:
         if not _t_hits and not _j_hits:
             st.info("No tenders or jobs match that search. Try a broader keyword.")
     else:
-        # No query → discovery shortcuts
-        st.caption("Jump straight into a sector, or open a dedicated portal.")
-        _disc = [
-            ("⛏️", "Coal & Mining"),       ("🏗️", "Civil Infrastructure"),
-            ("💡", "Electrical & Energy"), ("🚰", "Water & Irrigation"),
-            ("🏥", "Medical Procurement"), ("💻", "IT Services"),
-            ("🚛", "Transport"),           ("🏙️", "Municipal Projects"),
-        ]
-        _dc = st.columns(4)
-        for _i, (_em, _nm) in enumerate(_disc):
-            if _dc[_i % 4].button(f"{_em}  {_nm}", use_container_width=True, key=f"disc_{_nm}"):
-                st.session_state.explore_category = _nm
-                st.session_state.current_page = "📄  Tenders"
-                st.rerun()
+        # No query → discovery shortcuts built from the REAL top categories,
+        # so every chip is guaranteed to return tenders.
+        st.caption("Jump straight into a category, or open a dedicated portal.")
+        _disc = [(_emoji_for(_c), _c) for _c in TENDER_CATS_BY_FREQ[:8]]
+        if _disc:
+            _dc = st.columns(4)
+            for _i, (_em, _nm) in enumerate(_disc):
+                if _dc[_i % 4].button(f"{_em}  {_nm}", use_container_width=True, key=f"disc_{_nm}"):
+                    st.session_state.explore_category = _nm
+                    st.session_state.current_page = "📄  Tenders"
+                    st.rerun()
         st.markdown("<br>", unsafe_allow_html=True)
         _pc1, _pc2 = st.columns(2)
         if _pc1.button("📄  Tender Portal", use_container_width=True, key="exp_portal_t"):
@@ -2562,8 +2584,15 @@ elif "Profile" in page:
                     unsafe_allow_html=True)
         ps1, ps2 = st.columns(2)
         with ps1:
-            sectors = st.multiselect("Sectors you bid in", SECTORS,
-                                     default=[s for s in (profile.get("sectors") or []) if s in SECTORS])
+            # Options come from the REAL live tender categories so a chosen sector
+            # actually matches tenders and lifts the fit score (was a hardcoded
+            # list whose names didn't match the scraped data).
+            _sector_opts = (TENDER_CATS_BY_FREQ[:20] or list(SECTORS))
+            for _s in (profile.get("sectors") or []):
+                if _s not in _sector_opts:
+                    _sector_opts.append(_s)
+            sectors = st.multiselect("Sectors you bid in (live tender categories)", _sector_opts,
+                                     default=[s for s in (profile.get("sectors") or []) if s in _sector_opts])
             target_states = st.multiselect("Target States",
                                            ["Chhattisgarh", "Uttar Pradesh"],
                                            default=profile.get("states", ["Chhattisgarh", "Uttar Pradesh"]))

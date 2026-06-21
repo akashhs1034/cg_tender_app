@@ -61,7 +61,11 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
             resp = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
                 headers={"Content-Type": "application/json", "X-goog-api-key": gemini_key},
-                json={"contents": [{"parts": parts}]}, timeout=120,
+                # thinkingBudget:0 -> far fewer tokens/quota per call, no quality
+                # loss on these heavily-structured prompts.
+                json={"contents": [{"parts": parts}],
+                      "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
+                timeout=120,
             )
             resp.raise_for_status()
             _parts = resp.json()["candidates"][0]["content"]["parts"]

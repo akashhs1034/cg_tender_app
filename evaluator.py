@@ -52,7 +52,12 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
             resp = requests.post(
                 f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
                 headers={"Content-Type": "application/json", "X-goog-api-key": gemini_key},
-                json={"contents": [{"parts": parts}]}, timeout=90,
+                # thinkingBudget:0 disables the model's extended "thinking" step —
+                # ~8x fewer tokens per call (less quota, faster) with no quality loss
+                # on these structured JSON tasks.
+                json={"contents": [{"parts": parts}],
+                      "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
+                timeout=90,
             )
             resp.raise_for_status()
             _parts = resp.json()["candidates"][0]["content"]["parts"]

@@ -686,7 +686,6 @@ if "Dashboard" in page:
           <p class="hero-sub">
             India's most advanced tender and government job intelligence system
             for Chhattisgarh & Uttar Pradesh contractors.
-            Sign in on the left to access your personalized intelligence feed.
           </p>
           <div class="hero-cta-row">
             <div class="hero-pill">📋 {len(df_t)} Active Tenders</div>
@@ -694,6 +693,50 @@ if "Dashboard" in page:
             <div class="hero-pill">🌏 CG &amp; UP Coverage</div>
           </div>
         </div>""", unsafe_allow_html=True)
+
+        # ── Inline login card (visible on all screens, especially mobile) ──
+        st.markdown("""
+        <div style="max-width:420px;margin:0 auto 40px;background:linear-gradient(145deg,#0B1329,#0D1A35);
+             border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:28px 28px 24px;
+             position:relative;overflow:hidden;">
+          <div style="position:absolute;top:0;left:0;right:0;height:2px;
+               background:linear-gradient(90deg,#6366F1,#8B5CF6,#06B6D4)"></div>
+          <div style="font-size:.7rem;font-weight:700;color:#6366F1;text-transform:uppercase;
+               letter-spacing:.1em;margin-bottom:18px">⚡ Sign in to Opporta</div>
+        </div>""", unsafe_allow_html=True)
+
+        _col, = [st.columns(1)[0]]
+        with st.container():
+            _login_col, _spacer = st.columns([2, 1])
+            with _login_col:
+                ml_email = st.text_input("Email address", key="ml_email",
+                                         placeholder="you@example.com",
+                                         label_visibility="collapsed")
+                ml_pw    = st.text_input("Password", type="password", key="ml_pw",
+                                         placeholder="Password",
+                                         label_visibility="collapsed")
+                b1, b2 = st.columns(2)
+                if b1.button("Login", use_container_width=True, key="ml_login"):
+                    if ml_email and ml_pw:
+                        ok, msg, token = accounts.login_user(ml_email, ml_pw)
+                        if ok:
+                            st.session_state.authenticated = True
+                            st.session_state.email    = ml_email.strip().lower()
+                            st.session_state.sb_token = token or ""
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                    else:
+                        st.warning("Enter your email and password.")
+                if b2.button("Register", use_container_width=True, key="ml_register"):
+                    if ml_email and ml_pw:
+                        ok, msg = accounts.register_user(ml_email, ml_pw)
+                        if ok:
+                            st.success(msg + " Now login.")
+                        else:
+                            st.error(msg)
+                    else:
+                        st.warning("Enter email and password to register.")
 
     else:
         today_str = date.today().strftime("%A, %d %B %Y")

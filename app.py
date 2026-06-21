@@ -1,4 +1,4 @@
-﻿"""
+"""
 app.py -- OPPORTA  ·  Every Opportunity. One Platform.
 Elite Intelligence OS for CG & UP Government Tenders & Jobs.
 """
@@ -996,31 +996,12 @@ if "Dashboard" in page:
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # ── Quick-access nav cards (desktop full view, mobile 2-col grid) ──
-        st.markdown('<div class="nav-cards-grid">', unsafe_allow_html=True)
-        _nav_cards = [
-            ("🔍", "Explore Tenders",   "🔍  Explore"),
-            ("💼", "Government Jobs",   "💼  Jobs"),
-            ("⚡", "AI Workspace",      "⚡  Opporta Workspace"),
-            ("📄", "My Documents",      "📄  Documents"),
-            ("🔔", "Alerts",            "🔔  Alerts"),
-            ("📊", "Analytics",         "📊  Analytics"),
-            ("👤", "Profile",           "👤  Profile"),
-            ("💾", "Saved Pipeline",    "🔍  Explore"),
-        ]
-        _nc = st.columns(len(_nav_cards))
-        for _col, (_icon, _lbl, _pg) in zip(_nc, _nav_cards):
-            with _col:
-                st.markdown(f"""<div class="nav-card" style="margin-bottom:0">
-                  <div class="nav-card-icon">{_icon}</div>
-                  <div class="nav-card-label">{_lbl}</div>
-                </div>""", unsafe_allow_html=True)
-                if st.button(_lbl, key=f"ncard_{_pg}_{_lbl}", use_container_width=True):
-                    st.session_state.current_page = _pg
-                    st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+        # ══════════════════════════════════════════════════════════════════════
+        # SECTION 1 (already above): Greeting / Briefing banner
+        # SECTION 2: Active-tender general information + live list
+        # ══════════════════════════════════════════════════════════════════════
 
-        # ── KPI Grid ──
+        # ── KPI Grid (general information) ──
         kpi_data = [
             (str(len(df_t)),           "Active Tenders",     "Live listings",       "📋", False),
             (str(len(df_j)),           "Open Jobs",          "Across CG + UP",      "💼", False),
@@ -1040,84 +1021,150 @@ if "Dashboard" in page:
             </div>""", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
-        col_main, col_side = st.columns([3, 1])
 
-        with col_main:
-            st.markdown("""<div class="sec-hd">
-              <span class="sec-title">🎯 Top Matches For You</span>
-              <div class="sec-divider"></div>
-            </div>""", unsafe_allow_html=True)
+        # ── Active Tenders · Top matches list ──
+        st.markdown("""<div class="sec-hd">
+          <span class="sec-title">📋 Active Tenders</span>
+          <span class="sec-badge-green">🎯 Matched to your profile</span>
+          <div class="sec-divider"></div>
+        </div>""", unsafe_allow_html=True)
 
-            if scored:
-                for s, eligible, reasons, rec in scored[:8]:
-                    rc     = ring_cls(s)
-                    dl     = days_left(rec.get("deadline"))
-                    dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
-                    val    = _v(rec.get("value_text")) or (
-                        f"₹{float(rec.get('value_lakhs',0)):.0f}L" if rec.get("value_lakhs") else "—")
-                    elig_cls   = "tag-green" if eligible else "tag-warn"
-                    elig_txt   = "✅ Eligible" if eligible else "⚠ Review"
-                    district   = _v(rec.get("district"), "State-wide")
-                    color      = score_color(s)
+        if scored:
+            for s, eligible, reasons, rec in scored[:8]:
+                rc     = ring_cls(s)
+                dl     = days_left(rec.get("deadline"))
+                dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
+                val    = _v(rec.get("value_text")) or (
+                    f"₹{float(rec.get('value_lakhs',0)):.0f}L" if rec.get("value_lakhs") else "—")
+                elig_cls   = "tag-green" if eligible else "tag-warn"
+                elig_txt   = "✅ Eligible" if eligible else "⚠ Review"
+                district   = _v(rec.get("district"), "State-wide")
+                color      = score_color(s)
 
-                    st.markdown(f"""<div class="ocard">
-                      <div class="ocard-row">
-                        <div class="ocard-body">
-                          <div class="ocard-title">{safe_str(rec.get('title'))}</div>
-                          <div class="ocard-org">🏛 {safe_str(rec.get('organization'), 60)} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
-                          <div class="ocard-tags">
-                            <span class="tag tag-val">💰 {val}</span>
-                            <span class="tag tag-dl">{dl_txt}</span>
-                            <span class="tag tag-loc">📍 {district}</span>
-                            <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
-                            <span class="tag {elig_cls}">{elig_txt}</span>
-                          </div>
-                        </div>
-                        <div class="ring {rc}" style="color:{color};border-color:{color}">{s}</div>
+                st.markdown(f"""<div class="ocard">
+                  <div class="ocard-row">
+                    <div class="ocard-body">
+                      <div class="ocard-title">{safe_str(rec.get('title'))}</div>
+                      <div class="ocard-org">🏛 {safe_str(rec.get('organization'), 60)} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
+                      <div class="ocard-tags">
+                        <span class="tag tag-val">💰 {val}</span>
+                        <span class="tag tag-dl">{dl_txt}</span>
+                        <span class="tag tag-loc">📍 {district}</span>
+                        <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
+                        <span class="tag {elig_cls}">{elig_txt}</span>
                       </div>
-                    </div>""", unsafe_allow_html=True)
-
-                    with st.expander(f"Details — {safe_str(rec.get('title'), 50)}"):
-                        dc1, dc2 = st.columns(2)
-                        dc1.write(f"**Organization:** {_v(rec.get('organization'))}")
-                        dc1.write(f"**Category:** {_v(rec.get('category'))}")
-                        dc1.write(f"**District:** {district}")
-                        dc1.write(f"**State:** {_v(rec.get('state'))}")
-                        dc2.write(f"**Value:** {val}")
-                        dc2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
-                        dc2.write(f"**Source ID:** {_v(rec.get('source_id'))}")
-                        if reasons:
-                            st.markdown("**Match reasons:**")
-                            for r in reasons:
-                                st.caption(f"• {r}")
-                        doc_url = rec.get("document_url")
-                        if doc_url and str(doc_url) not in ("nan","None","—"):
-                            _pdf_widget(doc_url, rec.get("source_id",""), ctx="dash")
-                        if st.button("➕ Save to Pipeline", key=f"d_save_{rec.get('source_id')}"):
-                            accounts.save_tender(email, rec.get("source_id"), token=_token)
-                            st.toast("✓ Saved to pipeline")
-            else:
-                st.markdown("""<div class="ocard" style="text-align:center;padding:32px;color:#475569">
-                  <div style="font-size:2rem;margin-bottom:12px">📋</div>
-                  <div style="font-size:.88rem;font-weight:600;color:#64748B">Complete your Profile to see personalized matches</div>
-                  <div style="font-size:.77rem;color:#334155;margin-top:6px">Set your contractor class, sectors, and target districts</div>
+                    </div>
+                    <div class="ring {rc}" style="color:{color};border-color:{color}">{s}</div>
+                  </div>
                 </div>""", unsafe_allow_html=True)
 
-        with col_side:
-            st.markdown("""<div class="sec-hd">
-              <span class="sec-title">⚡ Quick Filters</span>
+                with st.expander(f"Details — {safe_str(rec.get('title'), 50)}"):
+                    dc1, dc2 = st.columns(2)
+                    dc1.write(f"**Organization:** {_v(rec.get('organization'))}")
+                    dc1.write(f"**Category:** {_v(rec.get('category'))}")
+                    dc1.write(f"**District:** {district}")
+                    dc1.write(f"**State:** {_v(rec.get('state'))}")
+                    dc2.write(f"**Value:** {val}")
+                    dc2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
+                    dc2.write(f"**Source ID:** {_v(rec.get('source_id'))}")
+                    if reasons:
+                        st.markdown("**Match reasons:**")
+                        for r in reasons:
+                            st.caption(f"• {r}")
+                    doc_url = rec.get("document_url")
+                    if doc_url and str(doc_url) not in ("nan","None","—"):
+                        _pdf_widget(doc_url, rec.get("source_id",""), ctx="dash")
+                    if st.button("➕ Save to Pipeline", key=f"d_save_{rec.get('source_id')}"):
+                        accounts.save_tender(email, rec.get("source_id"), token=_token)
+                        st.toast("✓ Saved to pipeline")
+
+            if st.button("🔍  See all active tenders  →", use_container_width=True,
+                         key="dash_see_all_tenders"):
+                st.session_state.current_page = "🔍  Explore"
+                st.rerun()
+        else:
+            st.markdown("""<div class="ocard" style="text-align:center;padding:32px;color:#475569">
+              <div style="font-size:2rem;margin-bottom:12px">📋</div>
+              <div style="font-size:.88rem;font-weight:600;color:#64748B">Complete your Profile to see personalized matches</div>
+              <div style="font-size:.77rem;color:#334155;margin-top:6px">Set your contractor class, sectors, and target districts</div>
             </div>""", unsafe_allow_html=True)
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SECTION 3: Features & Tools — click to open, everything inside
+        # ══════════════════════════════════════════════════════════════════════
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander("⚡  Features & Tools  —  tap to open the Analyzer, Documents, Alerts & more", expanded=False):
+            _feat_cards = [
+                ("🔍", "Explore Tenders",  "Search & filter all live tenders",     "🔍  Explore"),
+                ("⚡", "AI Analyzer",      "Score, evaluate & generate bids",      "⚡  Opporta Workspace"),
+                ("💼", "Government Jobs",  "Browse jobs matched to your resume",   "💼  Jobs"),
+                ("📄", "My Documents",     "Secure vault for your certificates",   "📄  Documents"),
+                ("🔔", "Smart Alerts",     "Get notified of new opportunities",    "🔔  Alerts"),
+                ("📊", "Analytics",        "Market trends & insights",             "📊  Analytics"),
+                ("💾", "Saved Pipeline",   "Track tenders you're bidding on",      "🔍  Explore"),
+                ("👤", "My Profile",       "Tune your matching criteria",          "👤  Profile"),
+            ]
+            _fc = st.columns(4)
+            for _i, (_icon, _lbl, _desc, _pg) in enumerate(_feat_cards):
+                with _fc[_i % 4]:
+                    st.markdown(f"""<div class="nav-card" style="margin-bottom:0;min-height:118px">
+                      <div class="nav-card-icon">{_icon}</div>
+                      <div class="nav-card-label">{_lbl}</div>
+                      <div style="font-size:.62rem;color:#475569;margin-top:5px;line-height:1.3">{_desc}</div>
+                    </div>""", unsafe_allow_html=True)
+                    if st.button(f"Open {_lbl}", key=f"feat_{_pg}_{_lbl}", use_container_width=True):
+                        st.session_state.current_page = _pg
+                        st.rerun()
+
+            st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="profile-section-title">⚡ Quick Category Filters</div>',
+                        unsafe_allow_html=True)
             qf_items = [
-                ("⛏️", "Coal & Mining"),    ("🏗️", "Civil Infrastructure"),
+                ("⛏️", "Coal & Mining"),       ("🏗️", "Civil Infrastructure"),
                 ("💡", "Electrical & Energy"), ("🚰", "Water & Irrigation"),
                 ("🏥", "Medical Procurement"), ("💻", "IT Services"),
-                ("🚛", "Transport"),          ("🏙️", "Municipal Projects"),
+                ("🚛", "Transport"),           ("🏙️", "Municipal Projects"),
             ]
-            for emoji, name in qf_items:
-                if st.button(f"{emoji}  {name}", use_container_width=True, key=f"qf_{name}"):
+            _qfc = st.columns(4)
+            for _i, (emoji, name) in enumerate(qf_items):
+                if _qfc[_i % 4].button(f"{emoji}  {name}", use_container_width=True, key=f"qf_{name}"):
                     st.session_state.explore_category = name
                     st.session_state.current_page     = "🔍  Explore"
                     st.rerun()
+
+        # ══════════════════════════════════════════════════════════════════════
+        # SECTION 4: Latest Government Jobs
+        # ══════════════════════════════════════════════════════════════════════
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("""<div class="sec-hd">
+          <span class="sec-title">💼 Latest Government Jobs</span>
+          <span class="sec-badge">CG + UP</span>
+          <div class="sec-divider"></div>
+        </div>""", unsafe_allow_html=True)
+
+        if not df_j.empty:
+            for _jr in df_j.head(6).to_dict("records"):
+                _jtitle = _html.escape(safe_str(_jr.get("title"), 95))
+                _jdept  = _esc(_jr.get("department"))
+                _jstate = _esc(_jr.get("state"))
+                _jvac   = _v(_jr.get("vacancies"))
+                _vac_badge = f'<div class="jvac">{_jvac} posts</div>' if _jvac not in ("—", "") else ''
+                st.markdown(
+                    f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
+                    f'<div class="jcard-title">{_jtitle}</div>'
+                    f'<div class="jcard-dept">🏛 {_jdept} &nbsp;&middot;&nbsp; {_jstate}</div>'
+                    f'</div>{_vac_badge}</div></div>',
+                    unsafe_allow_html=True,
+                )
+            if st.button("💼  See all government jobs  →", use_container_width=True,
+                         key="dash_see_all_jobs"):
+                st.session_state.current_page = "💼  Jobs"
+                st.rerun()
+        else:
+            st.markdown("""<div class="jcard" style="text-align:center;padding:28px;color:#475569">
+              <div style="font-size:1.6rem;margin-bottom:8px">💼</div>
+              <div style="font-size:.84rem;font-weight:600;color:#64748B">No open jobs right now — check back tomorrow</div>
+            </div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── EXPLORE ───────────────────────────────────────────────────────────────────

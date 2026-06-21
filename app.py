@@ -766,6 +766,24 @@ RECRUITMENT_AUTHORITIES = {
     ],
 }
 
+# Free, official study material — verified live government / education platforms.
+# (Exam-specific syllabi & previous papers live on each authority's own portal
+#  above; these are the free prep resources to actually study from.)
+STUDY_RESOURCES = {
+    "Free Learning Platforms": [
+        ("📘 SWAYAM — Free Govt Courses",        "https://swayam.gov.in"),
+        ("🎓 NPTEL — Engineering & Science",      "https://nptel.ac.in"),
+        ("📗 NCERT — Free Textbooks",             "https://ncert.nic.in"),
+        ("📚 National Digital Library",           "https://ndl.iitkgp.ac.in"),
+    ],
+    "Current Affairs & General Knowledge": [
+        ("📰 PIB — Govt Press / Current Affairs", "https://pib.gov.in"),
+        ("🗞 Yojana / Kurukshetra (Publications)", "https://www.publicationsdivision.nic.in"),
+        ("🏛 Chhattisgarh State Portal (CG GK)",  "https://cgstate.gov.in"),
+        ("🏛 Uttar Pradesh State Portal (UP GK)", "https://up.gov.in"),
+    ],
+}
+
 def _portal_region(title: str, subtitle: str, items: list, cols: int = 2) -> None:
     """Render one titled regional block of official-portal link buttons."""
     st.markdown(
@@ -2369,15 +2387,25 @@ elif "Jobs" in page:
                                 if res["met"]:    st.success("Met: " + " · ".join(res["met"]))
                                 if res["missing"]:st.error("Missing: " + " · ".join(res["missing"]))
 
-    # ── TAB 2: Upcoming Exams & Study Matrix (verified authorities) ──
+    # ── TAB 2: Upcoming Exams & Study Matrix (verified authorities + resources) ──
     with jtab2:
         st.markdown(
-            '<div class="portal-intro"><b>Official commissions, exam calendars &amp; study material.</b> '
-            '<span>Every recruitment authority below is the authoritative source for exam '
-            'notifications, schedules, admit cards, syllabi, previous papers and results. Each '
-            'link opens the official portal in a new browser tab.</span></div>', unsafe_allow_html=True)
+            '<div class="portal-intro"><b>Recruitment authorities + free study resources.</b> '
+            '<span>The commissions below publish exam notifications, schedules, admit cards, '
+            'official syllabi, previous papers and results on their own portals. Below them are '
+            'free government learning platforms to actually prepare from. Every link opens in a '
+            'new browser tab.</span></div>', unsafe_allow_html=True)
+
+        st.markdown('<div class="profile-section-title" style="margin-top:6px">🏛 Official Recruitment Authorities</div>',
+                    unsafe_allow_html=True)
         for _region, _items in RECRUITMENT_AUTHORITIES.items():
-            _portal_region(_region, "Notifications · schedules · admit cards · results", _items, cols=2)
+            _portal_region(_region, "Notifications · syllabi · admit cards · results", _items, cols=2)
+
+        st.markdown('<div class="profile-section-title" style="margin-top:26px">📚 Free Study Resources</div>',
+                    unsafe_allow_html=True)
+        st.caption("Verified free government & education platforms — courses, textbooks, current affairs.")
+        for _region, _items in STUDY_RESOURCES.items():
+            _portal_region(_region, "Free · official · open-access", _items, cols=2)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── DOCUMENTS ─────────────────────────────────────────────────────────────────

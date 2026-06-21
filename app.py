@@ -719,7 +719,7 @@ with st.sidebar:
                 st.session_state.sb_token = token or ""
                 st.rerun()
             elif msg in ("EMAIL_NOT_CONFIRMED", "RATE_LIMIT"):
-                st.warning("Use **Continue with Google** on the main screen — instant, no email needed.")
+                st.warning("📧 Please confirm your email (check inbox/spam), then log in — or wait a moment and retry.")
             else:
                 st.error(msg)
         if c2.button("Register", use_container_width=True):
@@ -736,10 +736,10 @@ with st.sidebar:
             elif msg == "ALREADY_EXISTS":
                 st.info("Already registered — click Login.")
             elif msg == "RATE_LIMIT":
-                st.warning("Email server busy — use **Continue with Google** instead (instant).")
+                st.warning("⏳ Email server busy — please wait a minute and try again.")
             else:
                 st.error(msg)
-        st.caption("Tip: **Continue with Google** on the main screen is the fastest — no email or codes.")
+        st.caption("Tip: signup is instant — no verification code needed.")
         st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="sb-nav-label">Operational Modules</div>', unsafe_allow_html=True)
@@ -944,28 +944,9 @@ if "Dashboard" in page:
 
             _ac, _sp = st.columns([1.4, 1])
             with _ac:
-                # ── Google Sign-In ──
-                _gurl = accounts.get_google_oauth_url(
-                    redirect_to=_secret("APP_URL") or "https://opporta.streamlit.app"
-                )
-                if _gurl:
-                    st.markdown(
-                        f'<a href="{_gurl}" target="_self" class="google-btn">'
-                        f'<svg width="18" height="18" viewBox="0 0 48 48">'
-                        f'<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>'
-                        f'<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>'
-                        f'<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>'
-                        f'<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>'
-                        f'<path fill="none" d="M0 0h48v48H0z"/></svg>'
-                        f' Continue with Google</a>',
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(
-                        '<div style="text-align:center;font-size:.72rem;color:#10B981;'
-                        'font-weight:600;margin:-6px 0 4px">✓ Recommended — instant, no email, no codes</div>',
-                        unsafe_allow_html=True)
-                    st.markdown('<div class="auth-divider">or use email</div>',
-                                unsafe_allow_html=True)
+                # Google Sign-In is temporarily disabled while Google reviews/
+                # verifies the app. Email + password (instant, no OTP) is the
+                # active method. Re-enable Google once verification is approved.
 
                 # ── Auth mode tabs ──
                 _t1, _t2 = st.columns(2)
@@ -1000,9 +981,9 @@ if "Dashboard" in page:
                                 st.session_state.entered_platform = False
                                 st.rerun()
                             elif msg == "EMAIL_NOT_CONFIRMED":
-                                st.warning("📧 This email isn't confirmed yet. Use **Continue with Google** above for instant access — no email needed.")
+                                st.warning("📧 This email isn't confirmed yet. Check your inbox (and spam) for the confirmation link, then log in.")
                             elif msg == "RATE_LIMIT":
-                                st.warning("⏳ The login server is busy. Please wait a moment, or use **Continue with Google** above (instant).")
+                                st.warning("⏳ The login server is busy right now. Please wait a minute and try again.")
                             else:
                                 st.error(msg)
                         else:
@@ -1010,7 +991,7 @@ if "Dashboard" in page:
 
                 # ── REGISTER: direct signup (no OTP email — instant) ──
                 elif st.session_state.auth_mode == "register":
-                    st.caption("Fastest: use **Continue with Google** above. Or create an email account below — no verification code needed.")
+                    st.caption("Create your account below — instant, no verification code needed.")
                     _re = st.text_input("Email", key="reg_email",
                                         placeholder="you@gmail.com",
                                         label_visibility="collapsed")
@@ -1034,13 +1015,13 @@ if "Dashboard" in page:
                                     st.session_state.entered_platform = False
                                     st.rerun()
                                 elif lmsg == "EMAIL_NOT_CONFIRMED":
-                                    st.success("✅ Account created. Email confirmation is ON in your project — either confirm via the email link, or (recommended) use **Continue with Google** above for instant access.")
+                                    st.success("✅ Account created. Please check your email for a confirmation link, then log in. (Tip: ask the admin to turn off 'Confirm email' in Supabase for instant access.)")
                                 else:
                                     st.success("✅ Account created — switch to **Login** and sign in.")
                             elif msg == "ALREADY_EXISTS":
                                 st.info("This email is already registered. Switch to **Login** above.")
                             elif msg == "RATE_LIMIT":
-                                st.warning("⏳ Too many signups on the email server right now. Please use **Continue with Google** above — it's instant and never rate-limited.")
+                                st.warning("⏳ Too many signups on the email server right now. Please wait a few minutes and try again.")
                             else:
                                 st.error(msg)
 

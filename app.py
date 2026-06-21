@@ -447,10 +447,19 @@ def load_table(name: str) -> pd.DataFrame:
     if url and key:
         try:
             from supabase import create_client
-            rows = create_client(url, key).table(name).select("*").limit(2000).execute().data
-            if rows:
-                df = pd.DataFrame(rows)
-                return _drop_expired(df)
+            client = create_client(url, key)
+            # Paginate in batches of 1000 (Supabase default cap)
+            all_rows, offset, batch = [], 0, 1000
+            while True:
+                chunk = client.table(name).select("*").range(offset, offset + batch - 1).execute().data
+                if not chunk:
+                    break
+                all_rows.extend(chunk)
+                if len(chunk) < batch:
+                    break
+                offset += batch
+            if all_rows:
+                return _drop_expired(pd.DataFrame(all_rows))
             return pd.DataFrame()
         except Exception as e:
             st.error(f"Supabase error on {name}: {e}")

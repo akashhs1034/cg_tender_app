@@ -99,177 +99,118 @@ def _infer_district(text: str, state: str) -> str | None:
     return None
 
 
+_DATA_EP = f"{_BASE}/all-bids-data"
+
+# Location search terms (GeM bids are national; we pull CG/UP-relevant ones by
+# searching state + major district names, which match buyer/location text).
+_SEARCH_TERMS = [
+    ("Chhattisgarh", "Chhattisgarh"), ("Raipur", "Chhattisgarh"),
+    ("Bilaspur", "Chhattisgarh"),     ("Durg", "Chhattisgarh"),
+    ("Korba", "Chhattisgarh"),        ("Bastar", "Chhattisgarh"),
+    ("Uttar Pradesh", "Uttar Pradesh"), ("Lucknow", "Uttar Pradesh"),
+    ("Kanpur", "Uttar Pradesh"),      ("Varanasi", "Uttar Pradesh"),
+    ("Prayagraj", "Uttar Pradesh"),   ("Gorakhpur", "Uttar Pradesh"),
+]
+
+
 def _make_session() -> requests.Session:
     s = requests.Session()
     s.headers.update(_HEADERS)
     return s
 
 
-def _is_target_state(state_cell: str) -> bool:
-    s = state_cell.strip().lower()
-    return any(t.lower() in s for t in _STATES)
-
-
-def _has_priority_kw(text: str) -> bool:
-    t = text.lower()
-    return any(kw in t for kw in _PRIORITY_KW)
-
-
-def _parse_table(html: str, default_state: str = "") -> list[dict]:
-    """Extract rows from the GeM bid listing table."""
-    soup = BeautifulSoup(html, "html.parser")
-    rows_out = []
-
-    # Try the standard GeM table structure
-    for table in soup.find_all("table"):
-        headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
-        if not headers:
-            continue
-
-        # Map header names to column indices
-        col = {}
-        for i, h in enumerate(headers):
-            if "bid no" in h or "bid number" in h:
-                col["bid_no"] = i
-            elif "category" in h:
-                col["category"] = i
-            elif "end date" in h or "bid validity" in h or "validity" in h:
-                col["deadline"] = i
-            elif "dept" in h or "department" in h or "ministry" in h:
-                col["dept"] = i
-            elif "state" in h:
-                col["state"] = i
-            elif "start" in h:
-                col["start"] = i
-            elif "emd" in h:
-                col["emd"] = i
-            elif "value" in h or "amount" in h:
-                col["value"] = i
-
-        if not col:
-            continue
-
-        tbody = table.find("tbody") or table
-        for tr in tbody.find_all("tr"):
-            cells = tr.find_all("td")
-            if not cells:
-                continue
-
-            def _cell(key):
-                idx = col.get(key)
-                if idx is None or idx >= len(cells):
-                    return ""
-                return cells[idx].get_text(strip=True)
-
-            bid_no   = _cell("bid_no")
-            cat      = _cell("category")
-            deadline = _cell("deadline")
-            dept     = _cell("dept") or "Government of India"
-            state_v  = _cell("state") or default_state
-            emd      = _cell("emd")
-            val      = _cell("value")
-
-            if not bid_no:
-                continue
-
-            # State filter
-            if not _is_target_state(state_v):
-                continue
-
-            # Link from first anchor in bid_no cell
-            idx = col.get("bid_no", 0)
-            a = cells[idx].find("a") if idx < len(cells) else None
-            href = a["href"] if a and a.get("href") else ""
-            url = (href if href.startswith("http") else f"{_BASE}{href}") if href else f"{_BASE}/all-bids"
-
-            combined = f"{cat} {dept} {state_v}"
-            actual_state = ("Chhattisgarh" if "chhattisgarh" in state_v.lower() or "cg" == state_v.strip().lower()
-                            else "Uttar Pradesh" if "uttar" in state_v.lower() or "up" == state_v.strip().lower()
-                            else state_v)
-
-            rows_out.append(core.tender_record(
-                title=cat or f"GeM Bid {bid_no}",
-                state=actual_state,
-                organization=dept,
-                category=_infer_category(combined),
-                district=_infer_district(combined, actual_state),
-                value_text=val or None,
-                emd=emd or None,
-                deadline=deadline or None,
-                description=f"GeM Bid No: {bid_no}",
-                document_url=url,
-                source_portal="gem.gov.in",
-            ))
-
-    return rows_out
-
-
-def _fetch_page(sess: requests.Session, page: int, keyword: str = "", state: str = "") -> str | None:
-    params: dict = {"pageNo": page}
-    if keyword:
-        params["searchBid"] = keyword
-    if state:
-        params["state"] = state
+def _csrf_token(sess: requests.Session) -> str | None:
+    """Load /all-bids to obtain the CSRF token + session cookies."""
     try:
-        r = sess.get(_LIST, params=params, timeout=30)
-        r.raise_for_status()
-        return r.text
+        r = sess.get(f"{_BASE}/all-bids", timeout=30)
     except Exception as e:
-        print(f"   gem: page {page} kw={keyword!r} state={state!r} failed — {e}")
+        print(f"   gem: could not load all-bids — {e}")
         return None
+    for pat in (r'name="csrf-token"\s+content="([^"]+)"',
+                r'csrf_bd_gem_nk["\']?\s*[:=]\s*["\']([^"\']+)',
+                r'"csrf_token"\s*:\s*"([^"]+)"'):
+        m = re.search(pat, r.text)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _first(v):
+    """GeM returns most fields as single-element lists."""
+    if isinstance(v, list):
+        return v[0] if v else None
+    return v
+
+
+def _fetch_bids(sess: requests.Session, token: str, term: str, page: int) -> list[dict]:
+    import json
+    payload = {
+        "payload": json.dumps({
+            "page": page,
+            "param": {"searchBid": term, "searchType": "fullText"},
+            "filter": {"bidStatusType": "ongoing_bids", "byEndDate": {}},
+        }),
+        "csrf_bd_gem_nk": token,
+    }
+    try:
+        r = sess.post(_DATA_EP, data=payload, timeout=30,
+                      headers={"X-Requested-With": "XMLHttpRequest",
+                               "Referer": f"{_BASE}/all-bids"})
+        r.raise_for_status()
+        return r.json().get("response", {}).get("response", {}).get("docs", []) or []
+    except Exception as e:
+        print(f"   gem: search {term!r} p{page} failed — {e}")
+        return []
 
 
 def scrape() -> list[dict]:
-    """
-    Fetch GeM bids for CG and UP matching priority logistics/transport/coal keywords.
-    Returns list of core.tender_record() dicts.
-    """
+    """Fetch ongoing GeM bids relevant to CG/UP via the JSON bid API."""
     sess = _make_session()
     records: list[dict] = []
-    seen_ids: set[str] = set()
+    seen: set[str] = set()
 
-    # Strategy 1: search by keyword for CG and UP
-    search_pairs = [
-        ("transport", "Chhattisgarh"),
-        ("coal", "Chhattisgarh"),
-        ("vehicle hiring", "Chhattisgarh"),
-        ("manpower", "Chhattisgarh"),
-        ("transport", "Uttar Pradesh"),
-        ("vehicle hiring", "Uttar Pradesh"),
-        ("manpower", "Uttar Pradesh"),
-        ("construction", "Chhattisgarh"),
-    ]
+    token = None
+    for _ in range(3):
+        token = _csrf_token(sess)
+        if token:
+            break
+        time.sleep(1)
+    if not token:
+        print("   gem: WARNING — could not obtain CSRF token; GeM unavailable")
+        return []
 
-    for kw, state in search_pairs:
-        for pg in range(1, min(_MAX_PG // len(search_pairs) + 1, 6)):
-            html = _fetch_page(sess, pg, keyword=kw, state=state)
-            if not html:
+    max_pages = max(1, min(_MAX_PG // len(_SEARCH_TERMS) + 1, 5))
+    for term, state in _SEARCH_TERMS:
+        for page in range(1, max_pages + 1):
+            docs = _fetch_bids(sess, token, term, page)
+            if not docs:
                 break
-            batch = _parse_table(html, default_state=state)
-            if not batch:
-                break  # no more rows
-            for rec in batch:
-                sid = rec["source_id"]
-                if sid not in seen_ids:
-                    seen_ids.add(sid)
-                    records.append(rec)
+            for doc in docs:
+                bid_no = _first(doc.get("b_bid_number"))
+                if not bid_no or bid_no in seen:
+                    continue
+                seen.add(bid_no)
+                item = (_first(doc.get("b_category_name"))
+                        or _first(doc.get("bd_category_name")) or "GeM Bid")
+                dept = (_first(doc.get("ba_official_details_deptName"))
+                        or _first(doc.get("ba_official_details_minName"))
+                        or "Government e-Marketplace")
+                qty  = _first(doc.get("b_total_quantity"))
+                end  = _first(doc.get("final_end_date_sort"))
+                bid_id = _first(doc.get("b_id")) or doc.get("id")
+                title = f"{str(item).title()} (Qty {qty})" if qty else str(item).title()
+                records.append(core.tender_record(
+                    title=title,
+                    state=state,
+                    organization=str(dept),
+                    category=_infer_category(f"{item} {dept}"),
+                    district=_infer_district(f"{item} {dept} {term}", state),
+                    deadline=end,
+                    description=f"GeM Bid No: {bid_no}",
+                    document_url=f"{_BASE}/showbidDocument/{bid_id}",
+                    source_portal="gem.gov.in",
+                ))
             time.sleep(_DELAY)
-
-    # Strategy 2: general listing without keyword filter, state-filtered
-    if len(records) < 20:
-        for state in ("Chhattisgarh", "Uttar Pradesh"):
-            for pg in range(1, min(_MAX_PG, 10)):
-                html = _fetch_page(sess, pg, state=state)
-                if not html:
-                    break
-                batch = _parse_table(html, default_state=state)
-                if not batch:
-                    break
-                for rec in batch:
-                    if rec["source_id"] not in seen_ids:
-                        seen_ids.add(rec["source_id"])
-                        records.append(rec)
-                time.sleep(_DELAY)
 
     print(f"   gem: {len(records)} core.tender_record() objects ready")
     if not records:

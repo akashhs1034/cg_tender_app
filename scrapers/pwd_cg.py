@@ -30,13 +30,15 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import core  # noqa: E402
 
+# pwd.cg.gov.in is dead (DNS NXDOMAIN); the live PWD portal is pwd.cg.nic.in.
 _PORTALS = [
-    "https://pwd.cg.gov.in/index.php/en/tender",
-    "https://pwd.cg.gov.in/tender",
-    "https://pwd.cg.gov.in/index.php/tender",
-    "https://pwd.cg.gov.in/",
+    "https://pwd.cg.nic.in/index.php/en/tender",
+    "https://pwd.cg.nic.in/tender",
+    "https://pwd.cg.nic.in/index.php/tender",
+    "https://pwd.cg.nic.in/",
+    "https://cgpwd.gov.in/tender",
 ]
-_BASE    = "https://pwd.cg.gov.in"
+_BASE    = "https://pwd.cg.nic.in"
 _ORG     = "CG Public Works Department (PWD)"
 
 _HEADERS = {

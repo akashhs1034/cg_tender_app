@@ -785,3 +785,97 @@ def evaluate_resume_for_job(job: dict, resume_text: str) -> dict:
         if result is not None:
             return result
     return _keyword_resume_eval(job, resume_text)
+
+
+# ---------------------------------------------------------------------------
+# Suggested study-plan generator (AI, with a rule-based fallback)
+# ---------------------------------------------------------------------------
+def _fallback_study_plan(exam: str, days, hours: int) -> dict:
+    """Rule-based, time-scaled plan used when the AI is unavailable."""
+    d = days if (isinstance(days, int) and days > 0) else 60
+    f = max(1, round(d * 0.40))
+    p = max(1, round(d * 0.35))
+    r = max(1, d - f - p)
+    return {
+        "exam": exam, "days_left": d, "ai": False,
+        "overview": (f"You have roughly {d} days at about {hours}h/day. Split the time into "
+                     "foundation, intensive practice, and revision. Prioritise high-weight topics "
+                     "and current affairs, and take regular timed mock tests."),
+        "phases": [
+            {"name": "Phase 1 — Foundation", "duration": f"first ~{f} days",
+             "focus": "Cover the full official syllabus & build concepts",
+             "topics": ["Map the official syllabus & exam pattern",
+                        "Core subjects at NCERT level",
+                        "State GK (CG/UP): history, geography, polity, schemes"]},
+            {"name": "Phase 2 — Practice", "duration": f"next ~{p} days",
+             "focus": "Solve previous papers & sectional tests",
+             "topics": ["Previous year question papers",
+                        "Sectional / topic-wise mock tests",
+                        "Current affairs (last 6–12 months)"]},
+            {"name": "Phase 3 — Revision", "duration": f"final ~{r} days",
+             "focus": "Full-length mocks, analysis & revision",
+             "topics": ["One full-length mock daily + analysis",
+                        "Revise notes, formulas & GK", "Drill weak areas"]},
+        ],
+        "high_priority_topics": ["Official syllabus core topics", "State GK & current affairs",
+                                 "General Studies / GK", "Quantitative aptitude & reasoning",
+                                 "Language paper (Hindi/English) as per pattern"],
+        "daily_routine": [f"~{max(1, hours-1)}h concept + practice on the day's topic",
+                          "~1h current affairs + GK", "20–30 MCQs daily with review"],
+        "free_resources": ["NCERT — subject basics (History, Polity, Geography)",
+                           "SWAYAM / NPTEL — deeper or technical topics",
+                           "PIB & Yojana — current affairs & government schemes",
+                           "National Digital Library — reference books & papers"],
+        "tips": ["Take at least one full-length mock every week and analyse mistakes",
+                 "Revise weekly — don't only consume new material",
+                 "Prioritise high-weight topics first",
+                 "Keep a daily current-affairs habit"],
+    }
+
+
+def generate_study_plan(exam: str, exam_date: str = "", hours_per_day: int = 4) -> dict:
+    """AI-suggested, time-aware study plan for a UP/CG government exam.
+
+    Always returns a dict (falls back to a rule-based plan if AI is unavailable).
+    Treat the output strictly as a SUGGESTION — the UI shows a disclaimer.
+    """
+    from datetime import date as _date
+    exam = (exam or "Government Exam").strip()
+    d = core.parse_date(exam_date) if exam_date else None
+    days = (d - _date.today()).days if d else None
+    if days is not None and days < 0:
+        days = None
+    days_txt = f"about {days} days from today" if days is not None else "an unspecified date"
+
+    prompt = f"""You are an expert mentor for Indian government recruitment exams,
+specialising in Uttar Pradesh and Chhattisgarh state exams. Build a focused,
+realistic, time-aware study plan tailored to THIS exam.
+
+EXAM: {exam}
+EXAM DATE: {exam_date or 'not specified'} ({days_txt})
+DAILY STUDY TIME: about {hours_per_day} hours/day
+
+Scale the number and length of phases to the time available. Name the most
+scoring/important topics specific to this exam's typical syllabus.
+
+Return ONLY valid JSON (no markdown):
+{{
+  "exam": "{exam}",
+  "days_left": {days if days is not None else 0},
+  "overview": "2-3 sentence realistic strategy for the available time",
+  "phases": [
+    {{"name": "Phase 1 — Foundation", "duration": "first ~X days", "focus": "what to achieve", "topics": ["topic", "topic", "topic"]}}
+  ],
+  "high_priority_topics": ["6-10 highest-scoring / most-important topics for this exam"],
+  "daily_routine": ["concrete daily time blocks"],
+  "free_resources": ["which free platform for what, e.g. 'NCERT for Polity & History basics'"],
+  "tips": ["3-5 practical preparation tips"]
+}}"""
+
+    data = _llm_extract(prompt)
+    if isinstance(data, dict) and data.get("phases"):
+        data.setdefault("exam", exam)
+        data["days_left"] = days if days is not None else data.get("days_left", 0)
+        data["ai"] = True
+        return data
+    return _fallback_study_plan(exam, days, hours_per_day)

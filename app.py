@@ -649,6 +649,59 @@ def _render_ai_error(fallback: str = "AI service is unavailable right now — pl
     else:
         st.error(fallback)
 
+def _render_study_plan(plan: dict) -> None:
+    """Render a suggested study plan dict with phases, topics, resources + disclaimer."""
+    exam = _esc(plan.get("exam", "Exam"))
+    days = plan.get("days_left", 0)
+    _ai  = plan.get("ai", True)
+    st.markdown(
+        f'<div class="brief" style="margin:10px 0 14px">'
+        f'<div class="brief-greeting">🧭 Suggested Study Plan · {exam}</div>'
+        f'<div class="brief-sub" style="margin-top:5px;max-width:680px">{_esc(plan.get("overview",""))}</div>'
+        f'<div class="brief-stats"><div class="bstat">⏳ <b>{days}</b> days to exam</div>'
+        f'<div class="bstat">{"⚡ AI-tailored" if _ai else "📋 General template"}</div></div>'
+        f'</div>', unsafe_allow_html=True)
+
+    for _ph in plan.get("phases", []):
+        _topics = "".join(f'<span class="tag tag-cat">{_esc(_t)}</span>' for _t in _ph.get("topics", []))
+        st.markdown(
+            f'<div class="ocard"><div class="ocard-title">{_esc(_ph.get("name"))} '
+            f'<span style="color:#10B981;font-size:.72rem;font-weight:600">· {_esc(_ph.get("duration"))}</span></div>'
+            f'<div class="ocard-org" style="margin-bottom:9px">{_esc(_ph.get("focus"))}</div>'
+            f'<div class="ocard-tags">{_topics}</div></div>', unsafe_allow_html=True)
+
+    if plan.get("high_priority_topics"):
+        st.markdown('<div class="profile-section-title" style="margin-top:14px">🔥 High-Priority Topics</div>',
+                    unsafe_allow_html=True)
+        st.markdown('<div class="ocard-tags" style="margin-bottom:8px">'
+                    + "".join(f'<span class="tag tag-warn">{_esc(_t)}</span>'
+                              for _t in plan["high_priority_topics"]) + '</div>',
+                    unsafe_allow_html=True)
+
+    _cc1, _cc2 = st.columns(2)
+    with _cc1:
+        if plan.get("daily_routine"):
+            st.markdown("**🕒 Suggested Daily Routine**")
+            for _x in plan["daily_routine"]:
+                st.caption("• " + str(_x))
+        if plan.get("tips"):
+            st.markdown("**💡 Tips**")
+            for _x in plan["tips"]:
+                st.caption("• " + str(_x))
+    with _cc2:
+        if plan.get("free_resources"):
+            st.markdown("**📚 Free Resources to Use**")
+            for _x in plan["free_resources"]:
+                st.caption("• " + str(_x))
+
+    st.markdown(
+        '<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.25);'
+        'border-radius:10px;padding:10px 14px;margin-top:12px;font-size:.74rem;color:#F59E0B;line-height:1.6">'
+        '⚠ <b>Suggested study plan — guidance only.</b> This is an AI/automated suggestion, '
+        'not official, not affiliated with any commission, and not a guarantee of syllabus coverage, '
+        'difficulty or results. Always confirm the official syllabus, exam pattern and dates on the '
+        'recruitment authority’s portal before relying on it.</div>', unsafe_allow_html=True)
+
 def ring_cls(s) -> str:
     try: s = int(s)
     except: return "ring-lo"
@@ -2395,6 +2448,44 @@ elif "Jobs" in page:
             'official syllabi, previous papers and results on their own portals. Below them are '
             'free government learning platforms to actually prepare from. Every link opens in a '
             'new browser tab.</span></div>', unsafe_allow_html=True)
+
+        # ── AI Study Plan Generator ──
+        st.markdown('<div class="profile-section-title" style="margin-top:6px">🧭 AI Study Plan Generator</div>',
+                    unsafe_allow_html=True)
+        st.caption("Pick your exam and its date — get a suggested, time-aware preparation plan with priority topics and resources.")
+        _common_exams = [
+            "UPPSC PCS (Prelims)", "UPSSSC PET", "UP Police Constable", "UP Super TET / TET",
+            "UPPSC RO/ARO", "CGPSC State Service", "CG Vyapam (Patwari / Assistant)",
+            "CG Police Constable", "CG TET", "CGPSC Medical (DME)", "Other (type below)",
+        ]
+        _sc1, _sc2, _sc3 = st.columns([2, 1.2, 1])
+        with _sc1:
+            _exam_sel = st.selectbox("Exam", _common_exams, key="sp_exam_sel",
+                                     label_visibility="collapsed")
+            _exam_custom = ""
+            if _exam_sel == "Other (type below)":
+                _exam_custom = st.text_input("Exam name", key="sp_exam_custom",
+                                             placeholder="Type your exam name",
+                                             label_visibility="collapsed")
+        with _sc2:
+            _exam_dt = st.date_input("Exam date", key="sp_date",
+                                     min_value=date.today(), format="DD/MM/YYYY")
+        with _sc3:
+            _sp_hours = st.number_input("Hrs/day", min_value=1, max_value=16, value=4, key="sp_hours")
+
+        if st.button("🧭  Generate Suggested Study Plan", width="stretch", key="sp_generate"):
+            _exam_final = (_exam_custom.strip() or "Government Exam") if _exam_sel == "Other (type below)" else _exam_sel
+            core.clear_ai_error()
+            with st.spinner("Building your time-aware study plan…"):
+                st.session_state["study_plan"] = evaluator.generate_study_plan(
+                    _exam_final, str(_exam_dt), int(_sp_hours))
+        if st.session_state.get("study_plan"):
+            _render_study_plan(st.session_state["study_plan"])
+            if st.button("✕  Clear plan", key="sp_clear"):
+                st.session_state.pop("study_plan", None)
+                st.rerun()
+
+        st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)
 
         st.markdown('<div class="profile-section-title" style="margin-top:6px">🏛 Official Recruitment Authorities</div>',
                     unsafe_allow_html=True)

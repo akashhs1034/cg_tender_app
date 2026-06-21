@@ -442,7 +442,8 @@ def _secret(k):
 
 @st.cache_data(ttl=300)
 def load_table(name: str) -> pd.DataFrame:
-    url, key = _secret("SUPABASE_URL"), _secret("SUPABASE_KEY")
+    url = _secret("SUPABASE_URL") or _secret("supabase_url")
+    key = _secret("SUPABASE_KEY") or _secret("supabase_key")
     if url and key:
         try:
             from supabase import create_client
@@ -452,7 +453,9 @@ def load_table(name: str) -> pd.DataFrame:
                 return _drop_expired(df)
             return pd.DataFrame()
         except Exception as e:
-            st.warning(f"⚠️ Could not load {name} from Supabase: {e}", icon="⚠️")
+            st.error(f"Supabase error on {name}: {e}")
+    else:
+        st.error(f"Supabase secrets not found. URL={'set' if url else 'MISSING'} KEY={'set' if key else 'MISSING'}")
     local = Path(__file__).parent / "data" / f"{name}.csv"
     if local.exists():
         return _drop_expired(pd.read_csv(local))

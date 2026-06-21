@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import core, accounts, evaluator, pdf_proxy
+import core, accounts, evaluator
 import base64 as _b64
 
 # ── LOGO ─────────────────────────────────────────────────────────────────────
@@ -22,11 +22,6 @@ try:
     _page_icon = _PILImg.open(_logo_path) if _logo_path.exists() else "⚡"
 except Exception:
     _page_icon = "⚡"
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def _cached_pdf(url: str):
-    """Fetch a tender PDF server-side; cache for 1 h to avoid re-downloading."""
-    return pdf_proxy.fetch_pdf(url)
 
 st.set_page_config(
     page_title="Opporta · Intelligence Platform",
@@ -665,47 +660,20 @@ def _read_pdf_text(file) -> str:
         return ""
 
 def _pdf_widget(doc_url: str, source_id: str, compact: bool = False, ctx: str = ""):
-    """
-    In-app tender document downloader.
-    - First click: fetches the file server-side (cached 1h).
-    - Second click: browser downloads the file directly from our app.
-    Falls back to a portal link if the file cannot be retrieved.
+    """Outbound link routing — opens the official source in a new browser tab.
 
-    ctx: short call-site prefix so keys stay unique when the same source_id
-    appears in multiple tabs/sections rendered in the same Streamlit pass
-    (e.g. AI Evaluator tab and Bid Generator tab both open at once).
+    The old in-app fetch/parse/download proxy was removed: many government
+    portals block server-side fetches or serve session-bound links, which led
+    to broken downloads. We now always route the user to the authoritative
+    source via st.link_button (opens in a new tab), so links never break.
     """
     if not doc_url or str(doc_url) in ("nan", "None", "—", ""):
         return
-    sid   = (ctx + "_" if ctx else "") + str(source_id)[:20].replace(" ", "_")
-    ready = st.session_state.get(f"pdfr_{sid}", False)
-
-    if not ready:
-        btn_lbl = "⬇️ Download Document" if compact else "⬇️ Download Tender Document (In-App)"
-        if st.button(btn_lbl, key=f"pfb_{sid}", use_container_width=not compact):
-            st.session_state[f"pdfr_{sid}"] = True
-            st.rerun()
-    else:
-        with st.spinner("Fetching document from government server…"):
-            data, mime, fname = _cached_pdf(doc_url)
-        if data:
-            st.download_button(
-                label="📥 Save to Device",
-                data=data,
-                file_name=fname or "tender_document.pdf",
-                mime=mime or "application/pdf",
-                key=f"pfd_{sid}",
-                use_container_width=not compact,
-            )
-            st.caption(f"📄 {fname}")
-        else:
-            st.caption("Document not directly downloadable from portal — use the link below.")
-            st.markdown(
-                f'<a href="{doc_url}" target="_blank" style="font-size:.75rem;color:#00C4FF;'
-                f'text-decoration:none">🔗 Open on Government Portal ↗</a>',
-                unsafe_allow_html=True,
-            )
-            st.session_state[f"pdfr_{sid}"] = False
+    st.link_button(
+        "🌐 Open Official Procurement Portal",
+        url=str(doc_url),
+        use_container_width=not compact,
+    )
 
 def _districts_for_state(state: str) -> list[str]:
     return STATE_DISTRICTS.get(state, CG_DISTRICTS + UP_DISTRICTS)

@@ -396,6 +396,48 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#475569!
 /* ── Plotly dark theme overrides ── */
 .js-plotly-plot .plotly,.js-plotly-plot .plotly div{color:#94A3B8!important}
 .stPlotlyChart{border-radius:12px;overflow:hidden}
+
+/* ── Sidebar toggle arrow — prominent purple pill on mobile ── */
+[data-testid="collapsedControl"]{
+  background:linear-gradient(135deg,#6366F1,#8B5CF6)!important;
+  border-radius:0 14px 14px 0!important;
+  width:28px!important;height:60px!important;
+  box-shadow:4px 0 20px rgba(99,102,241,.5)!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+}
+[data-testid="collapsedControl"] svg{color:#fff!important;width:16px!important;height:16px!important}
+
+/* ── Mobile top nav row — hidden on desktop, scrollable on mobile ── */
+.mob-topnav{display:none}
+@media (max-width:768px){
+  .mob-topnav{
+    display:block!important;
+    background:linear-gradient(135deg,#060C1A,#080F22);
+    border:1px solid rgba(99,102,241,.15);
+    border-radius:14px;
+    padding:8px;
+    margin-bottom:16px;
+    overflow-x:auto;
+    white-space:nowrap;
+    -webkit-overflow-scrolling:touch;
+  }
+  .mob-topnav > div[data-testid="stHorizontalBlock"]{
+    flex-wrap:nowrap!important;
+    overflow-x:auto!important;
+    gap:6px!important;
+    padding-bottom:2px;
+  }
+  .mob-topnav .stButton>button{
+    white-space:nowrap!important;
+    font-size:.72rem!important;
+    padding:8px 12px!important;
+    min-height:40px!important;
+    border-radius:8px!important;
+  }
+}
+@media (min-width:769px){
+  .mob-topnav{display:none!important}
+}
 </style>""", unsafe_allow_html=True)
 
 # ── CONSTANTS ─────────────────────────────────────────────────────────────────
@@ -670,6 +712,29 @@ closing_soon    = sum(1 for _, _, _, r in scored
 total_value     = df_t["value_lakhs"].fillna(0).sum() if not df_t.empty and "value_lakhs" in df_t else 0
 
 page = st.session_state.current_page
+
+# ── MOBILE TOP NAV ROW (real Streamlit buttons, visible only on mobile via CSS) ─
+if st.session_state.authenticated:
+    _nav_items = [
+        ("🏠", "Dashboard",  "🏠  Dashboard"),
+        ("🔍", "Explore",    "🔍  Explore"),
+        ("💼", "Jobs",       "💼  Jobs"),
+        ("⚡", "Workspace",  "⚡  Opporta Workspace"),
+        ("📄", "Docs",       "📄  Documents"),
+        ("🔔", "Alerts",     "🔔  Alerts"),
+        ("📊", "Analytics",  "📊  Analytics"),
+        ("👤", "Profile",    "👤  Profile"),
+    ]
+    st.markdown('<div class="mob-topnav">', unsafe_allow_html=True)
+    _ncols = st.columns(len(_nav_items))
+    for _col, (_icon, _lbl, _pg) in zip(_ncols, _nav_items):
+        _is_active = st.session_state.current_page == _pg
+        _label = f"{'▶ ' if _is_active else ''}{_icon} {_lbl}"
+        if _col.button(_label, key=f"mtnav_{_pg}", use_container_width=True,
+                       type="primary" if _is_active else "secondary"):
+            st.session_state.current_page = _pg
+            st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── DASHBOARD ─────────────────────────────────────────────────────────────────

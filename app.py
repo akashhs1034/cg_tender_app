@@ -138,6 +138,15 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .sec-badge-green{background:rgba(16,185,129,.08);color:#10B981;border:1px solid rgba(16,185,129,.2);border-radius:100px;padding:3px 12px;font-size:.67rem;font-weight:700}
 .sec-divider{flex:1;height:1px;background:linear-gradient(90deg,rgba(0,196,255,.12),transparent)}
 
+/* Official Government Data Source Network — regional portal directory */
+.portal-intro{background:linear-gradient(135deg,rgba(16,185,129,.06),rgba(2,4,10,0));border:1px solid rgba(16,185,129,.18);border-radius:14px;padding:14px 18px;margin-bottom:8px}
+.portal-intro b{color:#10B981}
+.portal-intro span{color:#94A3B8;font-size:.8rem;line-height:1.6}
+.portal-region{display:flex;align-items:baseline;gap:10px;margin:18px 0 10px;padding-bottom:7px;border-bottom:1px solid rgba(16,185,129,.18)}
+.portal-region-dot{width:7px;height:7px;border-radius:50%;background:#10B981;box-shadow:0 0 8px rgba(16,185,129,.6);flex-shrink:0;align-self:center}
+.portal-region-title{font-size:.78rem;font-weight:800;color:#10B981;text-transform:uppercase;letter-spacing:.09em}
+.portal-region-sub{font-size:.68rem;color:#64748B;font-weight:500}
+
 /* Opportunity Cards */
 .ocard{background:linear-gradient(145deg,#080F22,#0A1428);border:1px solid rgba(255,255,255,.06);border-radius:16px;padding:18px 20px;margin-bottom:10px;transition:border-color .2s,box-shadow .2s,transform .15s;position:relative;overflow:hidden}
 .ocard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#00C4FF,#1B6CF7);opacity:0;transition:opacity .2s}
@@ -706,6 +715,54 @@ _CAT_EMOJI = {
 }
 def _emoji_for(cat: str) -> str:
     return _CAT_EMOJI.get(cat, "📋")
+
+# ── OFFICIAL GOVERNMENT DATA SOURCE NETWORK ───────────────────────────────────
+# Authoritative fallback / direct-routing directory. All links open in a new tab
+# via st.link_button. Grouped by region so they stay clean and never collide
+# with the dynamic filtering above them.
+PROCUREMENT_PORTALS = {
+    "National": [
+        ("🏛 Central Public Procurement (CPPP)", "https://eprocure.gov.in"),
+        ("🛒 Government e-Marketplace (GeM)",     "https://gem.gov.in"),
+    ],
+    "Uttar Pradesh Network": [
+        ("UP e-Procurement Portal",        "https://etender.up.nic.in"),
+        ("UP Government Tenders Archive",  "http://tenders.up.nic.in"),
+    ],
+    "Chhattisgarh Network": [
+        ("CG Integrated e-Procurement",    "https://eproc.cgstate.gov.in"),
+        ("CG Government Tenders Portal",    "http://tenders.cg.gov.in"),
+        ("CG Public Works Dept (PWD)",     "https://pwd.cg.nic.in"),
+    ],
+}
+
+RECRUITMENT_AUTHORITIES = {
+    "Uttar Pradesh Network": [
+        ("UPPSC — Public Service Commission", "https://uppsc.up.nic.in"),
+        ("UPSSSC — Subordinate Services",     "http://upsssc.gov.in"),
+        ("UPPRPB — Police Recruitment",       "https://www.upprpb.in"),
+        ("UP Basic Education Board",          "http://upbasiceduboard.gov.in"),
+    ],
+    "Chhattisgarh Network": [
+        ("CGPSC — Public Service Commission", "https://psc.cg.gov.in"),
+        ("CGPSC — Alternative Portal",        "https://ecgpsc.cgstate.gov.in"),
+        ("CG Vyapam Board",                   "https://vyapam.cgstate.gov.in"),
+        ("CG Employment Exchange (Rojgar)",   "https://erojgar.cg.gov.in"),
+        ("CG Police Headquarters",            "https://cgpolice.gov.in"),
+        ("CG Directorate of Medical Education","https://cgdme.in"),
+    ],
+}
+
+def _portal_region(title: str, subtitle: str, items: list, cols: int = 2) -> None:
+    """Render one titled regional block of official-portal link buttons."""
+    st.markdown(
+        f'<div class="portal-region"><span class="portal-region-dot"></span>'
+        f'<span class="portal-region-title">{title}</span>'
+        f'<span class="portal-region-sub">{subtitle}</span></div>',
+        unsafe_allow_html=True)
+    _cols = st.columns(cols)
+    for _i, (_label, _url) in enumerate(items):
+        _cols[_i % cols].link_button(_label, _url, width="stretch")
 
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -1586,6 +1643,19 @@ elif "Tenders" in page:
                     st.session_state.current_page = "⚡  Opporta Workspace"
                     st.rerun()
 
+    # ── Direct Portals: Official State Procurement Pipelines (bottom of page) ──
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("🌐  Official State Procurement Pipelines — verified government portals", expanded=False):
+        st.markdown(
+            '<div class="portal-intro"><b>Authoritative data source network.</b> '
+            '<span>Route directly to the official government procurement portals to verify a '
+            'tender at source or browse listings we may not have ingested yet. Every link opens '
+            'the live portal in a new browser tab.</span></div>', unsafe_allow_html=True)
+        for _region, _items in PROCUREMENT_PORTALS.items():
+            _sub = ("Pan-India procurement" if _region == "National"
+                    else "State e-procurement & tenders")
+            _portal_region(_region, _sub, _items, cols=2)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ── AI WORKSPACE ──────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2276,6 +2346,17 @@ elif "Jobs" in page:
                             </div>""", unsafe_allow_html=True)
                             if res["met"]:    st.success("Met: " + " · ".join(res["met"]))
                             if res["missing"]:st.error("Missing: " + " · ".join(res["missing"]))
+
+    # ── Direct Portals: Upcoming Exams & Material — Official Recruitment Authorities ──
+    st.markdown("<br>", unsafe_allow_html=True)
+    with st.expander("🏛  Upcoming Exams & Material — Official Recruitment Authorities", expanded=False):
+        st.markdown(
+            '<div class="portal-intro"><b>Official commissions &amp; boards.</b> '
+            '<span>For exam notifications, admit cards, results and application portals, route '
+            'directly to the authoritative recruitment authorities below. Every link opens the '
+            'official portal in a new browser tab.</span></div>', unsafe_allow_html=True)
+        for _region, _items in RECRUITMENT_AUTHORITIES.items():
+            _portal_region(_region, "Commissions, boards & recruitment portals", _items, cols=2)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── DOCUMENTS ─────────────────────────────────────────────────────────────────

@@ -117,13 +117,24 @@ def _local_login(email: str, password: str) -> tuple[bool, str]:
 
 
 def register_user(email: str, password: str) -> tuple[bool, str]:
+    """Create an account. Returns (ok, message).
+
+    message is a stable code on failure so the UI can react:
+      'RATE_LIMIT'        -> Supabase mailer / signup rate exceeded
+      'ALREADY_EXISTS'    -> email already registered
+    """
     email = email.strip().lower()
     sb = _sb()
     if sb:
         try:
             sb.auth.sign_up({"email": email, "password": password})
-            return True, "Account created. You can now log in."
+            return True, "Account created."
         except Exception as e:
+            low = str(e).lower()
+            if any(s in low for s in ("rate", "limit", "exceed", "429", "too many")):
+                return False, "RATE_LIMIT"
+            if any(s in low for s in ("already", "registered", "exists", "duplicate")):
+                return False, "ALREADY_EXISTS"
             logging.warning(f"Supabase register failed ({e}), using local fallback.")
     return _local_register(email, password)
 
@@ -183,6 +194,14 @@ def login_user(email: str, password: str) -> tuple[bool, str, str | None]:
             token = resp.session.access_token if (resp and resp.session) else None
             return True, "Login successful.", token
         except Exception as e:
+            low = str(e).lower()
+            # Surface the real reason instead of masking it as "invalid password".
+            if "not confirmed" in low or "confirm" in low:
+                return False, "EMAIL_NOT_CONFIRMED", None
+            if any(s in low for s in ("rate", "limit", "429", "too many")):
+                return False, "RATE_LIMIT", None
+            if any(s in low for s in ("invalid", "credential", "password")):
+                return False, "Invalid email or password.", None
             logging.warning(f"Supabase login failed ({e}), trying local fallback.")
     ok, msg = _local_login(email, password)
     return ok, msg, None

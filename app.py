@@ -718,17 +718,28 @@ with st.sidebar:
                 st.session_state.email    = auth_email.strip().lower()
                 st.session_state.sb_token = token or ""
                 st.rerun()
+            elif msg in ("EMAIL_NOT_CONFIRMED", "RATE_LIMIT"):
+                st.warning("Use **Continue with Google** on the main screen — instant, no email needed.")
             else:
-                if "confirm" in msg.lower() or "not confirmed" in msg.lower() or "email" in msg.lower():
-                    st.warning("📧 Please check your email and click the confirmation link first, then login.")
-                else:
-                    st.error(msg)
+                st.error(msg)
         if c2.button("Register", use_container_width=True):
             ok, msg = accounts.register_user(auth_email, auth_pw)
             if ok:
-                st.success("✅ Account created! Check your email and click the confirmation link before logging in.")
+                lok, _lm, token = accounts.login_user(auth_email, auth_pw)
+                if lok:
+                    st.session_state.authenticated = True
+                    st.session_state.email    = auth_email.strip().lower()
+                    st.session_state.sb_token = token or ""
+                    st.rerun()
+                else:
+                    st.success("✅ Account created — click Login.")
+            elif msg == "ALREADY_EXISTS":
+                st.info("Already registered — click Login.")
+            elif msg == "RATE_LIMIT":
+                st.warning("Email server busy — use **Continue with Google** instead (instant).")
             else:
                 st.error(msg)
+        st.caption("Tip: **Continue with Google** on the main screen is the fastest — no email or codes.")
         st.markdown('</div>', unsafe_allow_html=True)
     else:
         st.markdown('<div class="sb-nav-label">Operational Modules</div>', unsafe_allow_html=True)
@@ -949,6 +960,10 @@ if "Dashboard" in page:
                         f' Continue with Google</a>',
                         unsafe_allow_html=True,
                     )
+                    st.markdown(
+                        '<div style="text-align:center;font-size:.72rem;color:#10B981;'
+                        'font-weight:600;margin:-6px 0 4px">✓ Recommended — instant, no email, no codes</div>',
+                        unsafe_allow_html=True)
                     st.markdown('<div class="auth-divider">or use email</div>',
                                 unsafe_allow_html=True)
 
@@ -984,75 +999,50 @@ if "Dashboard" in page:
                                 st.session_state.sb_token = token or ""
                                 st.session_state.entered_platform = False
                                 st.rerun()
+                            elif msg == "EMAIL_NOT_CONFIRMED":
+                                st.warning("📧 This email isn't confirmed yet. Use **Continue with Google** above for instant access — no email needed.")
+                            elif msg == "RATE_LIMIT":
+                                st.warning("⏳ The login server is busy. Please wait a moment, or use **Continue with Google** above (instant).")
                             else:
-                                if "confirm" in msg.lower() or "not confirmed" in msg.lower():
-                                    st.warning("📧 Please check your email and click the confirmation link first, then login.")
-                                else:
-                                    st.error(msg)
+                                st.error(msg)
                         else:
                             st.warning("Enter email and password.")
 
-                # ── REGISTER: Step 1 — enter email → send OTP ──
+                # ── REGISTER: direct signup (no OTP email — instant) ──
                 elif st.session_state.auth_mode == "register":
-                    _re = st.text_input("Gmail address", key="reg_email",
+                    st.caption("Fastest: use **Continue with Google** above. Or create an email account below — no verification code needed.")
+                    _re = st.text_input("Email", key="reg_email",
                                         placeholder="you@gmail.com",
                                         label_visibility="collapsed")
                     _rp = st.text_input("Choose password", type="password", key="reg_pw",
                                         placeholder="Choose a password (min 6 chars)",
                                         label_visibility="collapsed")
-                    if st.button("Send Verification Code  →", use_container_width=True,
-                                 key="send_otp"):
-                        if _re and _rp:
-                            if len(_rp) < 6:
-                                st.error("Password must be at least 6 characters.")
-                            else:
-                                ok, msg = accounts.send_otp(_re)
-                                if ok:
-                                    st.session_state.otp_email = _re.strip().lower()
-                                    st.session_state["_reg_pw"] = _rp
-                                    st.session_state.auth_mode = "verify"
-                                    st.rerun()
-                                else:
-                                    st.error(msg)
+                    if st.button("Create Account  →", use_container_width=True, key="do_register"):
+                        if not (_re and _rp):
+                            st.warning("Enter your email and choose a password.")
+                        elif len(_rp) < 6:
+                            st.error("Password must be at least 6 characters.")
                         else:
-                            st.warning("Enter your Gmail and choose a password.")
-
-                # ── REGISTER: Step 2 — enter OTP code ──
-                elif st.session_state.auth_mode == "verify":
-                    st.markdown(
-                        f'<div class="otp-hint">📧 Code sent to <b>{st.session_state.otp_email}</b><br>'
-                        f'Check your inbox (and spam folder)</div>',
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
-                    _otp = st.text_input("Enter 6-digit verification code", key="otp_code",
-                                         placeholder="123456",
-                                         label_visibility="collapsed",
-                                         max_chars=6)
-                    if st.button("Verify & Create Account  →", use_container_width=True,
-                                 key="do_verify"):
-                        if _otp and len(_otp) == 6:
-                            ok, msg, token = accounts.verify_otp(
-                                st.session_state.otp_email, _otp)
+                            ok, msg = accounts.register_user(_re, _rp)
                             if ok:
-                                # OTP verified — now create the account with password
-                                _stored_pw = st.session_state.get("_reg_pw", "")
-                                if _stored_pw:
-                                    accounts.register_user(
-                                        st.session_state.otp_email, _stored_pw)
-                                st.session_state.authenticated = True
-                                st.session_state.email = st.session_state.otp_email
-                                st.session_state.sb_token = token or ""
-                                st.session_state.entered_platform = False
-                                st.session_state.auth_mode = "login"
-                                st.rerun()
+                                # Immediately log in — no email round-trip.
+                                lok, lmsg, token = accounts.login_user(_re, _rp)
+                                if lok:
+                                    st.session_state.authenticated = True
+                                    st.session_state.email = _re.strip().lower()
+                                    st.session_state.sb_token = token or ""
+                                    st.session_state.entered_platform = False
+                                    st.rerun()
+                                elif lmsg == "EMAIL_NOT_CONFIRMED":
+                                    st.success("✅ Account created. Email confirmation is ON in your project — either confirm via the email link, or (recommended) use **Continue with Google** above for instant access.")
+                                else:
+                                    st.success("✅ Account created — switch to **Login** and sign in.")
+                            elif msg == "ALREADY_EXISTS":
+                                st.info("This email is already registered. Switch to **Login** above.")
+                            elif msg == "RATE_LIMIT":
+                                st.warning("⏳ Too many signups on the email server right now. Please use **Continue with Google** above — it's instant and never rate-limited.")
                             else:
                                 st.error(msg)
-                        else:
-                            st.warning("Enter the 6-digit code from your email.")
-                    if st.button("← Back", key="otp_back", use_container_width=True):
-                        st.session_state.auth_mode = "register"
-                        st.rerun()
 
     else:
         today_str = date.today().strftime("%A, %d %B %Y")

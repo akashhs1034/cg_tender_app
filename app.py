@@ -928,9 +928,29 @@ with st.sidebar:
             st.rerun()
 
 # ── GLOBAL CONTEXT ────────────────────────────────────────────────────────────
+# These fetch the user's profile + vault count from Supabase. Without caching
+# they fire on EVERY rerun (every click), adding 2 network round-trips of lag to
+# every interaction. Cache per (email, token); invalidated explicitly on save.
 email    = st.session_state.email
 _token   = st.session_state.get("sb_token", "")
-profile  = accounts.get_profile(email, token=_token) if email else dict(core.DEFAULT_PROFILE)
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_profile(_email: str, _tok: str):
+    return accounts.get_profile(_email, token=_tok)
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _cached_vault_count(_email: str, _tok: str) -> int:
+    try:
+        return len(accounts.list_documents(_email, token=_tok))
+    except Exception:
+        return 0
+
+def _bust_user_cache():
+    """Call after saving profile or uploading a document so reads refresh."""
+    _cached_profile.clear()
+    _cached_vault_count.clear()
+
+profile  = _cached_profile(email, _token) if email else dict(core.DEFAULT_PROFILE)
 if profile is None:
     profile = dict(core.DEFAULT_PROFILE)
 cname = profile.get("company_name") or profile.get("full_name") or (
@@ -940,12 +960,7 @@ cname = profile.get("company_name") or profile.get("full_name") or (
 # The matching engine must never hallucinate a score against empty telemetry.
 # We only compute personalized scores once the user has real profile data OR at
 # least one document in the secure vault. Until then every match = 0 / empty.
-_vault_count = 0
-if st.session_state.authenticated and email:
-    try:
-        _vault_count = len(accounts.list_documents(email, token=_token))
-    except Exception:
-        _vault_count = 0
+_vault_count = _cached_vault_count(email, _token) if (st.session_state.authenticated and email) else 0
 PROFILE_READY = (st.session_state.authenticated
                  and core.profile_is_configured(profile, _vault_count > 0))
 
@@ -2526,6 +2541,7 @@ elif "Documents" in page:
                                                 doc_file.read(), doc_file.type or "application/octet-stream",
                                                 token=_token)
             if doc_id:
+                _bust_user_cache()
                 st.success(f"✓ '{doc_name}' uploaded successfully.")
                 st.rerun()
             else:
@@ -2827,6 +2843,7 @@ elif "Profile" in page:
                 "states":           target_states,
                 "districts":        districts,
             }, token=_token)
+            _bust_user_cache()
             st.success("✓ Profile saved. Opporta Intelligence scores will update on next page load.")
             st.rerun()
 
@@ -2925,6 +2942,7 @@ elif "Profile" in page:
                     "job_category":         job_cat,
                     "languages":            languages,
                 }, token=_token)
+                _bust_user_cache()
                 st.success("✓ Job seeker profile saved. The Jobs page will now auto-score your eligibility.")
                 st.rerun()
 
@@ -2990,6 +3008,7 @@ elif "Profile" in page:
                         email, f"[{_vault_kind}] {_vault_label}", _vault_file.name,
                         _raw, _vault_file.type or "application/octet-stream", token=_token)
                 if _did:
+                    _bust_user_cache()
                     if _parsed.strip():
                         st.success(f"✓ Uploaded & parsed {len(_parsed):,} characters — "
                                    f"telemetry unlocked, match scoring is now active.")

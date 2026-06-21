@@ -30,6 +30,9 @@ for _k, _v in {
     "explore_search": "", "explore_category": "All",
     "explore_state": "All", "explore_district": "All",
     "bid_tender": None,
+    "entered_platform": False,
+    "auth_mode": "login",       # "login" | "register" | "verify"
+    "otp_email": "",
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
@@ -397,6 +400,36 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#475569!
 .js-plotly-plot .plotly,.js-plotly-plot .plotly div{color:#94A3B8!important}
 .stPlotlyChart{border-radius:12px;overflow:hidden}
 
+/* ── Enter button glow ── */
+@keyframes glow-pulse{0%,100%{box-shadow:0 0 20px rgba(99,102,241,.5),0 0 40px rgba(139,92,246,.3)}50%{box-shadow:0 0 40px rgba(99,102,241,.8),0 0 80px rgba(139,92,246,.5),0 0 120px rgba(6,182,212,.2)}}
+.enter-btn{display:inline-flex;align-items:center;gap:12px;background:linear-gradient(135deg,#6366F1,#8B5CF6,#06B6D4);border:none;border-radius:100px;padding:18px 48px;font-size:1.05rem;font-weight:800;color:#fff;cursor:pointer;letter-spacing:-.01em;animation:glow-pulse 2.5s ease-in-out infinite;transition:transform .2s;text-decoration:none}
+.enter-btn:hover{transform:scale(1.04)}
+.enter-arrow{font-size:1.3rem;transition:transform .2s}
+.enter-btn:hover .enter-arrow{transform:translateX(5px)}
+
+/* ── Auth card ── */
+.auth-card{max-width:440px;margin:0 auto;background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(99,102,241,.2);border-radius:24px;padding:32px;position:relative;overflow:hidden}
+.auth-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#6366F1,#8B5CF6,#06B6D4)}
+.auth-tab-row{display:flex;gap:4px;background:rgba(0,0,0,.3);border-radius:12px;padding:4px;margin-bottom:24px}
+.auth-tab{flex:1;padding:10px;text-align:center;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;color:#475569;transition:all .2s;border:none;background:none}
+.auth-tab.active{background:linear-gradient(135deg,#6366F1,#8B5CF6);color:#fff}
+.google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#E2E8F0;font-size:.85rem;font-weight:600;margin-bottom:16px;text-decoration:none;transition:all .2s}
+.google-btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.2)}
+.auth-divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:#334155;font-size:.72rem;font-weight:600;letter-spacing:.05em}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
+.otp-hint{font-size:.75rem;color:#475569;text-align:center;margin-top:10px}
+
+/* ── Nav slide cards ── */
+.nav-cards-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:24px 0}
+.nav-card{background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(99,102,241,.12);border-radius:16px;padding:20px 16px;text-align:center;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.nav-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#6366F1,#8B5CF6);opacity:0;transition:opacity .2s}
+.nav-card:hover{border-color:rgba(99,102,241,.3);transform:translateY(-3px);box-shadow:0 12px 32px rgba(99,102,241,.1)}
+.nav-card:hover::before{opacity:1}
+.nav-card-icon{font-size:1.6rem;margin-bottom:8px}
+.nav-card-label{font-size:.72rem;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.06em}
+@media(max-width:768px){.nav-cards-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px!important}}
+@media(max-width:480px){.nav-cards-grid{grid-template-columns:repeat(2,1fr)!important}}
+
 /* ── Sidebar toggle arrow — prominent purple pill on mobile ── */
 [data-testid="collapsedControl"]{
   background:linear-gradient(135deg,#6366F1,#8B5CF6)!important;
@@ -680,9 +713,11 @@ with st.sidebar:
         </div>""", unsafe_allow_html=True)
 
         if st.button("⏏  Log Out", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.email    = ""
-            st.session_state.sb_token = ""
+            st.session_state.authenticated  = False
+            st.session_state.email          = ""
+            st.session_state.sb_token       = ""
+            st.session_state.entered_platform = False
+            st.session_state.auth_mode      = "login"
             st.rerun()
 
 # ── GLOBAL CONTEXT ────────────────────────────────────────────────────────────
@@ -741,67 +776,179 @@ if st.session_state.authenticated:
 # ══════════════════════════════════════════════════════════════════════════════
 if "Dashboard" in page:
     if not st.session_state.authenticated:
-        st.markdown(f"""
-        <div class="hero">
-          <div class="hero-eyebrow">
-            <span class="hero-pulse"></span>
-            LIVE · Opporta Intelligence · CG + UP · Real-Time Intelligence
-          </div>
-          <h1 class="hero-h1">Every Opportunity.<br><em>One Platform.</em></h1>
-          <p class="hero-sub">
-            India's most advanced tender and government job intelligence system
-            for Chhattisgarh & Uttar Pradesh contractors.
-          </p>
-          <div class="hero-cta-row">
-            <div class="hero-pill">📋 {len(df_t)} Active Tenders</div>
-            <div class="hero-pill">💼 {len(df_j)} Open Jobs</div>
-            <div class="hero-pill">🌏 CG &amp; UP Coverage</div>
-          </div>
-        </div>""", unsafe_allow_html=True)
 
-        # ── Inline login card (visible on all screens, especially mobile) ──
-        st.markdown("""
-        <div style="max-width:420px;margin:0 auto 40px;background:linear-gradient(145deg,#0B1329,#0D1A35);
-             border:1px solid rgba(99,102,241,.25);border-radius:20px;padding:28px 28px 24px;
-             position:relative;overflow:hidden;">
-          <div style="position:absolute;top:0;left:0;right:0;height:2px;
-               background:linear-gradient(90deg,#6366F1,#8B5CF6,#06B6D4)"></div>
-          <div style="font-size:.7rem;font-weight:700;color:#6366F1;text-transform:uppercase;
-               letter-spacing:.1em;margin-bottom:18px">⚡ Sign in to Opporta</div>
-        </div>""", unsafe_allow_html=True)
+        # ── STEP 1: Hero landing — show intro + Enter button ──────────────────
+        if not st.session_state.entered_platform:
+            st.markdown(f"""
+            <div class="hero" style="padding:80px 20px 60px">
+              <div class="hero-eyebrow">
+                <span class="hero-pulse"></span>
+                LIVE · Opporta Intelligence · CG + UP · Real-Time
+              </div>
+              <h1 class="hero-h1">Every Opportunity.<br><em>One Platform.</em></h1>
+              <p class="hero-sub">
+                India's most advanced government tender & job intelligence system
+                for Chhattisgarh &amp; Uttar Pradesh. {len(df_t)} live tenders,
+                {len(df_j)} open jobs — updated every morning.
+              </p>
+              <div class="hero-cta-row" style="margin-bottom:48px">
+                <div class="hero-pill">📋 {len(df_t)} Active Tenders</div>
+                <div class="hero-pill">💼 {len(df_j)} Open Jobs</div>
+                <div class="hero-pill">🌏 CG &amp; UP Coverage</div>
+                <div class="hero-pill">⚡ Daily Auto-Update</div>
+              </div>
+            </div>""", unsafe_allow_html=True)
 
-        _col, = [st.columns(1)[0]]
-        with st.container():
-            _login_col, _spacer = st.columns([2, 1])
-            with _login_col:
-                ml_email = st.text_input("Email address", key="ml_email",
-                                         placeholder="you@example.com",
-                                         label_visibility="collapsed")
-                ml_pw    = st.text_input("Password", type="password", key="ml_pw",
-                                         placeholder="Password",
-                                         label_visibility="collapsed")
-                b1, b2 = st.columns(2)
-                if b1.button("Login", use_container_width=True, key="ml_login"):
-                    if ml_email and ml_pw:
-                        ok, msg, token = accounts.login_user(ml_email, ml_pw)
-                        if ok:
-                            st.session_state.authenticated = True
-                            st.session_state.email    = ml_email.strip().lower()
-                            st.session_state.sb_token = token or ""
-                            st.rerun()
+            _ec, _spacer1, _spacer2 = st.columns([1,1,1])
+            with _ec:
+                if st.button("⚡  Enter Dashboard  →", use_container_width=True,
+                             key="enter_platform"):
+                    st.session_state.entered_platform = True
+                    st.rerun()
+            st.markdown("""
+            <style>
+            [data-testid="stMainBlockContainer"] div:has(> [data-testid="stButton"]) button[kind="secondary"]:first-child,
+            div[data-testid="stBaseButton-secondary"]{
+              background:linear-gradient(135deg,#6366F1,#8B5CF6,#06B6D4)!important;
+              border:none!important;color:#fff!important;font-size:1rem!important;
+              font-weight:800!important;padding:18px 32px!important;border-radius:100px!important;
+              animation:glow-pulse 2.5s ease-in-out infinite!important;
+              letter-spacing:-.01em!important;
+            }
+            </style>""", unsafe_allow_html=True)
+
+        # ── STEP 2: Auth card — Login / Register / OTP ────────────────────────
+        else:
+            st.markdown(f"""
+            <div class="hero" style="padding:40px 20px 24px">
+              <div class="hero-eyebrow"><span class="hero-pulse"></span>OPPORTA INTELLIGENCE</div>
+              <h1 class="hero-h1" style="font-size:clamp(1.8rem,4vw,3rem)">
+                Welcome to Opporta
+              </h1>
+              <p class="hero-sub" style="margin-bottom:0">
+                {len(df_t)} live tenders · {len(df_j)} open jobs today
+              </p>
+            </div>""", unsafe_allow_html=True)
+
+            _ac, _sp = st.columns([1.4, 1])
+            with _ac:
+                # ── Google Sign-In ──
+                _gurl = accounts.get_google_oauth_url(
+                    redirect_to=_secret("APP_URL") or "https://opporta.streamlit.app"
+                )
+                if _gurl:
+                    st.markdown(
+                        f'<a href="{_gurl}" target="_self" class="google-btn">'
+                        f'<svg width="18" height="18" viewBox="0 0 48 48">'
+                        f'<path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>'
+                        f'<path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>'
+                        f'<path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>'
+                        f'<path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.35-8.16 2.35-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>'
+                        f'<path fill="none" d="M0 0h48v48H0z"/></svg>'
+                        f' Continue with Google</a>',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown('<div class="auth-divider">or use email</div>',
+                                unsafe_allow_html=True)
+
+                # ── Auth mode tabs ──
+                _t1, _t2 = st.columns(2)
+                if _t1.button("🔑  Login", use_container_width=True,
+                              type="primary" if st.session_state.auth_mode == "login" else "secondary",
+                              key="tab_login"):
+                    st.session_state.auth_mode = "login"
+                    st.rerun()
+                if _t2.button("✨  Create Account", use_container_width=True,
+                              type="primary" if st.session_state.auth_mode != "login" else "secondary",
+                              key="tab_reg"):
+                    st.session_state.auth_mode = "register"
+                    st.rerun()
+
+                st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
+
+                # ── LOGIN ──
+                if st.session_state.auth_mode == "login":
+                    _le = st.text_input("Email", key="li_email",
+                                        placeholder="you@gmail.com",
+                                        label_visibility="collapsed")
+                    _lp = st.text_input("Password", type="password", key="li_pw",
+                                        placeholder="Password",
+                                        label_visibility="collapsed")
+                    if st.button("Login  →", use_container_width=True, key="do_login"):
+                        if _le and _lp:
+                            ok, msg, token = accounts.login_user(_le, _lp)
+                            if ok:
+                                st.session_state.authenticated = True
+                                st.session_state.email = _le.strip().lower()
+                                st.session_state.sb_token = token or ""
+                                st.session_state.entered_platform = False
+                                st.rerun()
+                            else:
+                                st.error(msg)
                         else:
-                            st.error(msg)
-                    else:
-                        st.warning("Enter your email and password.")
-                if b2.button("Register", use_container_width=True, key="ml_register"):
-                    if ml_email and ml_pw:
-                        ok, msg = accounts.register_user(ml_email, ml_pw)
-                        if ok:
-                            st.success(msg + " Now login.")
+                            st.warning("Enter email and password.")
+
+                # ── REGISTER: Step 1 — enter email → send OTP ──
+                elif st.session_state.auth_mode == "register":
+                    _re = st.text_input("Gmail address", key="reg_email",
+                                        placeholder="you@gmail.com",
+                                        label_visibility="collapsed")
+                    _rp = st.text_input("Choose password", type="password", key="reg_pw",
+                                        placeholder="Choose a password (min 6 chars)",
+                                        label_visibility="collapsed")
+                    if st.button("Send Verification Code  →", use_container_width=True,
+                                 key="send_otp"):
+                        if _re and _rp:
+                            if len(_rp) < 6:
+                                st.error("Password must be at least 6 characters.")
+                            else:
+                                ok, msg = accounts.send_otp(_re)
+                                if ok:
+                                    st.session_state.otp_email = _re.strip().lower()
+                                    st.session_state["_reg_pw"] = _rp
+                                    st.session_state.auth_mode = "verify"
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
                         else:
-                            st.error(msg)
-                    else:
-                        st.warning("Enter email and password to register.")
+                            st.warning("Enter your Gmail and choose a password.")
+
+                # ── REGISTER: Step 2 — enter OTP code ──
+                elif st.session_state.auth_mode == "verify":
+                    st.markdown(
+                        f'<div class="otp-hint">📧 Code sent to <b>{st.session_state.otp_email}</b><br>'
+                        f'Check your inbox (and spam folder)</div>',
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown("<div style='height:10px'></div>", unsafe_allow_html=True)
+                    _otp = st.text_input("Enter 6-digit verification code", key="otp_code",
+                                         placeholder="123456",
+                                         label_visibility="collapsed",
+                                         max_chars=6)
+                    if st.button("Verify & Create Account  →", use_container_width=True,
+                                 key="do_verify"):
+                        if _otp and len(_otp) == 6:
+                            ok, msg, token = accounts.verify_otp(
+                                st.session_state.otp_email, _otp)
+                            if ok:
+                                # OTP verified — now create the account with password
+                                _stored_pw = st.session_state.get("_reg_pw", "")
+                                if _stored_pw:
+                                    accounts.register_user(
+                                        st.session_state.otp_email, _stored_pw)
+                                st.session_state.authenticated = True
+                                st.session_state.email = st.session_state.otp_email
+                                st.session_state.sb_token = token or ""
+                                st.session_state.entered_platform = False
+                                st.session_state.auth_mode = "login"
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                        else:
+                            st.warning("Enter the 6-digit code from your email.")
+                    if st.button("← Back", key="otp_back", use_container_width=True):
+                        st.session_state.auth_mode = "register"
+                        st.rerun()
 
     else:
         today_str = date.today().strftime("%A, %d %B %Y")
@@ -811,7 +958,7 @@ if "Dashboard" in page:
         <div class="brief">
           <div class="brief-row">
             <div>
-              <div class="brief-greeting">Good day, {cname}</div>
+              <div class="brief-greeting">Good day, {cname} 👋</div>
               <div class="brief-sub">Intelligence briefing · {today_str}</div>
               <div class="brief-stats">
                 <div class="bstat"><span class="live-dot"></span> Live Feed</div>
@@ -824,6 +971,31 @@ if "Dashboard" in page:
             </div>
           </div>
         </div>""", unsafe_allow_html=True)
+
+        # ── Quick-access nav cards (desktop full view, mobile 2-col grid) ──
+        st.markdown('<div class="nav-cards-grid">', unsafe_allow_html=True)
+        _nav_cards = [
+            ("🔍", "Explore Tenders",   "🔍  Explore"),
+            ("💼", "Government Jobs",   "💼  Jobs"),
+            ("⚡", "AI Workspace",      "⚡  Opporta Workspace"),
+            ("📄", "My Documents",      "📄  Documents"),
+            ("🔔", "Alerts",            "🔔  Alerts"),
+            ("📊", "Analytics",         "📊  Analytics"),
+            ("👤", "Profile",           "👤  Profile"),
+            ("💾", "Saved Pipeline",    "🔍  Explore"),
+        ]
+        _nc = st.columns(len(_nav_cards))
+        for _col, (_icon, _lbl, _pg) in zip(_nc, _nav_cards):
+            with _col:
+                st.markdown(f"""<div class="nav-card" style="margin-bottom:0">
+                  <div class="nav-card-icon">{_icon}</div>
+                  <div class="nav-card-label">{_lbl}</div>
+                </div>""", unsafe_allow_html=True)
+                if st.button(_lbl, key=f"ncard_{_pg}_{_lbl}", use_container_width=True,
+                             label_visibility="collapsed"):
+                    st.session_state.current_page = _pg
+                    st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
         # ── KPI Grid ──
         kpi_data = [

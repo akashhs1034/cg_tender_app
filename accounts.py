@@ -128,6 +128,46 @@ def register_user(email: str, password: str) -> tuple[bool, str]:
     return _local_register(email, password)
 
 
+def send_otp(email: str) -> tuple[bool, str]:
+    """Send a 6-digit OTP to the email for verification."""
+    email = email.strip().lower()
+    sb = _sb()
+    if sb:
+        try:
+            sb.auth.sign_in_with_otp({"email": email, "options": {"should_create_user": True}})
+            return True, "Verification code sent to your email."
+        except Exception as e:
+            return False, f"Could not send code: {e}"
+    return False, "Not connected to Supabase."
+
+
+def verify_otp(email: str, token: str) -> tuple[bool, str, str | None]:
+    """Verify the OTP code — returns (success, message, access_token)."""
+    email = email.strip().lower()
+    sb = _sb()
+    if sb:
+        try:
+            resp = sb.auth.verify_otp({"email": email, "token": token, "type": "email"})
+            access_token = resp.session.access_token if (resp and resp.session) else None
+            return True, "Email verified.", access_token
+        except Exception as e:
+            return False, f"Invalid or expired code: {e}", None
+    return False, "Not connected to Supabase.", None
+
+
+def get_google_oauth_url(redirect_to: str = "") -> str | None:
+    """Returns the Google OAuth redirect URL from Supabase."""
+    sb = _sb()
+    if sb:
+        try:
+            opts = {"redirect_to": redirect_to} if redirect_to else {}
+            resp = sb.auth.sign_in_with_oauth({"provider": "google", "options": opts})
+            return resp.url if resp else None
+        except Exception as e:
+            logging.warning(f"Google OAuth URL failed: {e}")
+    return None
+
+
 def login_user(email: str, password: str) -> tuple[bool, str, str | None]:
     """
     Returns (success, message, access_token).

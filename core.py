@@ -274,6 +274,39 @@ DEFAULT_PROFILE = {
 }
 
 
+def profile_is_configured(profile: dict, has_documents: bool = False) -> bool:
+    """True only when the user has supplied REAL data beyond the shipped defaults.
+
+    This is the guard that kills the "veil" bug: until the contractor/job-seeker
+    has actually entered something — or uploaded at least one vault document —
+    the matching engine must NOT fabricate a score. A pristine DEFAULT_PROFILE
+    (Class C, ₹500L turnover, 3 yrs) is treated as EMPTY, because those are
+    placeholders, not verified telemetry.
+
+    Verified signals (any one is enough):
+      • a company / firm name              • bid sectors selected
+      • target districts selected          • a job-seeker full name
+      • qualification / degree text         • key skills listed
+      • ≥1 document in the secure vault
+    """
+    if not profile:
+        return bool(has_documents)
+    text_signals = [
+        str(profile.get("company_name") or "").strip(),
+        str(profile.get("full_name") or "").strip(),
+        str(profile.get("qualification") or "").strip(),
+        str(profile.get("degree_type") or "").strip(),
+    ]
+    list_signals = [
+        list(profile.get("sectors") or []),
+        list(profile.get("districts") or []),
+        list(profile.get("job_skills") or []),
+    ]
+    if any(text_signals) or any(list_signals):
+        return True
+    return bool(has_documents)
+
+
 def score_tender_for_user(tender: dict, profile: dict):
     """Return (score 0-100, reasons[], eligible: bool|None) for THIS user.
 

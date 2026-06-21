@@ -109,7 +109,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
 .hero-h1{font-size:clamp(2.8rem,6vw,4.8rem);font-weight:900;line-height:1.05;color:#F1F5F9;letter-spacing:-.04em;margin-bottom:18px}
 .hero-h1 em{font-style:normal;background:linear-gradient(135deg,#00C4FF 0%,#1B6CF7 50%,#06B6D4 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero-sub{font-size:1rem;color:#475569;max-width:520px;margin:0 auto 40px;line-height:1.75;font-weight:400}
+.hero-sub{font-size:1rem;color:#7C8AA0;max-width:520px;margin:0 auto 40px;line-height:1.75;font-weight:400}
 .hero-cta-row{display:flex;gap:14px;justify-content:center;align-items:center;flex-wrap:wrap}
 .hero-pill{display:inline-flex;align-items:center;gap:8px;background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:100px;padding:8px 18px;font-size:.78rem;color:#10B981;font-weight:600}
 
@@ -121,7 +121,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .kpi:hover{transform:translateY(-3px);box-shadow:0 20px 48px rgba(0,196,255,.1);border-color:rgba(0,196,255,.28)}
 .kpi-icon{font-size:1.1rem;margin-bottom:14px;opacity:.7}
 .kpi-num{font-size:1.9rem;font-weight:900;color:#F1F5F9;line-height:1;letter-spacing:-.03em}
-.kpi-lbl{font-size:.65rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.1em;margin-top:7px}
+.kpi-lbl{font-size:.65rem;font-weight:700;color:#7C8AA0;text-transform:uppercase;letter-spacing:.1em;margin-top:7px}
 .kpi-sub{font-size:.7rem;color:#10B981;margin-top:5px;font-weight:500;display:flex;align-items:center;gap:4px}
 .kpi-sub.warn{color:#F59E0B}
 
@@ -151,7 +151,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .ocard-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
 .ocard-body{flex:1;min-width:0}
 .ocard-title{font-size:.9rem;font-weight:700;color:#E2E8F0;line-height:1.45;margin-bottom:5px;letter-spacing:-.01em}
-.ocard-org{font-size:.73rem;color:#475569;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.ocard-org{font-size:.73rem;color:#7C8AA0;margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .ocard-tags{display:flex;gap:6px;flex-wrap:wrap}
 
 /* Tags */
@@ -178,7 +178,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .jcard-row{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
 .jcard-body{flex:1;min-width:0}
 .jcard-title{font-size:.88rem;font-weight:700;color:#E2E8F0;letter-spacing:-.01em;margin-bottom:4px}
-.jcard-dept{font-size:.72rem;color:#475569;margin-bottom:11px}
+.jcard-dept{font-size:.72rem;color:#7C8AA0;margin-bottom:11px}
 .jvac{background:rgba(6,182,212,.08);color:#06B6D4;border:1px solid rgba(6,182,212,.2);border-radius:8px;padding:4px 10px;font-size:.72rem;font-weight:700;flex-shrink:0}
 
 /* AI Workspace */
@@ -187,12 +187,12 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .terminal-label{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:#00C4FF;font-weight:500;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px}
 .terminal-label::before{content:'>';color:#10B981}
 .terminal-title{font-size:1rem;font-weight:700;color:#F1F5F9;letter-spacing:-.01em}
-.terminal-sub{font-size:.8rem;color:#475569;margin-top:4px}
+.terminal-sub{font-size:.8rem;color:#7C8AA0;margin-top:4px}
 
 .res-panel{background:#080F22;border:1px solid rgba(0,196,255,.12);border-radius:14px;padding:20px 24px;margin-top:14px;position:relative;overflow:hidden}
 .res-panel::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,196,255,.3),transparent)}
 .res-score{font-size:3rem;font-weight:900;line-height:1;letter-spacing:-.05em}
-.res-label{font-size:.62rem;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-top:6px}
+.res-label{font-size:.62rem;color:#7C8AA0;font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-top:6px}
 .res-verdict{font-size:.85rem;color:#94A3B8;line-height:1.65}
 
 /* Doc Cards */
@@ -200,7 +200,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .doc-card:hover{border-color:rgba(0,196,255,.2)}
 .doc-icon{font-size:1.5rem;flex-shrink:0}
 .doc-name{font-size:.86rem;font-weight:600;color:#E2E8F0;letter-spacing:-.01em}
-.doc-meta{font-size:.7rem;color:#475569;margin-top:3px;font-family:'JetBrains Mono',monospace}
+.doc-meta{font-size:.7rem;color:#7C8AA0;margin-top:3px;font-family:'JetBrains Mono',monospace}
 
 /* Profile Form */
 .profile-card{background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(0,196,255,.14);border-radius:18px;padding:24px 26px;margin-bottom:16px;position:relative;overflow:hidden}
@@ -216,12 +216,12 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 /* Stat Metric */
 .stat-card{background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px 20px;text-align:center}
 .stat-num{font-size:1.8rem;font-weight:900;color:#F1F5F9;letter-spacing:-.04em;line-height:1}
-.stat-lbl{font-size:.67rem;color:#475569;font-weight:600;text-transform:uppercase;letter-spacing:.1em;margin-top:6px}
+.stat-lbl{font-size:.67rem;color:#7C8AA0;font-weight:600;text-transform:uppercase;letter-spacing:.1em;margin-top:6px}
 
 /* Alert Item */
 .alert-item{background:#080F22;border:1px solid rgba(0,196,255,.1);border-left:3px solid #00C4FF;border-radius:0 12px 12px 0;padding:14px 18px;margin-bottom:8px}
 .alert-title{font-size:.86rem;font-weight:600;color:#E2E8F0;margin-bottom:4px}
-.alert-meta{font-size:.7rem;color:#475569;font-family:'JetBrains Mono',monospace}
+.alert-meta{font-size:.7rem;color:#7C8AA0;font-family:'JetBrains Mono',monospace}
 
 /* Readiness Bar */
 .readiness-bar{background:#0B1329;border-radius:100px;height:6px;margin-top:8px;overflow:hidden}
@@ -235,7 +235,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .score-card.md::before{background:linear-gradient(90deg,#F59E0B,#D97706)}
 .score-card.lo::before{background:linear-gradient(90deg,#EF4444,#DC2626)}
 .score-val{font-size:1.5rem;font-weight:900;line-height:1;letter-spacing:-.04em}
-.score-lbl{font-size:.58rem;color:#475569;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-top:5px}
+.score-lbl{font-size:.58rem;color:#7C8AA0;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-top:5px}
 .score-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.06);margin-top:7px;overflow:hidden}
 .score-bar-fill{height:100%;border-radius:2px;transition:width .5s ease}
 
@@ -251,7 +251,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .profit-panel{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:18px 20px;margin-bottom:14px}
 .profit-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.8rem}
 .profit-row:last-child{border-bottom:none}
-.profit-label{color:#475569;font-weight:500}
+.profit-label{color:#7C8AA0;font-weight:500}
 .profit-val{color:#E2E8F0;font-weight:700;font-family:'JetBrains Mono',monospace;font-size:.78rem}
 .profit-rating{font-size:.8rem;font-weight:800;padding:6px 14px;border-radius:8px;display:inline-block;margin-top:12px}
 
@@ -262,7 +262,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .chk-label{flex:1}
 .chk-status{font-size:.65rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:4px}
 .chk-req{background:rgba(0,196,255,.08);color:#38BDF8}
-.chk-opt{background:rgba(71,85,105,.08);color:#475569}
+.chk-opt{background:rgba(71,85,105,.08);color:#7C8AA0}
 
 /* Step list */
 .step-item{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:.79rem;color:#94A3B8;line-height:1.5}
@@ -298,9 +298,9 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 /* Sidebar logo */
 .sb-logo{padding:20px 16px 16px;border-bottom:1px solid rgba(255,255,255,.04);margin-bottom:14px}
 .sb-brand{font-size:1.15rem;font-weight:900;color:#F1F5F9;letter-spacing:-.03em;margin-bottom:3px}
-.sb-brand span{background:linear-gradient(135deg,#00C4FF,#1B6CF7);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.sb-tagline{font-size:.6rem;color:#334155;font-weight:600;text-transform:uppercase;letter-spacing:.1em}
-.sb-nav-label{font-size:.6rem;font-weight:700;color:#334155;text-transform:uppercase;letter-spacing:.1em;padding:0 14px;margin:10px 0 6px}
+.sb-brand span{background:linear-gradient(180deg,#FFFFFF 0%,#E2E8F0 55%,#CBD5E1 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-shadow:0 0 18px rgba(255,255,255,.12);letter-spacing:.02em;font-weight:900}
+.sb-tagline{font-size:.6rem;color:#566179;font-weight:600;text-transform:uppercase;letter-spacing:.1em}
+.sb-nav-label{font-size:.6rem;font-weight:700;color:#566179;text-transform:uppercase;letter-spacing:.1em;padding:0 14px;margin:10px 0 6px}
 
 /* Metric Grid */
 .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
@@ -308,7 +308,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 /* Stray Streamlit cleanup */
 div[data-testid="metric-container"]{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 20px}
 div[data-testid="metric-container"] [data-testid="stMetricValue"]{color:#F1F5F9!important;font-weight:900!important;font-size:1.7rem!important}
-div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#475569!important;font-size:.7rem!important;text-transform:uppercase!important;letter-spacing:.08em!important}
+div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#7C8AA0!important;font-size:.7rem!important;text-transform:uppercase!important;letter-spacing:.08em!important}
 
 /* ── Responsive Breakpoints ── */
 @media (max-width:1200px){
@@ -423,13 +423,13 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#475569!
 .auth-card{max-width:440px;margin:0 auto;background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(0,196,255,.2);border-radius:24px;padding:32px;position:relative;overflow:hidden}
 .auth-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#00C4FF,#1B6CF7,#06B6D4)}
 .auth-tab-row{display:flex;gap:4px;background:rgba(0,0,0,.3);border-radius:12px;padding:4px;margin-bottom:24px}
-.auth-tab{flex:1;padding:10px;text-align:center;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;color:#475569;transition:all .2s;border:none;background:none}
+.auth-tab{flex:1;padding:10px;text-align:center;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;color:#7C8AA0;transition:all .2s;border:none;background:none}
 .auth-tab.active{background:linear-gradient(135deg,#00C4FF,#1B6CF7);color:#fff}
 .google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#E2E8F0;font-size:.85rem;font-weight:600;margin-bottom:16px;text-decoration:none;transition:all .2s}
 .google-btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.2)}
-.auth-divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:#334155;font-size:.72rem;font-weight:600;letter-spacing:.05em}
+.auth-divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:#566179;font-size:.72rem;font-weight:600;letter-spacing:.05em}
 .auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
-.otp-hint{font-size:.75rem;color:#475569;text-align:center;margin-top:10px}
+.otp-hint{font-size:.75rem;color:#7C8AA0;text-align:center;margin-top:10px}
 
 /* ── Nav slide cards ── */
 .nav-cards-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:24px 0}
@@ -740,10 +740,12 @@ with st.sidebar:
                 st.error(msg)
         st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="sb-nav-label">Navigation</div>', unsafe_allow_html=True)
+        st.markdown('<div class="sb-nav-label">Operational Modules</div>', unsafe_allow_html=True)
+        # Exactly 5 primary modules. Analytics + Alerts fold into Dashboard,
+        # the AI Workspace opens from a tender's detail, the Vault lives under Profile.
         pages = [
-            "🏠  Dashboard", "🔍  Explore", "⚡  Opporta Workspace",
-            "💼  Jobs", "📄  Documents", "🔔  Alerts", "📊  Analytics", "👤  Profile",
+            "👤  Profile", "🏠  Dashboard", "🔍  Explore",
+            "📄  Tenders", "💼  Jobs",
         ]
         for p in pages:
             is_active = st.session_state.current_page == p
@@ -772,8 +774,21 @@ _token   = st.session_state.get("sb_token", "")
 profile  = accounts.get_profile(email, token=_token) if email else dict(core.DEFAULT_PROFILE)
 if profile is None:
     profile = dict(core.DEFAULT_PROFILE)
-cname = profile.get("company_name") or (
+cname = profile.get("company_name") or profile.get("full_name") or (
     email.split("@")[0].title() if email else "Guest")
+
+# ── PROFILE READINESS GATE ────────────────────────────────────────────────────
+# The matching engine must never hallucinate a score against empty telemetry.
+# We only compute personalized scores once the user has real profile data OR at
+# least one document in the secure vault. Until then every match = 0 / empty.
+_vault_count = 0
+if st.session_state.authenticated and email:
+    try:
+        _vault_count = len(accounts.list_documents(email, token=_token))
+    except Exception:
+        _vault_count = 0
+PROFILE_READY = (st.session_state.authenticated
+                 and core.profile_is_configured(profile, _vault_count > 0))
 
 def get_scored(df: pd.DataFrame, prof: dict) -> list:
     if df.empty: return []
@@ -785,7 +800,52 @@ def get_scored(df: pd.DataFrame, prof: dict) -> list:
         out.append((s, eligible, reasons, rec))
     return sorted(out, key=lambda x: (x[1], x[0]), reverse=True)
 
-scored          = get_scored(df_t, profile) if st.session_state.authenticated else []
+def compute_smart_alerts(email, token, scored_list, df_tenders) -> list[dict]:
+    """Two mission-critical triggers only — no generic announcements.
+
+    (1) Active pipeline tracking — saved tenders whose deadline is approaching.
+    (2) Proactive matching — newly-surfaced tenders that clear the user's
+        qualification bar (eligible & score >= 80) and aren't already tracked.
+    """
+    alerts: list[dict] = []
+    try:
+        saved = accounts.list_saved(email, token=token) if email else []
+    except Exception:
+        saved = []
+    lookup = ({r["source_id"]: r for _, r in df_tenders.iterrows()}
+              if not df_tenders.empty else {})
+    saved_ids = set()
+
+    for s in saved:
+        sid = s.get("source_id", "")
+        saved_ids.add(sid)
+        rec = lookup.get(sid)
+        if not rec:
+            continue
+        dl = days_left(rec.get("deadline"))
+        if dl is not None and 0 <= dl <= 10:
+            alerts.append({
+                "icon": "⏰", "color": "#F87171" if dl <= 3 else "#F59E0B",
+                "title": f"Deadline approaching — {safe_str(rec.get('title'), 68)}",
+                "detail": f"Closes in {dl} day{'s' if dl != 1 else ''} · {_v(rec.get('organization'))}",
+                "sort": (0, dl),
+            })
+
+    for s, eligible, reasons, rec in scored_list:
+        if s >= 80 and eligible and rec.get("source_id") not in saved_ids:
+            alerts.append({
+                "icon": "🎯", "color": "#10B981",
+                "title": f"New high-match ({s}%) — {safe_str(rec.get('title'), 62)}",
+                "detail": (f"Clears your qualification bar · {_v(rec.get('category'),'General')}"
+                           f" · {_v(rec.get('district'),'State-wide')}"),
+                "sort": (1, 100 - s),
+            })
+
+    alerts.sort(key=lambda a: a["sort"])
+    return alerts
+
+# No verified telemetry → no scores. This is the airtight default state.
+scored          = get_scored(df_t, profile) if PROFILE_READY else []
 eligible_count  = sum(1 for _, e, _, _ in scored if e)
 high_conf_count = sum(1 for s, _, _, _ in scored if s >= 80)
 closing_soon    = sum(1 for _, _, _, r in scored
@@ -799,11 +859,11 @@ page = st.session_state.current_page
 # pin to the bottom of the viewport in CSS. Hidden on desktop (sidebar takes over).
 if st.session_state.authenticated:
     _bottom_items = [
-        ("🏠", "Home", "🏠  Dashboard"),
-        ("🔍", "Find", "🔍  Explore"),
-        ("💼", "Jobs", "💼  Jobs"),
-        ("⚡", "AI",   "⚡  Opporta Workspace"),
-        ("👤", "You",  "👤  Profile"),
+        ("🏠", "Home",    "🏠  Dashboard"),
+        ("🔍", "Explore", "🔍  Explore"),
+        ("📄", "Tenders", "📄  Tenders"),
+        ("💼", "Jobs",    "💼  Jobs"),
+        ("👤", "You",     "👤  Profile"),
     ]
     _mnav = st.container(key="mobilenav")
     with _mnav:
@@ -1025,6 +1085,31 @@ if "Dashboard" in page:
           </div>
         </div>""", unsafe_allow_html=True)
 
+        # ── TELEMETRY GATE — no fabricated matches until profile/vault is set ──
+        if not PROFILE_READY:
+            st.markdown(f"""
+            <div class="brief" style="border-color:rgba(245,158,11,.35);
+                 background:linear-gradient(135deg,rgba(245,158,11,.06),rgba(0,196,255,.02))">
+              <div class="brief-greeting" style="color:#F59E0B">⚠ Awaiting System Telemetry</div>
+              <div class="brief-sub" style="margin-top:6px;max-width:640px">
+                Opporta Intelligence has <b>not</b> generated match scores yet — your profile is empty.
+                We never fabricate a fit score against missing data. Add your contractor class,
+                sectors &amp; districts (or upload a document to the Vault) and the engine will
+                calibrate every match to your verified capacity.
+              </div>
+            </div>""", unsafe_allow_html=True)
+            _gt1, _gt2, _gt3 = st.columns([1, 1, 1])
+            if _gt1.button("👤  Complete Profile Setup", use_container_width=True, key="gate_profile"):
+                st.session_state.current_page = "👤  Profile"
+                st.rerun()
+            if _gt2.button("📄  Upload to Vault", use_container_width=True, key="gate_vault"):
+                st.session_state.current_page = "👤  Profile"
+                st.session_state["profile_tab"] = "vault"
+                st.rerun()
+            if _gt3.button("🔍  Browse Tenders Anyway", use_container_width=True, key="gate_browse"):
+                st.session_state.current_page = "📄  Tenders"
+                st.rerun()
+
         # ══════════════════════════════════════════════════════════════════════
         # SECTION 1 (already above): Greeting / Briefing banner
         # SECTION 2: Active-tender general information + live list
@@ -1107,59 +1192,65 @@ if "Dashboard" in page:
                         accounts.save_tender(email, rec.get("source_id"), token=_token)
                         st.toast("✓ Saved to pipeline")
 
-            if st.button("🔍  See all active tenders  →", use_container_width=True,
+            if st.button("📄  See all active tenders  →", use_container_width=True,
                          key="dash_see_all_tenders"):
-                st.session_state.current_page = "🔍  Explore"
+                st.session_state.current_page = "📄  Tenders"
                 st.rerun()
+        elif not PROFILE_READY:
+            st.markdown("""<div class="ocard" style="text-align:center;padding:36px">
+              <div style="font-size:2rem;margin-bottom:12px">📡</div>
+              <div style="font-size:.9rem;font-weight:700;color:#94A3B8">Awaiting profile telemetry</div>
+              <div style="font-size:.78rem;color:#64748B;margin-top:6px;line-height:1.6">Match scores are intentionally blank until you configure your profile.<br>No data in → no fabricated scores out.</div>
+            </div>""", unsafe_allow_html=True)
         else:
-            st.markdown("""<div class="ocard" style="text-align:center;padding:32px;color:#475569">
+            st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
               <div style="font-size:2rem;margin-bottom:12px">📋</div>
-              <div style="font-size:.88rem;font-weight:600;color:#64748B">Complete your Profile to see personalized matches</div>
-              <div style="font-size:.77rem;color:#334155;margin-top:6px">Set your contractor class, sectors, and target districts</div>
+              <div style="font-size:.88rem;font-weight:600;color:#94A3B8">No tenders currently match your criteria</div>
+              <div style="font-size:.77rem;color:#64748B;margin-top:6px">Try widening your sectors or target districts in Profile</div>
             </div>""", unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
-        # SECTION 3: Features & Tools — click to open, everything inside
+        # SECTION 3: Smart Pipeline Alerts  (folded into Dashboard)
+        #   Only two mission-critical triggers — no generic announcements:
+        #   (1) approaching deadlines on tenders the user is tracking
+        #   (2) newly-surfaced high-match tenders above their qualification bar
         # ══════════════════════════════════════════════════════════════════════
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.expander("⚡  Features & Tools  —  tap to open the Analyzer, Documents, Alerts & more", expanded=False):
-            _feat_cards = [
-                ("🔍", "Explore Tenders",  "Search & filter all live tenders",     "🔍  Explore"),
-                ("⚡", "AI Analyzer",      "Score, evaluate & generate bids",      "⚡  Opporta Workspace"),
-                ("💼", "Government Jobs",  "Browse jobs matched to your resume",   "💼  Jobs"),
-                ("📄", "My Documents",     "Secure vault for your certificates",   "📄  Documents"),
-                ("🔔", "Smart Alerts",     "Get notified of new opportunities",    "🔔  Alerts"),
-                ("📊", "Analytics",        "Market trends & insights",             "📊  Analytics"),
-                ("💾", "Saved Pipeline",   "Track tenders you're bidding on",      "🔍  Explore"),
-                ("👤", "My Profile",       "Tune your matching criteria",          "👤  Profile"),
-            ]
-            _fc = st.columns(4)
-            for _i, (_icon, _lbl, _desc, _pg) in enumerate(_feat_cards):
-                with _fc[_i % 4]:
-                    st.markdown(f"""<div class="nav-card" style="margin-bottom:0;min-height:118px">
-                      <div class="nav-card-icon">{_icon}</div>
-                      <div class="nav-card-label">{_lbl}</div>
-                      <div style="font-size:.62rem;color:#475569;margin-top:5px;line-height:1.3">{_desc}</div>
-                    </div>""", unsafe_allow_html=True)
-                    if st.button(f"Open {_lbl}", key=f"feat_{_pg}_{_lbl}", use_container_width=True):
-                        st.session_state.current_page = _pg
-                        st.rerun()
+        st.markdown("""<div class="sec-hd">
+          <span class="sec-title">🔔 Smart Pipeline Alerts</span>
+          <span class="sec-badge">Deadlines &amp; new high-matches only</span>
+          <div class="sec-divider"></div>
+        </div>""", unsafe_allow_html=True)
 
-            st.markdown('<div style="height:8px"></div>', unsafe_allow_html=True)
-            st.markdown('<div class="profile-section-title">⚡ Quick Category Filters</div>',
-                        unsafe_allow_html=True)
-            qf_items = [
-                ("⛏️", "Coal & Mining"),       ("🏗️", "Civil Infrastructure"),
-                ("💡", "Electrical & Energy"), ("🚰", "Water & Irrigation"),
-                ("🏥", "Medical Procurement"), ("💻", "IT Services"),
-                ("🚛", "Transport"),           ("🏙️", "Municipal Projects"),
-            ]
-            _qfc = st.columns(4)
-            for _i, (emoji, name) in enumerate(qf_items):
-                if _qfc[_i % 4].button(f"{emoji}  {name}", use_container_width=True, key=f"qf_{name}"):
-                    st.session_state.explore_category = name
-                    st.session_state.current_page     = "🔍  Explore"
-                    st.rerun()
+        _alerts = compute_smart_alerts(email, _token, scored, df_t)
+        if _alerts:
+            for _al in _alerts[:6]:
+                st.markdown(
+                    f'<div class="alert-item" style="border-left-color:{_al["color"]}">'
+                    f'<div class="alert-title">{_al["icon"]} {_html.escape(_al["title"])}</div>'
+                    f'<div class="alert-meta" style="color:#94A3B8">{_html.escape(_al["detail"])}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+        else:
+            st.markdown("""<div class="ocard" style="text-align:center;padding:24px">
+              <div style="font-size:1.5rem;margin-bottom:6px">🔕</div>
+              <div style="font-size:.82rem;color:#94A3B8;font-weight:600">No critical alerts</div>
+              <div style="font-size:.74rem;color:#64748B;margin-top:4px">You'll be alerted on approaching deadlines for saved tenders and brand-new high-match opportunities.</div>
+            </div>""", unsafe_allow_html=True)
+
+        # ── Tools launcher (folded modules) ──
+        st.markdown("<br>", unsafe_allow_html=True)
+        _tl1, _tl2, _tl3 = st.columns(3)
+        if _tl1.button("📊  Market Analytics", use_container_width=True, key="dash_open_analytics"):
+            st.session_state.current_page = "📊  Analytics"
+            st.rerun()
+        if _tl2.button("⚡  AI Tender Analyzer", use_container_width=True, key="dash_open_ws"):
+            st.session_state.current_page = "⚡  Opporta Workspace"
+            st.rerun()
+        if _tl3.button("📄  My Document Vault", use_container_width=True, key="dash_open_vault"):
+            st.session_state.current_page = "👤  Profile"
+            st.session_state["profile_tab"] = "vault"
+            st.rerun()
 
         # ══════════════════════════════════════════════════════════════════════
         # SECTION 4: Latest Government Jobs
@@ -1190,17 +1281,113 @@ if "Dashboard" in page:
                 st.session_state.current_page = "💼  Jobs"
                 st.rerun()
         else:
-            st.markdown("""<div class="jcard" style="text-align:center;padding:28px;color:#475569">
+            st.markdown("""<div class="jcard" style="text-align:center;padding:28px;color:#7C8AA0">
               <div style="font-size:1.6rem;margin-bottom:8px">💼</div>
               <div style="font-size:.84rem;font-weight:600;color:#64748B">No open jobs right now — check back tomorrow</div>
             </div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ── EXPLORE ───────────────────────────────────────────────────────────────────
+# ── EXPLORE — general system discovery (unified search: tenders + jobs) ────────
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Explore" in page:
     st.markdown("""<div class="sec-hd">
-      <span class="sec-title">🔍 Explore Opportunities</span>
+      <span class="sec-title">🔍 Explore</span>
+      <span class="sec-badge">Unified discovery</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    _xq = st.text_input("Search everything", value="",
+                        placeholder="Search across all tenders & jobs — keyword, organisation, district…",
+                        label_visibility="collapsed", key="explore_global_q")
+    _xql = _xq.strip().lower()
+
+    _t_hits, _j_hits = [], []
+    if _xql:
+        if not df_t.empty:
+            for _, _r in df_t.iterrows():
+                _rec = _r.to_dict()
+                _hay = (f"{_v(_rec.get('title'))} {_v(_rec.get('organization'))} "
+                        f"{_v(_rec.get('district'))} {_v(_rec.get('category'))} "
+                        f"{_v(_rec.get('state'))}").lower()
+                if _xql in _hay:
+                    _t_hits.append(_rec)
+        if not df_j.empty:
+            for _, _r in df_j.iterrows():
+                _rec = _r.to_dict()
+                _hay = (f"{_v(_rec.get('title'))} {_v(_rec.get('department'))} "
+                        f"{_v(_rec.get('category'))} {_v(_rec.get('state'))}").lower()
+                if _xql in _hay:
+                    _j_hits.append(_rec)
+
+    if _xql:
+        st.markdown(
+            f'<div class="brief-stats" style="margin:4px 0 18px">'
+            f'<div class="bstat">📄 <b>{len(_t_hits)}</b> tenders</div>'
+            f'<div class="bstat">💼 <b>{len(_j_hits)}</b> jobs</div>'
+            f'</div>', unsafe_allow_html=True)
+
+        if _t_hits:
+            st.markdown('<div class="profile-section-title">📄 Tender matches</div>', unsafe_allow_html=True)
+            for _rec in _t_hits[:6]:
+                _val = _v(_rec.get("value_text")) or (
+                    f"₹{float(_rec.get('value_lakhs',0)):.0f}L" if _rec.get("value_lakhs") else "—")
+                st.markdown(
+                    f'<div class="ocard"><div class="ocard-title">{_html.escape(safe_str(_rec.get("title"),100))}</div>'
+                    f'<div class="ocard-org">🏛 {_esc(_rec.get("organization"))} · {_esc(_rec.get("state"))}</div>'
+                    f'<div class="ocard-tags"><span class="tag tag-val">💰 {_html.escape(_val)}</span>'
+                    f'<span class="tag tag-loc">📍 {_esc(_rec.get("district"),"State-wide")}</span>'
+                    f'<span class="tag tag-cat">{_esc(_rec.get("category"),"General")}</span></div></div>',
+                    unsafe_allow_html=True)
+            if st.button("📄  Open full Tender Portal  →", use_container_width=True, key="exp_to_tenders"):
+                st.session_state.explore_search = _xql
+                st.session_state.current_page = "📄  Tenders"
+                st.rerun()
+
+        if _j_hits:
+            st.markdown('<div class="profile-section-title" style="margin-top:18px">💼 Job matches</div>', unsafe_allow_html=True)
+            for _rec in _j_hits[:6]:
+                _vac = _v(_rec.get("vacancies"))
+                _vb = f'<div class="jvac">{_vac} posts</div>' if _vac not in ("—","") else ''
+                st.markdown(
+                    f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
+                    f'<div class="jcard-title">{_html.escape(safe_str(_rec.get("title"),95))}</div>'
+                    f'<div class="jcard-dept">🏛 {_esc(_rec.get("department"))} · {_esc(_rec.get("state"))}</div>'
+                    f'</div>{_vb}</div></div>', unsafe_allow_html=True)
+            if st.button("💼  Open full Job Board  →", use_container_width=True, key="exp_to_jobs"):
+                st.session_state.current_page = "💼  Jobs"
+                st.rerun()
+
+        if not _t_hits and not _j_hits:
+            st.info("No tenders or jobs match that search. Try a broader keyword.")
+    else:
+        # No query → discovery shortcuts
+        st.caption("Jump straight into a sector, or open a dedicated portal.")
+        _disc = [
+            ("⛏️", "Coal & Mining"),       ("🏗️", "Civil Infrastructure"),
+            ("💡", "Electrical & Energy"), ("🚰", "Water & Irrigation"),
+            ("🏥", "Medical Procurement"), ("💻", "IT Services"),
+            ("🚛", "Transport"),           ("🏙️", "Municipal Projects"),
+        ]
+        _dc = st.columns(4)
+        for _i, (_em, _nm) in enumerate(_disc):
+            if _dc[_i % 4].button(f"{_em}  {_nm}", use_container_width=True, key=f"disc_{_nm}"):
+                st.session_state.explore_category = _nm
+                st.session_state.current_page = "📄  Tenders"
+                st.rerun()
+        st.markdown("<br>", unsafe_allow_html=True)
+        _pc1, _pc2 = st.columns(2)
+        if _pc1.button("📄  Tender Portal", use_container_width=True, key="exp_portal_t"):
+            st.session_state.current_page = "📄  Tenders"; st.rerun()
+        if _pc2.button("💼  Job Board", use_container_width=True, key="exp_portal_j"):
+            st.session_state.current_page = "💼  Jobs"; st.rerun()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── TENDERS — dedicated portal w/ multi-tier cascading filters ─────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Tenders" in page:
+    st.markdown("""<div class="sec-hd">
+      <span class="sec-title">📄 Tender Portal</span>
+      <span class="sec-badge">Category › State › District</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
@@ -1264,11 +1451,12 @@ elif "Explore" in page:
         if fst  != "All" and _v(rec.get("state")) != fst: continue
         if fcat != "All" and fcat.lower() not in _v(rec.get("category","")).lower(): continue
         if fdst != "All" and _v(rec.get("district","")).lower() != fdst.lower(): continue
-        if st.session_state.authenticated:
+        if PROFILE_READY:
             s, _, eligible = core.score_tender_for_user(rec, profile)
             rows.append((s, eligible, rec))
         else:
-            rows.append((int(rec.get("ai_score") or 0), True, rec))
+            # No verified telemetry → show neutral market score, never a fit verdict.
+            rows.append((int(rec.get("ai_score") or 0), None, rec))
 
     rows.sort(key=lambda x: x[0], reverse=True)
 
@@ -1280,12 +1468,14 @@ elif "Explore" in page:
 
     if not st.session_state.authenticated:
         st.info("🔐 Sign in to see your personalized Opporta Intelligence fit score for each tender.")
+    elif not PROFILE_READY:
+        st.info("📡 Showing neutral market scores. Complete your Profile (or upload a vault document) to unlock personalized eligibility & fit scoring.")
 
     if not rows:
-        st.markdown("""<div class="ocard" style="text-align:center;padding:40px;color:#475569">
+        st.markdown("""<div class="ocard" style="text-align:center;padding:40px;color:#7C8AA0">
           <div style="font-size:2rem;margin-bottom:12px">🔍</div>
           <div style="font-size:.9rem;font-weight:600;color:#64748B">No tenders match your filters</div>
-          <div style="font-size:.77rem;color:#334155;margin-top:6px">Try broadening your search or changing the state/district</div>
+          <div style="font-size:.77rem;color:#566179;margin-top:6px">Try broadening your search or changing the state/district</div>
         </div>""", unsafe_allow_html=True)
 
     for s, eligible, rec in rows[:80]:
@@ -1293,8 +1483,12 @@ elif "Explore" in page:
         dl       = days_left(rec.get("deadline"))
         dl_txt   = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
         val      = _v(rec.get("value_text")) or (f"₹{float(rec.get('value_lakhs',0)):.0f}L" if rec.get("value_lakhs") else "—")
-        elig_cls = "tag-green" if eligible else "tag-warn"
-        elig_txt = "✅ Eligible" if eligible else "⚠ Review"
+        if eligible is None:
+            elig_cls, elig_txt = "tag-cat", "ℹ Market score"
+        elif eligible:
+            elig_cls, elig_txt = "tag-green", "✅ Eligible"
+        else:
+            elig_cls, elig_txt = "tag-warn", "⚠ Review"
         district = _v(rec.get("district"), "State-wide")
         color    = score_color(s)
 
@@ -1330,9 +1524,14 @@ elif "Explore" in page:
             if doc_url and str(doc_url) not in ("nan","None","—",""):
                 _pdf_widget(doc_url, rec.get("source_id",""), ctx="exp")
             if st.session_state.authenticated:
-                if st.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}"):
-                    accounts.save_tender(email, rec.get("source_id"))
+                _sv, _an = st.columns(2)
+                if _sv.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}"):
+                    accounts.save_tender(email, rec.get("source_id"), token=_token)
                     st.toast("✓ Saved to your pipeline")
+                if _an.button("⚡ Analyze with AI", key=f"e_an_{rec.get('source_id')}"):
+                    st.session_state["ws_prefill"] = safe_str(rec.get("title"), 110)
+                    st.session_state.current_page = "⚡  Opporta Workspace"
+                    st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── AI WORKSPACE ──────────────────────────────────────────────────────────────
@@ -1344,6 +1543,10 @@ elif "Workspace" in page:
           <div style="font-size:.9rem;font-weight:600;color:#64748B">Sign in to access Opporta Workspace</div>
         </div>""", unsafe_allow_html=True)
         st.stop()
+
+    # Prefill the evaluator search when arriving from a tender's "Analyze with AI".
+    if "ws_prefill" in st.session_state:
+        st.session_state["eval_search_q"] = st.session_state.pop("ws_prefill")
 
     has_ai = bool(
         os.getenv("GEMINI_API_KEY") or _secret("GEMINI_API_KEY") or
@@ -1572,7 +1775,7 @@ elif "Workspace" in page:
                         cond_html = '<div class="profit-panel">'
                         for item in checklist["conditional"]:
                             icon  = "✅" if item["status"] == "present" else "❓" if item["status"] in ("unknown","check") else "❌"
-                            color_i = "#10B981" if item["status"] == "present" else "#475569"
+                            color_i = "#10B981" if item["status"] == "present" else "#7C8AA0"
                             badge_cls = "chk-req" if item["required"] else "chk-opt"
                             badge_txt = "Required" if item["required"] else "Optional"
                             cond_html += (
@@ -1627,7 +1830,7 @@ elif "Workspace" in page:
               <div class="jcard-dept">{_v(selected_job.get('department'))} &nbsp;·&nbsp;
                 {_v(selected_job.get('state'))} &nbsp;·&nbsp;
                 Vacancies: {_v(selected_job.get('vacancies'))}</div>
-              <div style="font-size:.77rem;color:#475569;line-height:1.5">
+              <div style="font-size:.77rem;color:#7C8AA0;line-height:1.5">
                 {safe_str(selected_job.get('qualification'), 220)}
               </div>
             </div>""", unsafe_allow_html=True)
@@ -2069,7 +2272,7 @@ elif "Documents" in page:
         st.markdown("""<div class="ocard" style="text-align:center;padding:36px">
           <div style="font-size:2rem;margin-bottom:12px">📂</div>
           <div style="font-size:.88rem;color:#64748B">No documents uploaded yet</div>
-          <div style="font-size:.76rem;color:#334155;margin-top:6px">
+          <div style="font-size:.76rem;color:#566179;margin-top:6px">
             Upload your GST cert, experience proofs, contractor registration, and bid documents above.
           </div>
         </div>""", unsafe_allow_html=True)
@@ -2083,7 +2286,29 @@ elif "Alerts" in page:
         st.stop()
 
     st.markdown("""<div class="sec-hd">
-      <span class="sec-title">🔔 Alert History</span>
+      <span class="sec-title">🔔 Smart Pipeline Alerts</span>
+      <span class="sec-badge">Deadlines &amp; new high-matches only</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    # Live, calibrated alerts (same engine as the Dashboard panel).
+    _live = compute_smart_alerts(email, _token, scored, df_t)
+    if _live:
+        for _al in _live:
+            st.markdown(
+                f'<div class="alert-item" style="border-left-color:{_al["color"]}">'
+                f'<div class="alert-title">{_al["icon"]} {_html.escape(_al["title"])}</div>'
+                f'<div class="alert-meta" style="color:#94A3B8">{_html.escape(_al["detail"])}</div>'
+                f'</div>', unsafe_allow_html=True)
+    else:
+        st.markdown("""<div class="ocard" style="text-align:center;padding:26px">
+          <div style="font-size:1.5rem;margin-bottom:6px">🔕</div>
+          <div style="font-size:.84rem;color:#94A3B8;font-weight:600">No critical alerts right now</div>
+          <div style="font-size:.74rem;color:#7C8AA0;margin-top:4px">Save tenders to your pipeline and complete your profile to receive deadline & high-match alerts.</div>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("""<div class="sec-hd" style="margin-top:30px">
+      <span class="sec-title">📧 Dispatch History</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
@@ -2110,7 +2335,7 @@ elif "Alerts" in page:
             rtype  = entry.get("record_type","tender").title()
             st.markdown(f"""<div class="alert-item">
               <div class="alert-title">{title}</div>
-              <div style="font-size:.73rem;color:#475569;margin:4px 0 8px">{org}</div>
+              <div style="font-size:.73rem;color:#7C8AA0;margin:4px 0 8px">{org}</div>
               <div class="ocard-tags">
                 <span class="tag tag-dl">📧 Sent {sent}</span>
                 <span class="tag tag-cat">{rtype}</span>
@@ -2120,7 +2345,7 @@ elif "Alerts" in page:
         st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
           <div style="font-size:2rem;margin-bottom:12px">🔔</div>
           <div style="font-size:.9rem;color:#64748B;font-weight:600">No alerts sent yet</div>
-          <div style="font-size:.77rem;color:#334155;margin-top:8px;line-height:1.6">
+          <div style="font-size:.77rem;color:#566179;margin-top:8px;line-height:1.6">
             Alerts are emailed each time the pipeline runs and finds new matches for your profile.<br>
             Complete your Profile → add RESEND_API_KEY to .env → run: <code>python ingest.py</code>
           </div>
@@ -2256,7 +2481,11 @@ elif "Profile" in page:
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
-    ptab1, ptab2 = st.tabs(["🏢  Contractor Profile", "👤  Job Seeker Profile"])
+    if not PROFILE_READY:
+        st.info("📡 Your profile is empty — Opporta Intelligence is holding all match scores at 0 until you save real data here or upload a document to the Vault.")
+
+    ptab1, ptab2, ptab3 = st.tabs(
+        ["🏢  Contractor Profile", "👤  Job Seeker Profile", "📄  Document Vault"])
 
     # ── Tab 1: Contractor Profile ──────────────────────────────────────────────
     with ptab1:
@@ -2336,7 +2565,7 @@ elif "Profile" in page:
               pcard_html = (
                   f'<div class="pipe-card"><div style="flex:1;min-width:0">'
                   f'<div style="font-size:.87rem;font-weight:600;color:#E2E8F0;margin-bottom:3px">&#128204; {_html.escape(title)}</div>'
-                  f'<div style="font-size:.72rem;color:#475569">{_html.escape(org)}</div>'
+                  f'<div style="font-size:.72rem;color:#7C8AA0">{_html.escape(org)}</div>'
                   f'<div class="ocard-tags" style="margin-top:8px">'
                   f'<span class="tag tag-cat">Status: {_html.escape(status)}</span>'
                   f'{val_tag}{dl_tag}'
@@ -2347,8 +2576,8 @@ elif "Profile" in page:
           st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
             <div style="font-size:2rem;margin-bottom:10px">📋</div>
             <div style="font-size:.86rem;color:#64748B">No saved tenders yet</div>
-            <div style="font-size:.75rem;color:#334155;margin-top:6px">
-              Use the Explore page to save tenders to your pipeline.
+            <div style="font-size:.75rem;color:#566179;margin-top:6px">
+              Use the Tenders portal to save tenders to your pipeline.
             </div>
           </div>""", unsafe_allow_html=True)
 
@@ -2436,15 +2665,86 @@ elif "Profile" in page:
         else:
             st.info("Fill in your qualification, degree type, skills and save above — the app will automatically score your eligibility for every job.")
 
+    # ── Tab 3: Document Vault ──────────────────────────────────────────────────
+    with ptab3:
+        st.markdown('<div class="profile-section-title">Secure Document Vault</div>',
+                    unsafe_allow_html=True)
+        st.caption("Contractor licenses, capacity certificates, resumes, GST / turnover statements. "
+                   "Uploaded files are parsed and fed into Opporta Intelligence to calibrate your match scores.")
+
+        _vc1, _vc2 = st.columns([2, 1])
+        with _vc1:
+            _vault_label = st.text_input("Document label", key="vault_label",
+                                         placeholder="e.g. Contractor License (Class A), GST Certificate, Resume")
+        with _vc2:
+            _vault_kind = st.selectbox("Type", ["License", "Capacity Cert", "Resume",
+                                                "Tax / Turnover", "Other"], key="vault_kind")
+        _vault_file = st.file_uploader("Select file", type=["pdf", "jpg", "jpeg", "png", "txt", "docx"],
+                                       key="vault_file_up")
+
+        if st.button("⬆️  Upload to Vault & Index", use_container_width=True, key="vault_do_upload"):
+            if _vault_file and _vault_label:
+                _raw = _vault_file.read()
+                # Extraction parser → feed text into the Intelligence core.
+                _parsed = ""
+                try:
+                    if _vault_file.name.lower().endswith(".pdf"):
+                        import io as _io
+                        _parsed = _read_pdf_text(_io.BytesIO(_raw))
+                    elif _vault_file.name.lower().endswith(".txt"):
+                        _parsed = _raw.decode("utf-8", errors="ignore")
+                except Exception:
+                    _parsed = ""
+                with st.spinner("Uploading securely & indexing for match scoring…"):
+                    _did = accounts.save_document(
+                        email, f"[{_vault_kind}] {_vault_label}", _vault_file.name,
+                        _raw, _vault_file.type or "application/octet-stream", token=_token)
+                if _did:
+                    if _parsed.strip():
+                        st.success(f"✓ Uploaded & parsed {len(_parsed):,} characters — "
+                                   f"telemetry unlocked, match scoring is now active.")
+                    else:
+                        st.success("✓ Uploaded. Telemetry unlocked — match scoring is now active.")
+                    st.rerun()
+                else:
+                    st.error("Upload failed. Check logs.")
+            else:
+                st.warning("Add a label and choose a file first.")
+
+        st.markdown('<div class="profile-section-title" style="margin-top:22px">Stored Documents</div>',
+                    unsafe_allow_html=True)
+        _docs = accounts.list_documents(email, token=_token)
+        if _docs:
+            st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:12px">{len(_docs)} documents · feeding the engine</div>',
+                        unsafe_allow_html=True)
+            for _doc in _docs:
+                _kb   = round(_doc.get("size_bytes", 0) / 1024, 1)
+                _mime = _doc.get("mime_type", "")
+                _icon = "📄" if "pdf" in _mime else "🖼️" if "image" in _mime else "📁"
+                _up   = str(_doc.get("uploaded_at", ""))[:10]
+                st.markdown(
+                    f'<div class="doc-card"><div class="doc-icon">{_icon}</div>'
+                    f'<div style="flex:1;min-width:0">'
+                    f'<div class="doc-name">{_esc(_doc.get("name"))}</div>'
+                    f'<div class="doc-meta">{_esc(_doc.get("filename"))} · {_kb} KB · {_up}</div></div>'
+                    f'<span class="tag tag-cat" style="flex-shrink:0">{_mime.split("/")[-1].upper()[:8]}</span>'
+                    f'</div>', unsafe_allow_html=True)
+        else:
+            st.markdown("""<div class="ocard" style="text-align:center;padding:30px">
+              <div style="font-size:1.8rem;margin-bottom:8px">📂</div>
+              <div style="font-size:.86rem;color:#94A3B8;font-weight:600">Vault is empty</div>
+              <div style="font-size:.76rem;color:#7C8AA0;margin-top:6px">Upload one document above to unlock personalized match scoring.</div>
+            </div>""", unsafe_allow_html=True)
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ── FOOTER ────────────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""<div style="text-align:center;padding:48px 0 24px;color:#1E293B;font-size:.65rem;
   letter-spacing:.15em;font-weight:600;text-transform:uppercase;font-family:'JetBrains Mono',monospace">
   ⚡ OPPORTA · EVERY OPPORTUNITY · ONE PLATFORM · CG + UP<br>
-  <a href="?page=privacy" style="color:#334155;text-decoration:none;font-size:.6rem">Privacy Policy</a>
+  <a href="?page=privacy" style="color:#566179;text-decoration:none;font-size:.6rem">Privacy Policy</a>
   &nbsp;·&nbsp;
-  <a href="?page=privacy" style="color:#334155;text-decoration:none;font-size:.6rem">Terms of Use</a>
+  <a href="?page=privacy" style="color:#566179;text-decoration:none;font-size:.6rem">Terms of Use</a>
 </div>""", unsafe_allow_html=True)
 
 # ── PRIVACY POLICY PAGE (accessible via ?page=privacy) ────────────────────────
@@ -2455,7 +2755,7 @@ if _qp == "privacy":
       <div style="font-size:.7rem;color:#00C4FF;font-weight:700;text-transform:uppercase;
            letter-spacing:.1em;margin-bottom:12px">⚡ Opporta</div>
       <h1 style="font-size:2rem;font-weight:900;color:#F1F5F9;margin-bottom:8px">Privacy Policy</h1>
-      <p style="color:#475569;font-size:.8rem;margin-bottom:32px">Last updated: June 2026</p>
+      <p style="color:#7C8AA0;font-size:.8rem;margin-bottom:32px">Last updated: June 2026</p>
 
       <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">1. What We Collect</h2>
       <p style="color:#64748B;font-size:.85rem;line-height:1.75">
@@ -2498,7 +2798,7 @@ if _qp == "privacy":
       </p>
 
       <div style="margin-top:40px;padding-top:20px;border-top:1px solid rgba(255,255,255,.05);
-           color:#334155;font-size:.7rem">
+           color:#566179;font-size:.7rem">
         © 2026 Opporta · Every Opportunity, One Platform · CG + UP
       </div>
     </div>

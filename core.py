@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import threading
 from datetime import datetime, date
 from dateutil import parser as dateparser  # python-dateutil
 
@@ -21,12 +22,23 @@ DEFAULT_TURNOVER_LAKHS = 500.0  # 5 Crore = 500 Lakh
 # ---------------------------------------------------------------------------
 # AI call status — lets the UI tell the user WHY an AI call failed
 # (quota hit vs. missing/invalid key vs. network) instead of a generic error.
+#
+# Stored THREAD-LOCAL: Streamlit runs each user session in its own ScriptRunner
+# thread, so a module-level dict would leak one user's AI error to another. A
+# threading.local() store isolates it per session.
 # ---------------------------------------------------------------------------
-LAST_AI_ERROR: dict = {"kind": None, "detail": ""}
+_AI_ERR = threading.local()
+
+
+def _ai_err_state() -> dict:
+    d = getattr(_AI_ERR, "state", None)
+    if d is None:
+        d = _AI_ERR.state = {"kind": None, "detail": ""}
+    return d
 
 
 def record_ai_error(exc) -> None:
-    """Classify and store the most recent AI failure."""
+    """Classify and store the most recent AI failure (for this session)."""
     msg = str(exc)
     low = msg.lower()
     if any(s in low for s in ("429", "quota", "rate limit", "rate_limit",
@@ -41,13 +53,15 @@ def record_ai_error(exc) -> None:
         kind = "network"
     else:
         kind = "error"
-    LAST_AI_ERROR["kind"] = kind
-    LAST_AI_ERROR["detail"] = msg[:300]
+    st = _ai_err_state()
+    st["kind"] = kind
+    st["detail"] = msg[:300]
 
 
 def clear_ai_error() -> None:
-    LAST_AI_ERROR["kind"] = None
-    LAST_AI_ERROR["detail"] = ""
+    st = _ai_err_state()
+    st["kind"] = None
+    st["detail"] = ""
 
 
 def ai_error_message():
@@ -55,7 +69,8 @@ def ai_error_message():
 
     severity is one of 'warning' | 'error' so the UI can pick st.warning/st.error.
     """
-    kind = LAST_AI_ERROR.get("kind")
+    st = _ai_err_state()
+    kind = st.get("kind")
     if not kind:
         return None
     if kind == "quota":
@@ -70,7 +85,7 @@ def ai_error_message():
         return ("warning",
                 "🌐 Couldn't reach the AI service just now (network/temporary issue). Please retry.")
     return ("error",
-            f"⚠ AI service error — please try again. ({LAST_AI_ERROR.get('detail', '')[:140]})")
+            f"⚠ AI service error — please try again. ({st.get('detail', '')[:140]})")
 
 
 # ---------------------------------------------------------------------------

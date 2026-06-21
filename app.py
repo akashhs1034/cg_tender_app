@@ -13,10 +13,18 @@ import core, accounts, evaluator
 import base64 as _b64
 
 # ── LOGO ─────────────────────────────────────────────────────────────────────
+# Cache the base64 data-URI so the 1.2 MB PNG is read + encoded ONCE, not on
+# every Streamlit rerun (every click re-executes module-level code).
 _logo_path = Path(__file__).parent / "assets" / "logo.png"
-_LOGO_URI  = (
-    "data:image/png;base64," + _b64.b64encode(_logo_path.read_bytes()).decode()
-) if _logo_path.exists() else None
+
+@st.cache_data(show_spinner=False)
+def _logo_data_uri(path_str: str) -> str | None:
+    p = Path(path_str)
+    if not p.exists():
+        return None
+    return "data:image/png;base64," + _b64.b64encode(p.read_bytes()).decode()
+
+_LOGO_URI = _logo_data_uri(str(_logo_path))
 try:
     from PIL import Image as _PILImg
     _page_icon = _PILImg.open(_logo_path) if _logo_path.exists() else "⚡"
@@ -565,10 +573,15 @@ def load_table(name: str) -> pd.DataFrame:
         try:
             from supabase import create_client
             client = create_client(url, key)
-            # Paginate in batches of 1000 (Supabase default cap)
+            # Paginate in batches of 1000 (Supabase default cap).
+            # ORDER BY a stable key (source_id) is required: range pagination
+            # without a deterministic order can return duplicate/missing rows
+            # because PostgREST's row order is otherwise not guaranteed.
             all_rows, offset, batch = [], 0, 1000
             while True:
-                chunk = client.table(name).select("*").range(offset, offset + batch - 1).execute().data
+                chunk = (client.table(name).select("*")
+                         .order("source_id")
+                         .range(offset, offset + batch - 1).execute().data)
                 if not chunk:
                     break
                 all_rows.extend(chunk)
@@ -920,7 +933,12 @@ def compute_smart_alerts(email, token, scored_list, df_tenders) -> list[dict]:
     return alerts
 
 # No verified telemetry → no scores. This is the airtight default state.
-scored          = get_scored(df_t, profile) if PROFILE_READY else []
+# get_scored() is an O(n) Python loop over every tender; only run it on the
+# pages that actually consume `scored` (Dashboard KPIs/matches + Alerts panel)
+# instead of on every rerun of every page.
+_cur_page = st.session_state.current_page
+_scored_needed = ("Dashboard" in _cur_page) or ("Alerts" in _cur_page)
+scored          = get_scored(df_t, profile) if (PROFILE_READY and _scored_needed) else []
 eligible_count  = sum(1 for _, e, _, _ in scored if e)
 high_conf_count = sum(1 for s, _, _, _ in scored if s >= 80)
 closing_soon    = sum(1 for _, _, _, r in scored

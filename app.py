@@ -446,12 +446,13 @@ def load_table(name: str) -> pd.DataFrame:
     if url and key:
         try:
             from supabase import create_client
-            rows = create_client(url, key).table(name).select("*").execute().data
+            rows = create_client(url, key).table(name).select("*").limit(2000).execute().data
             if rows:
                 df = pd.DataFrame(rows)
                 return _drop_expired(df)
-        except Exception:
-            pass
+            return pd.DataFrame()
+        except Exception as e:
+            st.warning(f"⚠️ Could not load {name} from Supabase: {e}", icon="⚠️")
     local = Path(__file__).parent / "data" / f"{name}.csv"
     if local.exists():
         return _drop_expired(pd.read_csv(local))

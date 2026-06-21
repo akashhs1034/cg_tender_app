@@ -452,36 +452,65 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#475569!
 }
 [data-testid="collapsedControl"] svg{color:#fff!important;width:16px!important;height:16px!important}
 
-/* ── Mobile top nav row — hidden on desktop, scrollable on mobile ── */
-.mob-topnav{display:none}
+/* ── ══════════════════════════════════════════════════════════ ── */
+/* ── MOBILE BOTTOM TAB BAR — fixed, native-app style              ── */
+/* ── ══════════════════════════════════════════════════════════ ── */
+/* Desktop: hide entirely (sidebar handles nav). */
+@media (min-width:769px){ .st-key-mobilenav{display:none!important} }
+
+/* Phone/tablet: pin to bottom of the viewport as a frosted tab bar. */
 @media (max-width:768px){
-  .mob-topnav{
-    display:block!important;
-    background:linear-gradient(135deg,#040E22,#080F22);
-    border:1px solid rgba(0,196,255,.15);
-    border-radius:14px;
-    padding:8px;
-    margin-bottom:16px;
-    overflow-x:auto;
-    white-space:nowrap;
-    -webkit-overflow-scrolling:touch;
+  .st-key-mobilenav{
+    position:fixed!important;
+    bottom:0!important; left:0!important; right:0!important;
+    z-index:99990!important;
+    background:rgba(3,10,24,.94)!important;
+    backdrop-filter:blur(18px)!important;
+    -webkit-backdrop-filter:blur(18px)!important;
+    border-top:1px solid rgba(0,196,255,.22)!important;
+    box-shadow:0 -8px 32px rgba(0,0,0,.5)!important;
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom)) 4px!important;
+    margin:0!important;
   }
-  .mob-topnav > div[data-testid="stHorizontalBlock"]{
-    flex-wrap:nowrap!important;
-    overflow-x:auto!important;
-    gap:6px!important;
-    padding-bottom:2px;
+  .st-key-mobilenav [data-testid="stHorizontalBlock"]{
+    gap:2px!important; flex-wrap:nowrap!important;
   }
-  .mob-topnav .stButton>button{
-    white-space:nowrap!important;
-    font-size:.72rem!important;
-    padding:8px 12px!important;
-    min-height:40px!important;
-    border-radius:8px!important;
+  .st-key-mobilenav [data-testid="column"]{
+    min-width:0!important; flex:1 1 0!important;
   }
-}
-@media (min-width:769px){
-  .mob-topnav{display:none!important}
+  /* Each tab = stacked icon over short label, no box. */
+  .st-key-mobilenav .stButton>button{
+    background:transparent!important;
+    border:none!important;
+    box-shadow:none!important;
+    color:#7C8AA0!important;
+    line-height:1.35!important;
+    font-weight:600!important;
+    padding:3px 0 2px!important;
+    min-height:52px!important;
+    border-radius:12px!important;
+    transition:none!important;
+  }
+  .st-key-mobilenav .stButton>button:hover{
+    background:rgba(0,196,255,.06)!important;
+    transform:none!important;
+  }
+  /* emoji (line 1) + label (line 2) share one <p> → one balanced size */
+  .st-key-mobilenav .stButton>button p{
+    font-size:.92rem!important; line-height:1.35!important; margin:0!important;
+    font-weight:600!important;
+  }
+  /* Active tab — cyan glow pill. */
+  .st-key-mobilenav .stButton>button[kind="primary"]{
+    background:rgba(0,196,255,.12)!important;
+    color:#38BDF8!important;
+    box-shadow:0 0 0 1px rgba(0,196,255,.25) inset!important;
+  }
+  .st-key-mobilenav .stButton>button[kind="primary"] p{
+    color:#38BDF8!important; font-weight:700!important;
+  }
+  /* Reserve space so the fixed bar never hides the last content. */
+  .block-container{padding-bottom:84px!important}
 }
 </style>""", unsafe_allow_html=True)
 
@@ -765,28 +794,28 @@ total_value     = df_t["value_lakhs"].fillna(0).sum() if not df_t.empty and "val
 
 page = st.session_state.current_page
 
-# ── MOBILE TOP NAV ROW (real Streamlit buttons, visible only on mobile via CSS) ─
+# ── MOBILE BOTTOM TAB BAR (fixed, thumb-friendly — visible only on phones) ─────
+# Scoped via st.container(key=…) → wrapper gets class .st-key-mobilenav, which we
+# pin to the bottom of the viewport in CSS. Hidden on desktop (sidebar takes over).
 if st.session_state.authenticated:
-    _nav_items = [
-        ("🏠", "Dashboard",  "🏠  Dashboard"),
-        ("🔍", "Explore",    "🔍  Explore"),
-        ("💼", "Jobs",       "💼  Jobs"),
-        ("⚡", "Workspace",  "⚡  Opporta Workspace"),
-        ("📄", "Docs",       "📄  Documents"),
-        ("🔔", "Alerts",     "🔔  Alerts"),
-        ("📊", "Analytics",  "📊  Analytics"),
-        ("👤", "Profile",    "👤  Profile"),
+    _bottom_items = [
+        ("🏠", "Home", "🏠  Dashboard"),
+        ("🔍", "Find", "🔍  Explore"),
+        ("💼", "Jobs", "💼  Jobs"),
+        ("⚡", "AI",   "⚡  Opporta Workspace"),
+        ("👤", "You",  "👤  Profile"),
     ]
-    st.markdown('<div class="mob-topnav">', unsafe_allow_html=True)
-    _ncols = st.columns(len(_nav_items))
-    for _col, (_icon, _lbl, _pg) in zip(_ncols, _nav_items):
-        _is_active = st.session_state.current_page == _pg
-        _label = f"{'▶ ' if _is_active else ''}{_icon} {_lbl}"
-        if _col.button(_label, key=f"mtnav_{_pg}", use_container_width=True,
-                       type="primary" if _is_active else "secondary"):
-            st.session_state.current_page = _pg
-            st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
+    _mnav = st.container(key="mobilenav")
+    with _mnav:
+        _mcols = st.columns(len(_bottom_items))
+        for _col, (_icon, _lbl, _pg) in zip(_mcols, _bottom_items):
+            _is_active = st.session_state.current_page == _pg
+            # two trailing spaces + newline → markdown hard break → icon over label
+            if _col.button(f"{_icon}  \n{_lbl}", key=f"bnav_{_pg}",
+                           use_container_width=True,
+                           type="primary" if _is_active else "secondary"):
+                st.session_state.current_page = _pg
+                st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── DASHBOARD ─────────────────────────────────────────────────────────────────

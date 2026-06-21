@@ -612,6 +612,20 @@ def _profile_to_resume_text(p: dict) -> str:
         parts.append(f"{yrs} years experience")
     return " ".join(parts)
 
+def _has_job_profile(p: dict) -> bool:
+    """True only if the user entered REAL job-seeker data (a resume's worth).
+
+    job_category ('General') and the default languages are NOT real signals, so
+    a blank profile returns False and NO match percentage is shown anywhere.
+    """
+    return bool(
+        str(p.get("full_name") or "").strip()
+        or str(p.get("qualification") or "").strip()
+        or str(p.get("degree_type") or "").strip()
+        or list(p.get("job_skills") or [])
+        or int(p.get("job_experience_years") or 0) > 0
+    )
+
 def ring_cls(s) -> str:
     try: s = int(s)
     except: return "ring-lo"
@@ -1286,6 +1300,79 @@ if "Dashboard" in page:
               <div style="font-size:.84rem;font-weight:600;color:#64748B">No open jobs right now — check back tomorrow</div>
             </div>""", unsafe_allow_html=True)
 
+        # ══════════════════════════════════════════════════════════════════════
+        # SECTION 5: BID WORKSHOP — upload firm docs + tender doc → ready-to-bid file
+        # ══════════════════════════════════════════════════════════════════════
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("""<div class="sec-hd">
+          <span class="sec-title">🛠 Bid Workshop</span>
+          <span class="sec-badge-green">Ready-to-Bid File Generator</span>
+          <div class="sec-divider"></div>
+        </div>""", unsafe_allow_html=True)
+
+        with st.expander("⚡  Generate a Ready-to-Bid file  —  upload your firm documents + the tender document", expanded=False):
+            _ws_ai = bool(
+                os.getenv("GEMINI_API_KEY") or _secret("GEMINI_API_KEY") or
+                os.getenv("ANTHROPIC_API_KEY") or _secret("ANTHROPIC_API_KEY"))
+            if not _ws_ai:
+                st.warning("⚡ Opporta Intelligence needs GEMINI_API_KEY (or ANTHROPIC_API_KEY) to read the tender and draft the bid. Add it to your secrets to enable generation.")
+
+            st.markdown("**Step 1 — Tender document** (the NIT / tender notice PDF)")
+            _ws_tender = st.file_uploader("Tender document", type=["pdf", "jpg", "jpeg", "png"],
+                                          key="ws_tender_doc", label_visibility="collapsed")
+
+            st.markdown("**Step 2 — Your firm documents** (GST, registration, experience, turnover — optional but recommended)")
+            _ws_firm = st.file_uploader("Firm documents", type=["pdf", "txt", "jpg", "jpeg", "png"],
+                                        accept_multiple_files=True, key="ws_firm_docs",
+                                        label_visibility="collapsed")
+
+            if st.button("⚡  Generate Ready-to-Bid File", use_container_width=True, key="ws_generate"):
+                if not _ws_tender:
+                    st.warning("Upload the tender document first.")
+                elif not _ws_ai:
+                    st.error("AI key not configured — cannot read the tender. Add GEMINI_API_KEY to secrets.")
+                else:
+                    import bid_engine
+                    # Parse firm documents into text for the readiness + bid context.
+                    _ws_firm_texts: list[str] = []
+                    for _ff in (_ws_firm or []):
+                        try:
+                            _txt = (_read_pdf_text(_ff) if _ff.name.lower().endswith(".pdf")
+                                    else _ff.read().decode("utf-8", errors="ignore"))
+                            if _txt.strip():
+                                _ws_firm_texts.append(_txt)
+                        except Exception:
+                            pass
+                    with st.spinner("Opporta Intelligence is reading the tender, checking your readiness & drafting the bid…"):
+                        _ws_t   = bid_engine.extract_tender(_ws_tender.read(),
+                                                            _ws_tender.type or "application/pdf")
+                        _ws_chk = bid_engine.readiness_check(_ws_t, profile, _ws_firm_texts)
+                        _ws_bid = bid_engine.generate_bid_content(_ws_t, profile, _ws_firm_texts)
+                        _ws_docx = bid_engine.build_docx(_ws_bid, _ws_t, profile) if _ws_bid else None
+
+                    if _ws_t.get("_extraction_failed"):
+                        st.error("Could not read the tender document automatically. Try a clearer PDF, or use the AI Tender Analyzer to enter details manually.")
+                    else:
+                        st.success(f"✓ Bid drafted for: {safe_str(_ws_t.get('title'), 90)}")
+                        # Readiness summary (uses real profile + uploaded firm docs only)
+                        _rp = _ws_chk.get("overall_pct", 0)
+                        st.markdown(
+                            f'<div class="elig-{"yes" if _rp>=70 else "partial" if _rp>=40 else "no"}" '
+                            f'style="margin:8px 0 12px">Readiness {_rp}% · '
+                            f'{len(_ws_chk.get("met",[]))} met · {len(_ws_chk.get("missing",[]))} missing</div>',
+                            unsafe_allow_html=True)
+                        for _w in _ws_chk.get("warnings", [])[:4]:
+                            st.caption(f"⚠ {_w}")
+                        if _ws_docx:
+                            st.download_button(
+                                "📥  Download Ready-to-Bid File (.docx)",
+                                data=_ws_docx,
+                                file_name=f"OPPORTA_Bid_{safe_str(_ws_t.get('tender_no') or _ws_t.get('title'),'tender')[:30].replace(' ','_')}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True, key="ws_download")
+                        else:
+                            st.error("Bid drafting did not return content — check your AI key / quota and try again.")
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ── EXPLORE — general system discovery (unified search: tenders + jobs) ────────
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1483,14 +1570,15 @@ elif "Tenders" in page:
         dl       = days_left(rec.get("deadline"))
         dl_txt   = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
         val      = _v(rec.get("value_text")) or (f"₹{float(rec.get('value_lakhs',0)):.0f}L" if rec.get("value_lakhs") else "—")
-        if eligible is None:
-            elig_cls, elig_txt = "tag-cat", "ℹ Market score"
-        elif eligible:
-            elig_cls, elig_txt = "tag-green", "✅ Eligible"
-        else:
-            elig_cls, elig_txt = "tag-warn", "⚠ Review"
         district = _v(rec.get("district"), "State-wide")
         color    = score_color(s)
+        if eligible is None:
+            # No profile/resume → STRICTLY no percentage shown at all.
+            elig_cls, elig_txt = "tag-cat", "🔒 Complete profile for fit score"
+            ring_html = ""
+        else:
+            elig_cls, elig_txt = ("tag-green", "✅ Eligible") if eligible else ("tag-warn", "⚠ Review")
+            ring_html = f'<div class="ring {rc}" style="color:{color};border-color:{color}">{s}</div>'
 
         st.markdown(f"""<div class="ocard">
           <div class="ocard-row">
@@ -1505,7 +1593,7 @@ elif "Tenders" in page:
                 <span class="tag {elig_cls}">{elig_txt}</span>
               </div>
             </div>
-            <div class="ring {rc}" style="color:{color};border-color:{color}">{s}</div>
+            {ring_html}
           </div>
         </div>""", unsafe_allow_html=True)
 
@@ -2110,7 +2198,12 @@ elif "Jobs" in page:
         st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(jobs_filtered)} postings</div>',
                     unsafe_allow_html=True)
 
-        _job_prof_text = _profile_to_resume_text(profile) if st.session_state.authenticated else ""
+        # Strict: show a match % ONLY when a real job-seeker profile exists.
+        _job_prof_text = (_profile_to_resume_text(profile)
+                          if (st.session_state.authenticated and _has_job_profile(profile))
+                          else "")
+        if st.session_state.authenticated and not _job_prof_text:
+            st.info("📡 Add your qualification, degree or skills in Profile → Job Seeker to unlock your match % for every job.")
 
         for rec in jobs_filtered[:100]:
             dl     = days_left(rec.get("deadline"))
@@ -2638,9 +2731,9 @@ elif "Profile" in page:
                 st.success("✓ Job seeker profile saved. The Jobs page will now auto-score your eligibility.")
                 st.rerun()
 
-        # ── Auto Job Eligibility Preview ──
+        # ── Auto Job Eligibility Preview ── (only with a real job-seeker profile)
         _js_resume = _profile_to_resume_text(profile)
-        if _js_resume.strip():
+        if _has_job_profile(profile):
             st.markdown('<div class="profile-section-title" style="margin-top:24px">Your Job Eligibility (from profile)</div>',
                         unsafe_allow_html=True)
             st.caption("Based on your saved profile — upload a resume in the Jobs tab for deeper Opporta Intelligence analysis.")

@@ -15,6 +15,10 @@ import json
 import base64
 import core
 
+# Latest Gemini Flash. "gemini-flash-latest" auto-tracks the newest flash model
+# and works with the AQ. key format; gemini-2.0-flash is quota-limited (429).
+GEMINI_MODEL = "gemini-flash-latest"
+
 # ---------------------------------------------------------------------------
 # Core LLM extraction — tries Gemini first, falls back to Claude
 # ---------------------------------------------------------------------------
@@ -25,12 +29,13 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
     gemini_key    = os.getenv("GEMINI_API_KEY")
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
 
-    # ---- Gemini path (google-genai SDK v2+) ----
+    # ---- Gemini path (direct REST + X-goog-api-key header) ----
+    # We call the REST endpoint directly instead of the google-genai SDK: the
+    # SDK mishandles the newer "AQ." API-key format (sends it as an OAuth token
+    # -> 401). The header method below matches a working curl exactly.
     if gemini_key:
         try:
-            from google import genai as _genai
-            _client = _genai.Client(api_key=gemini_key)
-
+            import requests
             parts: list = []
             if document_bytes:
                 actual_mime = mime_type if ("pdf" in mime_type or "image" in mime_type) else "application/pdf"
@@ -38,10 +43,17 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
                     "mime_type": actual_mime,
                     "data": base64.b64encode(document_bytes).decode(),
                 }})
-            parts.append(full_prompt)
+            parts.append({"text": full_prompt})
 
-            resp = _client.models.generate_content(model="gemini-2.0-flash", contents=parts)
-            text = resp.text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            resp = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                headers={"Content-Type": "application/json", "X-goog-api-key": gemini_key},
+                json={"contents": [{"parts": parts}]}, timeout=90,
+            )
+            resp.raise_for_status()
+            _parts = resp.json()["candidates"][0]["content"]["parts"]
+            text = "".join(p.get("text", "") for p in _parts).strip()
+            text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
             return json.loads(text)
         except Exception as e:
             print(f"[AI Evaluator] Gemini error: {e}")

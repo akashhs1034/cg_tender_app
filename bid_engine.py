@@ -18,6 +18,9 @@ import core
 
 logger = logging.getLogger(__name__)
 
+# Latest Gemini Flash via "-latest" alias (works with AQ. keys; 2.0-flash 429s).
+GEMINI_MODEL = "gemini-flash-latest"
+
 
 # ---------------------------------------------------------------------------
 # AI helper — tries Gemini first, falls back to Claude
@@ -33,12 +36,13 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
 
     full_prompt = prompt + "\n\nReturn ONLY valid raw JSON. No markdown fences."
 
-    # ---- Gemini path (google-genai SDK v2+) ----
+    # ---- Gemini path (direct REST + X-goog-api-key header) ----
+    # Direct REST avoids the google-genai SDK's mishandling of the newer "AQ."
+    # API-key format (which the SDK sends as an OAuth token -> 401).
     if gemini_key:
+        text = ""
         try:
-            from google import genai as _genai
-            _client = _genai.Client(api_key=gemini_key)
-
+            import requests
             parts: list = []
             if doc_bytes:
                 actual_mime = mime_type
@@ -48,14 +52,20 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
                     "mime_type": actual_mime,
                     "data": base64.b64encode(doc_bytes).decode(),
                 }})
-            parts.append(full_prompt)
+            parts.append({"text": full_prompt})
 
-            resp = _client.models.generate_content(model="gemini-2.0-flash", contents=parts)
-            text = resp.text.strip()
+            resp = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                headers={"Content-Type": "application/json", "X-goog-api-key": gemini_key},
+                json={"contents": [{"parts": parts}]}, timeout=120,
+            )
+            resp.raise_for_status()
+            _parts = resp.json()["candidates"][0]["content"]["parts"]
+            text = "".join(p.get("text", "") for p in _parts).strip()
             text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
             return json.loads(text)
         except json.JSONDecodeError:
-            return text  # type: ignore[possibly-undefined]
+            return text  # model returned prose, not JSON — hand it back as-is
         except Exception as exc:
             logger.warning("Gemini API error: %s", exc)
             if not anthropic_key:

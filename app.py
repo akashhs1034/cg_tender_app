@@ -2342,5 +2342,66 @@ elif "Profile" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""<div style="text-align:center;padding:48px 0 24px;color:#1E293B;font-size:.65rem;
   letter-spacing:.15em;font-weight:600;text-transform:uppercase;font-family:'JetBrains Mono',monospace">
-  ⚡ OPPORTA · EVERY OPPORTUNITY · ONE PLATFORM · CG + UP
+  ⚡ OPPORTA · EVERY OPPORTUNITY · ONE PLATFORM · CG + UP<br>
+  <a href="?page=privacy" style="color:#334155;text-decoration:none;font-size:.6rem">Privacy Policy</a>
+  &nbsp;·&nbsp;
+  <a href="?page=privacy" style="color:#334155;text-decoration:none;font-size:.6rem">Terms of Use</a>
 </div>""", unsafe_allow_html=True)
+
+# ── PRIVACY POLICY PAGE (accessible via ?page=privacy) ────────────────────────
+_qp = st.query_params.get("page", "")
+if _qp == "privacy":
+    st.markdown("""
+    <div style="max-width:800px;margin:0 auto;padding:40px 20px">
+      <div style="font-size:.7rem;color:#6366F1;font-weight:700;text-transform:uppercase;
+           letter-spacing:.1em;margin-bottom:12px">⚡ Opporta</div>
+      <h1 style="font-size:2rem;font-weight:900;color:#F1F5F9;margin-bottom:8px">Privacy Policy</h1>
+      <p style="color:#475569;font-size:.8rem;margin-bottom:32px">Last updated: June 2026</p>
+
+      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">1. What We Collect</h2>
+      <p style="color:#64748B;font-size:.85rem;line-height:1.75">
+        Opporta collects your email address and profile information (company name, qualifications,
+        skills) that you voluntarily provide. We also collect documents you upload for job/tender
+        eligibility analysis. Government tender and job data is sourced from public portals.
+      </p>
+
+      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">2. How We Use Your Data</h2>
+      <p style="color:#64748B;font-size:.85rem;line-height:1.75">
+        Your data is used solely to personalise your tender and job recommendations, score your
+        eligibility, and send you alerts about matching opportunities. We do not sell, share, or
+        disclose your personal information to third parties.
+      </p>
+
+      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">3. Data Security</h2>
+      <p style="color:#64748B;font-size:.85rem;line-height:1.75">
+        All data is stored securely in Supabase with Row Level Security (RLS) enforced at the
+        database level. Only you can access your own profile, saved tenders, and uploaded documents —
+        even Opporta administrators cannot view your private data.
+      </p>
+
+      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">4. Google Sign-In</h2>
+      <p style="color:#64748B;font-size:.85rem;line-height:1.75">
+        If you sign in with Google, we receive your name and email address from Google. We do not
+        access your Google contacts, Gmail, Drive, or any other Google data.
+      </p>
+
+      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">5. Your Rights</h2>
+      <p style="color:#64748B;font-size:.85rem;line-height:1.75">
+        You may request deletion of your account and all associated data at any time by contacting
+        us at <span style="color:#6366F1">support@opporta.in</span>. You can also delete your
+        uploaded documents directly from the Documents section.
+      </p>
+
+      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">6. Contact</h2>
+      <p style="color:#64748B;font-size:.85rem;line-height:1.75">
+        For any privacy concerns, email us at
+        <span style="color:#6366F1">support@opporta.in</span>
+      </p>
+
+      <div style="margin-top:40px;padding-top:20px;border-top:1px solid rgba(255,255,255,.05);
+           color:#334155;font-size:.7rem">
+        © 2026 Opporta · Every Opportunity, One Platform · CG + UP
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+    st.stop()

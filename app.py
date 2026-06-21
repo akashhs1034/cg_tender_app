@@ -685,11 +685,14 @@ with st.sidebar:
                 st.session_state.sb_token = token or ""
                 st.rerun()
             else:
-                st.error(msg)
+                if "confirm" in msg.lower() or "not confirmed" in msg.lower() or "email" in msg.lower():
+                    st.warning("📧 Please check your email and click the confirmation link first, then login.")
+                else:
+                    st.error(msg)
         if c2.button("Register", use_container_width=True):
             ok, msg = accounts.register_user(auth_email, auth_pw)
             if ok:
-                st.success(msg)
+                st.success("✅ Account created! Check your email and click the confirmation link before logging in.")
             else:
                 st.error(msg)
         st.markdown('</div>', unsafe_allow_html=True)
@@ -884,7 +887,10 @@ if "Dashboard" in page:
                                 st.session_state.entered_platform = False
                                 st.rerun()
                             else:
-                                st.error(msg)
+                                if "confirm" in msg.lower() or "not confirmed" in msg.lower():
+                                    st.warning("📧 Please check your email and click the confirmation link first, then login.")
+                                else:
+                                    st.error(msg)
                         else:
                             st.warning("Enter email and password.")
 

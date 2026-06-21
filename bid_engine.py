@@ -34,6 +34,10 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
     gemini_key    = os.getenv("GEMINI_API_KEY")
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
 
+    if not gemini_key and not anthropic_key:
+        core.record_ai_error("no api key configured")
+        return None
+
     full_prompt = prompt + "\n\nReturn ONLY valid raw JSON. No markdown fences."
 
     # ---- Gemini path (direct REST + X-goog-api-key header) ----
@@ -63,11 +67,15 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
             _parts = resp.json()["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in _parts).strip()
             text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            return json.loads(text)
+            result = json.loads(text)
+            core.clear_ai_error()
+            return result
         except json.JSONDecodeError:
+            core.clear_ai_error()
             return text  # model returned prose, not JSON — hand it back as-is
         except Exception as exc:
             logger.warning("Gemini API error: %s", exc)
+            core.record_ai_error(exc)
             if not anthropic_key:
                 return None
             # fall through to Claude
@@ -100,11 +108,15 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
             )
             text = "".join(b.text for b in msg.content if getattr(b,"type","") == "text").strip()
             text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            return json.loads(text)
+            result = json.loads(text)
+            core.clear_ai_error()
+            return result
         except json.JSONDecodeError:
+            core.clear_ai_error()
             return text  # type: ignore[possibly-undefined]
         except Exception as exc:
             logger.warning("Claude API error: %s", exc)
+            core.record_ai_error(exc)
             return None
 
     return None

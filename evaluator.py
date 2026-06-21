@@ -29,6 +29,10 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
     gemini_key    = os.getenv("GEMINI_API_KEY")
     anthropic_key = os.getenv("ANTHROPIC_API_KEY")
 
+    if not gemini_key and not anthropic_key:
+        core.record_ai_error("no api key configured")
+        return None
+
     # ---- Gemini path (direct REST + X-goog-api-key header) ----
     # We call the REST endpoint directly instead of the google-genai SDK: the
     # SDK mishandles the newer "AQ." API-key format (sends it as an OAuth token
@@ -54,9 +58,12 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
             _parts = resp.json()["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in _parts).strip()
             text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            return json.loads(text)
+            result = json.loads(text)
+            core.clear_ai_error()
+            return result
         except Exception as e:
             print(f"[AI Evaluator] Gemini error: {e}")
+            core.record_ai_error(e)
             if not anthropic_key:
                 return None
 
@@ -88,9 +95,12 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
             )
             text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
             text = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            return json.loads(text)
+            result = json.loads(text)
+            core.clear_ai_error()
+            return result
         except Exception as e:
             print(f"[AI Evaluator] Claude error: {e}")
+            core.record_ai_error(e)
             return None
 
     return None

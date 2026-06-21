@@ -621,6 +621,15 @@ def _has_job_profile(p: dict) -> bool:
         or int(p.get("job_experience_years") or 0) > 0
     )
 
+def _render_ai_error(fallback: str = "AI service is unavailable right now — please try again.") -> None:
+    """Show WHY the last AI call failed (quota vs. key vs. network) — not a generic error."""
+    info = core.ai_error_message()
+    if info:
+        sev, txt = info
+        (st.warning if sev == "warning" else st.error)(txt)
+    else:
+        st.error(fallback)
+
 def ring_cls(s) -> str:
     try: s = int(s)
     except: return "ring-lo"
@@ -1311,6 +1320,7 @@ if "Dashboard" in page:
                                 _ws_firm_texts.append(_txt)
                         except Exception:
                             pass
+                    core.clear_ai_error()
                     with st.spinner("Opporta Intelligence is reading the tender, checking your readiness & drafting the bid…"):
                         _ws_t   = bid_engine.extract_tender(_ws_tender.read(),
                                                             _ws_tender.type or "application/pdf")
@@ -1319,7 +1329,11 @@ if "Dashboard" in page:
                         _ws_docx = bid_engine.build_docx(_ws_bid, _ws_t, profile) if _ws_bid else None
 
                     if _ws_t.get("_extraction_failed"):
-                        st.error("Could not read the tender document automatically. Try a clearer PDF, or use the AI Tender Analyzer to enter details manually.")
+                        # Show the precise reason (quota / key / network) when we have it.
+                        if core.ai_error_message():
+                            _render_ai_error()
+                        else:
+                            st.error("Could not read the tender document automatically. Try a clearer PDF, or use the AI Tender Analyzer to enter details manually.")
                     else:
                         st.success(f"✓ Bid drafted for: {safe_str(_ws_t.get('title'), 90)}")
                         # Readiness summary (uses real profile + uploaded firm docs only)
@@ -1339,7 +1353,7 @@ if "Dashboard" in page:
                                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                 use_container_width=True, key="ws_download")
                         else:
-                            st.error("Bid drafting did not return content — check your AI key / quota and try again.")
+                            _render_ai_error("Bid drafting did not return content — please try again.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── EXPLORE — general system discovery (unified search: tenders + jobs) ────────
@@ -2005,16 +2019,21 @@ elif "Workspace" in page:
             if t.strip(): vault_texts.append(t)
 
         if tender_pdf and st.button("🔍 Extract Tender Details", use_container_width=True, key="bid_extract"):
+            core.clear_ai_error()
             with st.spinner("Opporta Intelligence reading tender document..."):
                 import bid_engine
                 st.session_state.bid_tender = bid_engine.extract_tender(
                     tender_pdf.read(), tender_pdf.type or "application/pdf")
-            st.success("✓ Extraction complete — review and edit below.")
+            if not st.session_state.bid_tender.get("_extraction_failed"):
+                st.success("✓ Extraction complete — review and edit below.")
 
         if st.session_state.get("bid_tender"):
             t = st.session_state.bid_tender
             if t.get("_extraction_failed"):
-                st.error("Opporta Intelligence extraction failed — fill in the details below manually.")
+                if core.ai_error_message():
+                    _render_ai_error()
+                else:
+                    st.error("Opporta Intelligence extraction failed — fill in the details below manually.")
 
             st.markdown("---")
             st.markdown("**Step 3 — Confirm extracted tender details**")
@@ -2087,6 +2106,7 @@ elif "Workspace" in page:
             else:
                 st.caption("⚠️ This drafts a bid document template based on your inputs. Review, verify, and sign before official submission. Opporta does not guarantee tender award.")
                 if st.button("📝 Draft Bid Document (.docx)", use_container_width=True, key="bid_gen"):
+                    core.clear_ai_error()
                     with st.spinner("Drafting bid document — this takes ~30 seconds..."):
                         bid_content = bid_engine.generate_bid_content(
                             st.session_state.bid_tender, profile, vault_texts)
@@ -2105,7 +2125,7 @@ elif "Workspace" in page:
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             use_container_width=True)
                     else:
-                        st.error("Generation failed. Check your GEMINI_API_KEY and try again.")
+                        _render_ai_error("Generation failed — please try again.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── JOBS ──────────────────────────────────────────────────────────────────────

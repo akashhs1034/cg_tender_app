@@ -19,6 +19,61 @@ DEFAULT_TURNOVER_LAKHS = 500.0  # 5 Crore = 500 Lakh
 
 
 # ---------------------------------------------------------------------------
+# AI call status — lets the UI tell the user WHY an AI call failed
+# (quota hit vs. missing/invalid key vs. network) instead of a generic error.
+# ---------------------------------------------------------------------------
+LAST_AI_ERROR: dict = {"kind": None, "detail": ""}
+
+
+def record_ai_error(exc) -> None:
+    """Classify and store the most recent AI failure."""
+    msg = str(exc)
+    low = msg.lower()
+    if any(s in low for s in ("429", "quota", "rate limit", "rate_limit",
+                              "resource_exhausted", "resource exhausted", "exceeded")):
+        kind = "quota"
+    elif any(s in low for s in ("401", "403", "unauthenticated", "unauthorized",
+                                "permission_denied", "permission denied", "api key",
+                                "api_key", "invalid authentication", "no api key")):
+        kind = "auth"
+    elif any(s in low for s in ("timeout", "timed out", "connection", "network",
+                                "temporarily", "503", "502", "unavailable")):
+        kind = "network"
+    else:
+        kind = "error"
+    LAST_AI_ERROR["kind"] = kind
+    LAST_AI_ERROR["detail"] = msg[:300]
+
+
+def clear_ai_error() -> None:
+    LAST_AI_ERROR["kind"] = None
+    LAST_AI_ERROR["detail"] = ""
+
+
+def ai_error_message():
+    """Return (severity, text) for the last AI failure, or None if there was none.
+
+    severity is one of 'warning' | 'error' so the UI can pick st.warning/st.error.
+    """
+    kind = LAST_AI_ERROR.get("kind")
+    if not kind:
+        return None
+    if kind == "quota":
+        return ("warning",
+                "⏳ Opporta Intelligence has hit its usage limit (quota) for the moment. "
+                "This is temporary — please try again in a few minutes. Your key is fine.")
+    if kind == "auth":
+        return ("error",
+                "🔑 Opporta Intelligence couldn't authenticate. The GEMINI_API_KEY is missing "
+                "or invalid in this app's secrets — add a valid key to enable AI features.")
+    if kind == "network":
+        return ("warning",
+                "🌐 Couldn't reach the AI service just now (network/temporary issue). Please retry.")
+    return ("error",
+            f"⚠ AI service error — please try again. ({LAST_AI_ERROR.get('detail', '')[:140]})")
+
+
+# ---------------------------------------------------------------------------
 # Parsing helpers
 # ---------------------------------------------------------------------------
 def parse_value_to_lakhs(raw) -> float | None:

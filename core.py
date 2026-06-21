@@ -236,6 +236,52 @@ def tender_record(*, title, state, organization, category=None, district=None,
     }
 
 
+# ---------------------------------------------------------------------------
+# Tender category normalization — fold the 45+ raw scraped categories into a
+# clean set of ~10 parent buckets used for filtering, the sector picker, and
+# the fit-score sector match (so vocabulary is consistent end-to-end).
+# ---------------------------------------------------------------------------
+CATEGORY_BUCKETS = [
+    "Civil & Construction", "Water & Irrigation", "Electrical & Energy",
+    "Medical & Healthcare", "IT & Technology", "Transport & Logistics",
+    "Manufacturing & Goods", "Municipal Projects", "Consultancy & Survey",
+    "Miscellaneous",
+]
+
+# Checked in order — first keyword hit wins, so put narrower buckets first.
+_BUCKET_KEYWORDS = [
+    ("Water & Irrigation",    ["water", "irrigation", "pipe", "drilling", "boring",
+                               "canal", "marine", "dam", "sewer", "drainage", "borewell"]),
+    ("Electrical & Energy",   ["electric", "solar", "energy", "power", "lighting",
+                               "street light", "transformer", "ht ", "lt "]),
+    ("Medical & Healthcare",  ["medical", "health", "hospital", "surgical", "pharma",
+                               "drug", "medicine", "nursing"]),
+    ("IT & Technology",       ["it services", "software", "computer", "network",
+                               "digital", "cctv", "data cent", "website", "hardware"]),
+    ("Transport & Logistics", ["transport", "vehicle", "crane", "shipping", "freight",
+                               "logistic", "coal", "mining", "loading", "haul"]),
+    ("Municipal Projects",    ["municipal", "nagar", "urban", "sanitation", "solid waste"]),
+    ("Consultancy & Survey",  ["survey", "investigation", "consultanc", "design",
+                               "dpr", "audit", "advisory"]),
+    ("Manufacturing & Goods", ["manufactur", "abrasive", "mechanical", "equipment",
+                               "goods", "material", "memento", "medal", "dairy",
+                               "furniture", "supply", "stationery", "uniform"]),
+    ("Civil & Construction",  ["civil", "construction", "road", "bridge", "building",
+                               "composite", "concrete", "rcc", "works", "structure"]),
+]
+
+
+def normalize_category(raw) -> str:
+    """Map a raw scraped category string to one of CATEGORY_BUCKETS."""
+    s = str(raw or "").strip().lower()
+    if not s or s in ("nan", "none", "nat", "other", "miscellaneous", "misc"):
+        return "Miscellaneous"
+    for bucket, kws in _BUCKET_KEYWORDS:
+        if any(kw in s for kw in kws):
+            return bucket
+    return "Miscellaneous"
+
+
 # Light keyword router so the Jobs tab's category pills actually do something.
 _JOB_CATEGORY_MAP = {
     "Health": ["nurse", "medical", "health", "ecg", "doctor", "pharma"],
@@ -412,11 +458,13 @@ def score_tender_for_user(tender: dict, profile: dict):
         except (TypeError, ValueError):
             pass
 
-    # --- Sector relevance ---
+    # --- Sector relevance (bucket-to-bucket, consistent vocabulary) ---
     sectors = [s.lower() for s in profile.get("sectors", [])]
-    cat = str(tender.get("category") or "").lower()
+    cat_bucket = normalize_category(tender.get("category")).lower()
+    raw_cat    = str(tender.get("category") or "").lower()
     if sectors:
-        if any(s in cat or cat in s for s in sectors):
+        # Match on the clean bucket, but still honour an exact raw-category pick.
+        if any(s == cat_bucket or s in cat_bucket or s in raw_cat for s in sectors):
             score += 20
             reasons.append("Matches your sector focus")
         else:

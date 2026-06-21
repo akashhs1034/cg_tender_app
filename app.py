@@ -691,30 +691,24 @@ def _districts_for_state(state: str) -> list[str]:
 df_t = load_table("tenders")
 df_j = load_table("jobs")
 
-# Real categories present in the live data, ordered by how many tenders use them.
-# Filters & the Profile sector picker are built from THESE (not a hardcoded list),
-# so every chip/option actually returns results and matches the scoring engine.
-def _real_categories(df: pd.DataFrame, limit: int | None = None) -> list[str]:
-    if df.empty or "category" not in df:
-        return []
-    cats = df["category"].dropna().astype(str)
-    cats = cats[cats.str.strip() != ""].value_counts().index.tolist()
-    return cats[:limit] if limit else cats
-
-TENDER_CATS_BY_FREQ = _real_categories(df_t)
+# Fold the 45+ raw scraped categories into ~10 clean buckets (core.normalize_category)
+# and use those everywhere — filters, chips, the Profile sector picker, scoring —
+# so the vocabulary is consistent and every option returns results.
+if not df_t.empty and "category" in df_t:
+    df_t["category_bucket"] = df_t["category"].map(core.normalize_category)
+    TENDER_CATS_BY_FREQ = df_t["category_bucket"].value_counts().index.tolist()
+else:
+    TENDER_CATS_BY_FREQ = list(core.CATEGORY_BUCKETS)
 
 _CAT_EMOJI = {
-    "civil": "🏗️", "road": "🛣️", "bridge": "🌉", "building": "🏢", "canal": "🚤",
-    "marine": "⚓", "abrasive": "🪨", "pipe": "🚰", "water": "💧", "electric": "💡",
-    "solar": "☀️", "medical": "🏥", "coal": "⛏️", "mining": "⛏️", "transport": "🚛",
-    "it ": "💻", "municipal": "🏙️", "survey": "📐", "manufactur": "🏭", "crane": "🏗️",
+    "Civil & Construction": "🏗️", "Water & Irrigation": "💧",
+    "Electrical & Energy": "💡", "Medical & Healthcare": "🏥",
+    "IT & Technology": "💻", "Transport & Logistics": "🚛",
+    "Manufacturing & Goods": "🏭", "Municipal Projects": "🏙️",
+    "Consultancy & Survey": "📐", "Miscellaneous": "📋",
 }
 def _emoji_for(cat: str) -> str:
-    low = (cat or "").lower()
-    for kw, em in _CAT_EMOJI.items():
-        if kw in low:
-            return em
-    return "📋"
+    return _CAT_EMOJI.get(cat, "📋")
 
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -1453,9 +1447,8 @@ elif "Tenders" in page:
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
-    # Build live category list
-    all_cats = (["All"] + sorted(df_t["category"].dropna().unique().tolist())
-                if not df_t.empty and "category" in df_t else ["All"])
+    # Category options = clean buckets present in the data (by frequency).
+    all_cats = ["All"] + [c for c in TENDER_CATS_BY_FREQ]
 
     # Filters
     st.markdown('<div class="filter-row">', unsafe_allow_html=True)
@@ -1511,7 +1504,7 @@ elif "Tenders" in page:
         haystack = f"{_v(rec.get('title'))} {_v(rec.get('organization'))} {_v(rec.get('district'))} {_v(rec.get('description'))}".lower()
         if q and q not in haystack: continue
         if fst  != "All" and _v(rec.get("state")) != fst: continue
-        if fcat != "All" and fcat.lower() not in _v(rec.get("category","")).lower(): continue
+        if fcat != "All" and rec.get("category_bucket") != fcat: continue
         if fdst != "All" and _v(rec.get("district","")).lower() != fdst.lower(): continue
         if PROFILE_READY:
             s, _, eligible = core.score_tender_for_user(rec, profile)
@@ -2485,9 +2478,9 @@ elif "Analytics" in page:
         # ── Row 1: category charts ──
         a1, a2 = st.columns(2)
         with a1:
-            if "category" in df_t:
+            if "category_bucket" in df_t:
                 _chart_card("Tenders by Category",
-                            _bar(df_t["category"].fillna("Other").value_counts().head(10),
+                            _bar(df_t["category_bucket"].value_counts().head(10),
                                  color="#00C4FF", horizontal=True))
         with a2:
             if not df_j.empty and "category" in df_j:
@@ -2584,14 +2577,12 @@ elif "Profile" in page:
                     unsafe_allow_html=True)
         ps1, ps2 = st.columns(2)
         with ps1:
-            # Options come from the REAL live tender categories so a chosen sector
-            # actually matches tenders and lifts the fit score (was a hardcoded
-            # list whose names didn't match the scraped data).
-            _sector_opts = (TENDER_CATS_BY_FREQ[:20] or list(SECTORS))
+            # Clean ~10 buckets that match the live data and the scoring engine.
+            _sector_opts = list(core.CATEGORY_BUCKETS)
             for _s in (profile.get("sectors") or []):
                 if _s not in _sector_opts:
                     _sector_opts.append(_s)
-            sectors = st.multiselect("Sectors you bid in (live tender categories)", _sector_opts,
+            sectors = st.multiselect("Sectors you bid in", _sector_opts,
                                      default=[s for s in (profile.get("sectors") or []) if s in _sector_opts])
             target_states = st.multiselect("Target States",
                                            ["Chhattisgarh", "Uttar Pradesh"],

@@ -116,14 +116,21 @@ def parse_value_to_lakhs(raw) -> float | None:
 
 
 def parse_date(raw) -> date | None:
-    """Parse '24 Jun 2026', '2026-07-15', etc. Returns None if unparseable."""
+    """Parse '24 Jun 2026', '2026-07-15', '10-06-2026', ISO datetimes, etc.
+
+    ISO-style YYYY-MM-DD[...] strings are parsed WITHOUT dayfirst — otherwise
+    dateutil's dayfirst=True swaps month/day on ISO dates (e.g. '2026-06-10'
+    became Oct 6). Indian DD-MM-YYYY strings still use dayfirst=True.
+    """
     if raw is None:
         return None
     s = str(raw).strip()
-    if not s or s.lower() in {"n/a", "nan", "none"}:
+    if not s or s.lower() in {"n/a", "nan", "none", "nat"}:
         return None
+    # ISO date / datetime (starts with 4-digit year) → unambiguous, no dayfirst
+    iso = bool(re.match(r"^\d{4}-\d{2}-\d{2}", s))
     try:
-        return dateparser.parse(s, dayfirst=True).date()
+        return dateparser.parse(s, dayfirst=not iso).date()
     except (ValueError, OverflowError, TypeError):
         return None
 

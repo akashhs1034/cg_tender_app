@@ -80,12 +80,12 @@ def ai_error_message():
     if kind == "auth":
         return ("error",
                 "🔑 Opporta Intelligence couldn't authenticate. The GEMINI_API_KEY is missing "
-                "or invalid in this app's secrets — add a valid key to enable AI features.")
+                "or invalid in this app's secrets — add a valid key to enable Opporta Intelligence.")
     if kind == "network":
         return ("warning",
-                "🌐 Couldn't reach the AI service just now (network/temporary issue). Please retry.")
+                "🌐 Couldn't reach Opporta Intelligence just now (network/temporary issue). Please retry.")
     return ("error",
-            f"⚠ AI service error — please try again. ({st.get('detail', '')[:140]})")
+            f"⚠ Opporta Intelligence error — please try again. ({st.get('detail', '')[:140]})")
 
 
 # ---------------------------------------------------------------------------

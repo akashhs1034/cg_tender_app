@@ -640,7 +640,7 @@ def _has_job_profile(p: dict) -> bool:
         or int(p.get("job_experience_years") or 0) > 0
     )
 
-def _render_ai_error(fallback: str = "AI service is unavailable right now — please try again.") -> None:
+def _render_ai_error(fallback: str = "Opporta Intelligence is unavailable right now — please try again.") -> None:
     """Show WHY the last AI call failed (quota vs. key vs. network) — not a generic error."""
     info = core.ai_error_message()
     if info:
@@ -659,7 +659,7 @@ def _render_study_plan(plan: dict) -> None:
         f'<div class="brief-greeting">🧭 Suggested Study Plan · {exam}</div>'
         f'<div class="brief-sub" style="margin-top:5px;max-width:680px">{_esc(plan.get("overview",""))}</div>'
         f'<div class="brief-stats"><div class="bstat">⏳ <b>{days}</b> days to exam</div>'
-        f'<div class="bstat">{"⚡ AI-tailored" if _ai else "📋 General template"}</div></div>'
+        f'<div class="bstat">{"⚡ Opporta Intelligence" if _ai else "📋 General template"}</div></div>'
         f'</div>', unsafe_allow_html=True)
 
     for _ph in plan.get("phases", []):
@@ -697,7 +697,7 @@ def _render_study_plan(plan: dict) -> None:
     st.markdown(
         '<div style="background:rgba(245,158,11,.06);border:1px solid rgba(245,158,11,.25);'
         'border-radius:10px;padding:10px 14px;margin-top:12px;font-size:.74rem;color:#F59E0B;line-height:1.6">'
-        '⚠ <b>Suggested study plan — guidance only.</b> This is an AI/automated suggestion, '
+        '⚠ <b>Suggested study plan — guidance only.</b> This is an Opporta Intelligence (automated) suggestion, '
         'not official, not affiliated with any commission, and not a guarantee of syllabus coverage, '
         'difficulty or results. Always confirm the official syllabus, exam pattern and dates on the '
         'recruitment authority’s portal before relying on it.</div>', unsafe_allow_html=True)
@@ -1368,7 +1368,7 @@ if "Dashboard" in page:
         if _tl1.button("📊  Market Analytics", width="stretch", key="dash_open_analytics"):
             st.session_state.current_page = "📊  Analytics"
             st.rerun()
-        if _tl2.button("⚡  AI Tender Analyzer", width="stretch", key="dash_open_ws"):
+        if _tl2.button("⚡  Opporta Intelligence Analyzer", width="stretch", key="dash_open_ws"):
             st.session_state.current_page = "⚡  Opporta Workspace"
             st.rerun()
         if _tl3.button("📄  My Document Vault", width="stretch", key="dash_open_vault"):
@@ -1440,7 +1440,7 @@ if "Dashboard" in page:
                 if not _ws_tender:
                     st.warning("Upload the tender document first.")
                 elif not _ws_ai:
-                    st.error("AI key not configured — cannot read the tender. Add GEMINI_API_KEY to secrets.")
+                    st.error("Opporta Intelligence not configured — cannot read the tender. Add GEMINI_API_KEY to secrets.")
                 else:
                     import bid_engine
                     # Parse firm documents into text for the readiness + bid context.
@@ -1466,7 +1466,7 @@ if "Dashboard" in page:
                         if core.ai_error_message():
                             _render_ai_error()
                         else:
-                            st.error("Could not read the tender document automatically. Try a clearer PDF, or use the AI Tender Analyzer to enter details manually.")
+                            st.error("Could not read the tender document automatically. Try a clearer PDF, or use the Opporta Intelligence Analyzer to enter details manually.")
                     else:
                         st.success(f"✓ Bid drafted for: {safe_str(_ws_t.get('title'), 90)}")
                         # Readiness summary (uses real profile + uploaded firm docs only)
@@ -1727,7 +1727,7 @@ elif "Tenders" in page:
                 if _sv.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}"):
                     accounts.save_tender(email, rec.get("source_id"), token=_token)
                     st.toast("✓ Saved to your pipeline")
-                if _an.button("⚡ Analyze with AI", key=f"e_an_{rec.get('source_id')}"):
+                if _an.button("⚡ Analyze with Opporta Intelligence", key=f"e_an_{rec.get('source_id')}"):
                     st.session_state["ws_prefill"] = safe_str(rec.get("title"), 110)
                     st.session_state.current_page = "⚡  Opporta Workspace"
                     st.rerun()
@@ -2450,7 +2450,7 @@ elif "Jobs" in page:
             'new browser tab.</span></div>', unsafe_allow_html=True)
 
         # ── AI Study Plan Generator ──
-        st.markdown('<div class="profile-section-title" style="margin-top:6px">🧭 AI Study Plan Generator</div>',
+        st.markdown('<div class="profile-section-title" style="margin-top:6px">🧭 Opporta Intelligence Study Plan</div>',
                     unsafe_allow_html=True)
         st.caption("Pick your exam and its date — get a suggested, time-aware preparation plan with priority topics and resources.")
         _common_exams = [

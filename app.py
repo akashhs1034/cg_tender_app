@@ -934,14 +934,17 @@ with st.sidebar:
 email    = st.session_state.email
 _token   = st.session_state.get("sb_token", "")
 
+# NOTE: params must NOT start with "_" — Streamlit excludes underscore-prefixed
+# args from the cache key, which would make every user share one cache entry
+# (i.e. leak the first user's profile to everyone). These names are hashed.
 @st.cache_data(ttl=300, show_spinner=False)
-def _cached_profile(_email: str, _tok: str):
-    return accounts.get_profile(_email, token=_tok)
+def _cached_profile(user_email: str, user_token: str):
+    return accounts.get_profile(user_email, token=user_token)
 
 @st.cache_data(ttl=300, show_spinner=False)
-def _cached_vault_count(_email: str, _tok: str) -> int:
+def _cached_vault_count(user_email: str, user_token: str) -> int:
     try:
-        return len(accounts.list_documents(_email, token=_tok))
+        return len(accounts.list_documents(user_email, token=user_token))
     except Exception:
         return 0
 
@@ -953,8 +956,9 @@ def _bust_user_cache():
 profile  = _cached_profile(email, _token) if email else dict(core.DEFAULT_PROFILE)
 if profile is None:
     profile = dict(core.DEFAULT_PROFILE)
-cname = profile.get("company_name") or profile.get("full_name") or (
-    email.split("@")[0].title() if email else "Guest")
+cname = (str(profile.get("company_name") or "").strip()
+         or str(profile.get("full_name") or "").strip()
+         or (email.split("@")[0].title() if email else "Guest"))
 
 # ── PROFILE READINESS GATE ────────────────────────────────────────────────────
 # The matching engine must never hallucinate a score against empty telemetry.
@@ -1224,28 +1228,25 @@ if "Dashboard" in page:
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # ── TELEMETRY GATE — no fabricated matches until profile/vault is set ──
+        # ── Gentle disclaimer until a profile is set (no alarmist styling) ──
         if not PROFILE_READY:
             st.markdown(f"""
-            <div class="brief" style="border-color:rgba(245,158,11,.35);
-                 background:linear-gradient(135deg,rgba(245,158,11,.06),rgba(0,196,255,.02))">
-              <div class="brief-greeting" style="color:#F59E0B">⚠ Awaiting System Telemetry</div>
+            <div class="brief" style="border-color:rgba(0,196,255,.2)">
+              <div class="brief-greeting" style="font-size:1.05rem">👋 Complete your profile to see suggested matches</div>
               <div class="brief-sub" style="margin-top:6px;max-width:640px">
-                Opporta Intelligence has <b>not</b> generated match scores yet — your profile is empty.
-                We never fabricate a fit score against missing data. Add your contractor class,
-                sectors &amp; districts (or upload a document to the Vault) and the engine will
-                calibrate every match to your verified capacity.
+                Add your contractor class, sectors &amp; districts (or upload a document to your Vault)
+                and Opporta Intelligence will show personalized fit scores and suggested tenders for you.
               </div>
             </div>""", unsafe_allow_html=True)
             _gt1, _gt2, _gt3 = st.columns([1, 1, 1])
-            if _gt1.button("👤  Complete Profile Setup", width="stretch", key="gate_profile"):
+            if _gt1.button("👤  Complete Profile", width="stretch", key="gate_profile"):
                 st.session_state.current_page = "👤  Profile"
                 st.rerun()
             if _gt2.button("📄  Upload to Vault", width="stretch", key="gate_vault"):
                 st.session_state.current_page = "👤  Profile"
                 st.session_state["profile_tab"] = "vault"
                 st.rerun()
-            if _gt3.button("🔍  Browse Tenders Anyway", width="stretch", key="gate_browse"):
+            if _gt3.button("🔍  Browse Tenders", width="stretch", key="gate_browse"):
                 st.session_state.current_page = "📄  Tenders"
                 st.rerun()
 
@@ -1337,9 +1338,9 @@ if "Dashboard" in page:
                 st.rerun()
         elif not PROFILE_READY:
             st.markdown("""<div class="ocard" style="text-align:center;padding:36px">
-              <div style="font-size:2rem;margin-bottom:12px">📡</div>
-              <div style="font-size:.9rem;font-weight:700;color:#94A3B8">Awaiting profile telemetry</div>
-              <div style="font-size:.78rem;color:#64748B;margin-top:6px;line-height:1.6">Match scores are intentionally blank until you configure your profile.<br>No data in → no fabricated scores out.</div>
+              <div style="font-size:2rem;margin-bottom:12px">👤</div>
+              <div style="font-size:.9rem;font-weight:700;color:#94A3B8">Complete your profile to see suggested matches</div>
+              <div style="font-size:.78rem;color:#64748B;margin-top:6px;line-height:1.6">Add your contractor class, sectors &amp; districts and your personalized fit scores will appear here.</div>
             </div>""", unsafe_allow_html=True)
         else:
             st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
@@ -1709,7 +1710,7 @@ elif "Tenders" in page:
     if not st.session_state.authenticated:
         st.info("🔐 Sign in to see your personalized Opporta Intelligence fit score for each tender.")
     elif not PROFILE_READY:
-        st.info("📡 Showing neutral market scores. Complete your Profile (or upload a vault document) to unlock personalized eligibility & fit scoring.")
+        st.info("ℹ️ Update your profile to see suggested, personalized fit scores for each tender. Showing general market scores for now.")
 
     if not rows:
         st.markdown("""<div class="ocard" style="text-align:center;padding:40px;color:#7C8AA0">
@@ -2379,7 +2380,7 @@ elif "Jobs" in page:
                               if (st.session_state.authenticated and _has_job_profile(profile))
                               else "")
             if st.session_state.authenticated and not _job_prof_text:
-                st.info("📡 Add your qualification, degree or skills in Profile → Job Seeker to unlock your match % for every job.")
+                st.info("ℹ️ Add your qualification, degree or skills in Profile → Job Seeker to see your suggested match % for every job.")
 
             for rec in jobs_filtered[:100]:
                 dl     = days_left(rec.get("deadline"))
@@ -2810,7 +2811,7 @@ elif "Profile" in page:
     </div>""", unsafe_allow_html=True)
 
     if not PROFILE_READY:
-        st.info("📡 Your profile is empty — Opporta Intelligence is holding all match scores at 0 until you save real data here or upload a document to the Vault.")
+        st.info("ℹ️ Update your profile below to see suggested matches and personalized fit scores. Your saved details power the recommendations.")
 
     ptab1, ptab2, ptab3 = st.tabs(
         ["🏢  Contractor Profile", "👤  Job Seeker Profile", "📄  Document Vault"])
@@ -3038,9 +3039,9 @@ elif "Profile" in page:
                     _bust_user_cache()
                     if _parsed.strip():
                         st.success(f"✓ Uploaded & parsed {len(_parsed):,} characters — "
-                                   f"telemetry unlocked, match scoring is now active.")
+                                   f"suggested match scoring is now active.")
                     else:
-                        st.success("✓ Uploaded. Telemetry unlocked — match scoring is now active.")
+                        st.success("✓ Uploaded. Suggested match scoring is now active.")
                     st.rerun()
                 else:
                     st.error("Upload failed. Check logs.")

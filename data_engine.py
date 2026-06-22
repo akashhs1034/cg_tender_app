@@ -161,13 +161,63 @@ _NIT_RE = _re.compile(r"(?:NIT|Tender|निविदा)\s*(?:No\.?|क्र\.
                       r"([A-Za-z0-9/\-]{3,40})", _re.IGNORECASE)
 
 
+_CG_CITY_HINTS = ("raipur", "रायपुर", "bilaspur", "बिलासपुर", "durg", "दुर्ग",
+                  "bhilai", "भिलाई", "korba", "कोरबा", "raigarh", "रायगढ़",
+                  "rajnandgaon", "jagdalpur", "जगदलपुर", "ambikapur", "अंबिकापुर",
+                  "bastar", "बस्तर", "dhamtari", "mahasamund", "kanker", "chhattisgarh",
+                  "छत्तीसगढ़")
+_UP_CITY_HINTS = ("lucknow", "लखनऊ", "kanpur", "कानपुर", "varanasi", "वाराणसी",
+                  "prayagraj", "प्रयागराज", "allahabad", "agra", "आगरा",
+                  "gorakhpur", "गोरखपुर", "noida", "नोएडा", "ghaziabad", "गाज़ियाबाद",
+                  "meerut", "मेरठ", "bareilly", "aligarh", "jhansi", "झांसी",
+                  "ayodhya", "अयोध्या", "uttar pradesh", "उत्तर प्रदेश")
+
+
 def _guess_state(text: str) -> str | None:
-    low = text.lower()
-    if "chhattisgarh" in low or "छत्तीसगढ़" in text or "raipur" in low or "रायपुर" in text:
+    low = str(text or "").lower()
+    if any(h in low or h in str(text or "") for h in _CG_CITY_HINTS):
         return "Chhattisgarh"
-    if "uttar pradesh" in low or "उत्तर प्रदेश" in text or "lucknow" in low or "लखनऊ" in text:
+    if any(h in low or h in str(text or "") for h in _UP_CITY_HINTS):
         return "Uttar Pradesh"
     return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Part C — district-wise newspaper / e-paper directory (real, stable portals)
+# ──────────────────────────────────────────────────────────────────────────────
+# Only real, stable e-paper PORTAL landing pages. Each portal has its own
+# district/edition picker — we link the portal and tell the user which edition
+# to open, rather than fabricating 100+ fragile per-district deep links.
+NEWSPAPER_DIRECTORY: dict[str, list[dict]] = {
+    "Chhattisgarh": [
+        {"name": "Dainik Bhaskar", "url": "https://epaper.bhaskar.com",
+         "note": "Largest CG circulation — daily निविदा/NIT display ads across all districts."},
+        {"name": "Patrika (Rajasthan Patrika)", "url": "https://epaper.patrika.com",
+         "note": "Strong Raipur, Bilaspur, Durg, Bastar editions; many municipal & PWD NITs."},
+        {"name": "Nava Bharat", "url": "https://www.enavabharat.com/epaper/",
+         "note": "Established CG Hindi daily; collector-office & gram-panchayat tenders."},
+        {"name": "Deshbandhu", "url": "https://www.deshbandhu.co.in",
+         "note": "Raipur-rooted CG daily; state govt & local body tender notices."},
+        {"name": "Haribhoomi", "url": "https://epaper.haribhoomi.com",
+         "note": "Wide CG coverage; PWD, irrigation & nagar nigam advertisements."},
+        {"name": "Nai Dunia", "url": "https://epaper.naidunia.com",
+         "note": "CG/MP Hindi daily; district administration tender ads."},
+        {"name": "Dainik Jagran", "url": "https://epaper.jagran.com",
+         "note": "National Hindi daily with CG editions; government NITs."},
+    ],
+    "Uttar Pradesh": [
+        {"name": "Dainik Jagran", "url": "https://epaper.jagran.com",
+         "note": "Largest UP circulation — NIT/निविदा ads in every district edition."},
+        {"name": "Amar Ujala", "url": "https://epaper.amarujala.com",
+         "note": "Very strong UP coverage; PWD, Jal Nigam, Nagar Nigam & Vikas Pradhikaran tenders."},
+        {"name": "Hindustan (Hindi)", "url": "https://epaper.livehindustan.com",
+         "note": "Deep UP district editions; collector-office & local-body NITs."},
+        {"name": "Dainik Bhaskar", "url": "https://epaper.bhaskar.com",
+         "note": "Growing UP editions; government & municipal tender ads."},
+        {"name": "Rajasthan Patrika", "url": "https://epaper.patrika.com",
+         "note": "Select UP editions; PWD and urban-body tender notices."},
+    ],
+}
 
 
 def _guess_org(text: str) -> str | None:
@@ -262,6 +312,169 @@ def scan_epapers() -> list[dict]:
         print(f"   data_engine.scan_epapers: {pages} page(s) scanned, "
               f"{len(records)} candidate tender(s).")
     return records
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Part D — Gemini-Vision e-paper extractor (page image / PDF -> offline tenders)
+# ──────────────────────────────────────────────────────────────────────────────
+_VISION_MODEL = "gemini-flash-latest"
+
+_EPAPER_VISION_PROMPT = """You are reading a scanned PAGE of an Indian newspaper / e-paper from the state of Chhattisgarh or Uttar Pradesh. The text may be in Hindi (Devanagari) or English, printed in dense columns.
+
+Find EVERY GOVERNMENT TENDER NOTICE printed on this page. These are advertisements headed with words like "निविदा सूचना", "ई-निविदा", "Tender Notice", "Notice Inviting Tender", "NIT", "Invitation for Bids", "कोटेशन", "Quotation" — usually issued by a government office such as PWD / लोक निर्माण विभाग, Collector / कलेक्टर कार्यालय, Nagar Nigam / Nagar Palika / नगर निगम, Jal Sansadhan / जल संसाधन / PHED, Gram Panchayat, Janpad, Executive Engineer / कार्यपालन अभियंता, RES, CGMSC, etc.
+
+Ignore commercial ads, matrimonials, news articles and editorials — ONLY government tender / quotation notices.
+
+For EACH tender notice found, extract (translate Hindi VALUES to clean English where natural, but keep proper nouns/numbers as printed):
+- work: short description of the work / supply / service
+- office: full issuing office / department
+- district: the CG/UP district it pertains to, if printed
+- nit_no: NIT / tender / निविदा number / reference
+- value: estimated cost exactly as printed (e.g. "Rs 45.50 Lakh")
+- emd: earnest money deposit if printed
+- published_date / closing_date / opening_date: in YYYY-MM-DD if clearly derivable, else as printed
+- portal: any e-procurement website URL printed in the notice
+
+Return ONLY a JSON array, no markdown fences. Each element exactly:
+{"work":"", "office":"", "district":"", "nit_no":"", "value":"", "emd":"", "published_date":"", "closing_date":"", "opening_date":"", "portal":""}
+Use null for any field not printed. If there are NO government tender notices on this page, return [].
+Do NOT invent or guess tenders — extract only what is actually printed on the page."""
+
+
+def _gemini_vision_json(file_bytes: bytes, mime_type: str):
+    """POST a page image / PDF to Gemini and return parsed JSON (list/dict).
+
+    Returns (data, status). Mirrors bid_engine's REST call: direct endpoint +
+    X-goog-api-key header (the SDK mishandles the 'AQ.' key format), thinking
+    disabled for speed/quota. Records errors into core's AI-error channel so the
+    UI can surface quota/key problems honestly.
+    """
+    import os
+    import base64
+    import json
+
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        core.record_ai_error("no api key configured")
+        return None, "no_key"
+
+    actual = (mime_type or "image/jpeg").lower()
+    if "pdf" not in actual and "image" not in actual:
+        actual = "image/jpeg"
+
+    try:
+        import requests
+        resp = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{_VISION_MODEL}:generateContent",
+            headers={"Content-Type": "application/json", "X-goog-api-key": key},
+            json={"contents": [{"parts": [
+                {"inline_data": {"mime_type": actual,
+                                 "data": base64.b64encode(file_bytes).decode()}},
+                {"text": _EPAPER_VISION_PROMPT},
+            ]}], "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
+            timeout=180,
+        )
+        resp.raise_for_status()
+        parts = resp.json()["candidates"][0]["content"]["parts"]
+        text = "".join(p.get("text", "") for p in parts).strip()
+        text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        data = json.loads(text)
+        core.clear_ai_error()
+        return data, "ok"
+    except Exception as exc:
+        core.record_ai_error(exc)
+        return None, f"error:{type(exc).__name__}"
+
+
+def offline_tender_record(*, title, organization=None, district=None, state=None,
+                          nit_no=None, value_text=None, emd=None,
+                          published_date=None, closing_date=None, opening_date=None,
+                          newspaper=None, document_url=None, description=None,
+                          added_by=None) -> dict:
+    """Shape one extracted notice into an `offline_tenders`-table record."""
+    def _s(x):
+        x = str(x).strip() if x is not None else ""
+        return x or None
+    def _iso(x):
+        d = core.parse_date(x)
+        return d.isoformat() if d else None
+
+    title = (_s(title) or "Tender Notice (newspaper)")[:300]
+    org   = _s(organization)
+    nit   = _s(nit_no)
+    pub   = published_date
+    return {
+        "source_id":      core.make_source_id(title, org or _s(newspaper) or "",
+                                              nit or pub or ""),
+        "title":          title,
+        "state":          _s(state),
+        "district":       _s(district),
+        "organization":   org,
+        "nit_no":         nit,
+        "category":       "Offline / Newspaper Tender",
+        "value_text":     _s(value_text),
+        "value_lakhs":    core.parse_value_to_lakhs(value_text) if value_text else None,
+        "emd":            _s(emd),
+        "published_date": _iso(published_date),
+        "deadline":       _iso(closing_date),
+        "opening_date":   _iso(opening_date),
+        "newspaper":      _s(newspaper),
+        "document_url":   _s(document_url),
+        "description":    (_s(description)[:500] if _s(description) else None),
+        "source_portal":  "offline:newspaper",
+        "added_by":       (_s(added_by).lower() if _s(added_by) else None),
+        "scraped_at":     core._now_iso(),
+    }
+
+
+def extract_tenders_from_epaper(file_bytes: bytes, mime_type: str = "image/jpeg", *,
+                                district_hint: str | None = None,
+                                state_hint: str | None = None,
+                                newspaper_hint: str | None = None,
+                                added_by: str | None = None) -> tuple[list[dict], str]:
+    """Read ONE e-paper page (image or PDF) -> structured offline-tender records.
+
+    Returns (records, status). Never raises. Honest: returns [] when the page
+    has no tender notices (or when AI is unavailable), and only shapes notices
+    Gemini actually read off the page.
+    """
+    try:
+        data, status = _gemini_vision_json(file_bytes, mime_type)
+        # Gemini usually returns a JSON array; tolerate a {"tenders":[...]} wrap.
+        if isinstance(data, dict):
+            data = next((v for v in data.values() if isinstance(v, list)), None)
+        if not isinstance(data, list):
+            return [], status
+
+        out: list[dict] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            work = item.get("work") or item.get("title")
+            if not work or not str(work).strip():
+                continue
+            dist = item.get("district") or district_hint
+            st_  = state_hint or _guess_state(f"{item.get('district') or ''} "
+                                              f"{item.get('office') or ''} {work}")
+            out.append(offline_tender_record(
+                title=work,
+                organization=item.get("office"),
+                district=dist,
+                state=st_,
+                nit_no=item.get("nit_no"),
+                value_text=item.get("value"),
+                emd=item.get("emd"),
+                published_date=item.get("published_date"),
+                closing_date=item.get("closing_date"),
+                opening_date=item.get("opening_date"),
+                newspaper=newspaper_hint,
+                document_url=item.get("portal"),
+                description=work,
+                added_by=added_by,
+            ))
+        return out, status
+    except Exception as exc:
+        return [], f"error:{type(exc).__name__}"
 
 
 # ──────────────────────────────────────────────────────────────────────────────

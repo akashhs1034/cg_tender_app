@@ -613,6 +613,55 @@ def days_left(d) -> int | None:
     dd = core.parse_date(d)
     return (dd - date.today()).days if dd else None
 
+def save_offline_tenders(records: list[dict]) -> int:
+    """Upsert extracted offline (newspaper) tenders to the shared store.
+
+    Returns the number saved. Uses the anon key (the offline_tenders table has a
+    public insert policy); upsert on source_id de-duplicates re-uploads.
+    """
+    if not records:
+        return 0
+    url = _secret("SUPABASE_URL") or _secret("supabase_url")
+    key = _secret("SUPABASE_KEY") or _secret("supabase_key")
+    if not (url and key):
+        st.error("Supabase not configured — cannot save offline tenders.")
+        return 0
+    try:
+        from supabase import create_client
+        client = create_client(url, key)
+        client.table("offline_tenders").upsert(records, on_conflict="source_id").execute()
+        return len(records)
+    except Exception as e:
+        st.error(f"Could not save offline tenders: {e}")
+        return 0
+
+def _render_offline_card(r: dict) -> None:
+    """Render one newspaper/offline tender as a card (no fit score — these are
+    raw newspaper extractions, so we show the printed facts honestly)."""
+    _t     = _html.escape(safe_str(r.get("title"), 120))
+    _org   = _esc(r.get("organization"))
+    _dist  = _esc(r.get("district"))
+    _nit   = _v(r.get("nit_no"))
+    _val   = _v(r.get("value_text")) or (f"₹{float(r.get('value_lakhs')):.0f}L"
+                                         if r.get("value_lakhs") else "—")
+    _close = _v(r.get("deadline"))
+    _paper = _v(r.get("newspaper"))
+    _meta  = " &nbsp;·&nbsp; ".join(x for x in [
+        (f"🧾 NIT {_html.escape(_nit)}" if _nit != "—" else ""),
+        (f"💰 {_html.escape(_val)}"     if _val != "—" else ""),
+        (f"⏰ closes {_html.escape(_close)}" if _close != "—" else ""),
+        (f"🗞 {_html.escape(_paper)}"   if _paper != "—" else ""),
+    ] if x)
+    st.markdown(
+        f'<div class="ocard"><div class="ocard-title">📰 {_t}</div>'
+        f'<div class="ocard-org">🏛 {_org} &nbsp;·&nbsp; 📍 {_dist}</div>'
+        + (f'<div class="alert-meta" style="color:#94A3B8;margin-top:4px">{_meta}</div>'
+           if _meta else "")
+        + '</div>', unsafe_allow_html=True)
+    if r.get("document_url"):
+        st.link_button("🌐 Open Official Procurement Portal", r["document_url"],
+                       width="stretch")
+
 def _profile_to_resume_text(p: dict) -> str:
     """Build a keyword-matchable text blob from job seeker profile fields."""
     parts = []
@@ -1786,6 +1835,129 @@ elif "Tenders" in page:
                     _cc1.link_button("📄 View Corrigendum", _cr["corrigendum_url"], width="stretch")
                 if _cr.get("tender_url"):
                     _cc2.link_button("🌐 View Tender", _cr["tender_url"], width="stretch")
+
+    # ── Offline / Newspaper Tenders — district-wise NITs printed only in papers ──
+    # Many small offices (PWD divisions, Collector, Nagar Nigam, Gram Panchayat)
+    # advertise tenders ONLY in local newspapers, never on e-procurement portals.
+    # This captures them district-wise: browse what's collected, add tenders by
+    # letting Opporta Intelligence read an e-paper page, or open district papers.
+    with st.expander("📰  Offline / Newspaper Tenders — district-wise NITs printed in CG/UP papers", expanded=False):
+        st.caption("Government offices (PWD, Collector, Nagar Nigam, Gram Panchayat, Jal Sansadhan…) "
+                   "often publish tenders only in local newspapers. Browse them district-wise, add "
+                   "tenders from an e-paper page, or open your district's papers directly.")
+        _ot1, _ot2, _ot3 = st.tabs(["📂 Browse (district-wise)",
+                                    "➕ Add from e-paper",
+                                    "🗞 Newspaper directory"])
+
+        # ---- Tab 1: browse the shared offline-tender store, grouped by district
+        with _ot1:
+            df_off = load_table("offline_tenders")
+            if df_off.empty:
+                st.info("No offline tenders captured yet. Use **➕ Add from e-paper** to extract them "
+                        "from a newspaper page, or open your district's papers under **🗞 Newspaper directory**.")
+            else:
+                _orows = df_off.to_dict("records")
+                _ob1, _ob2 = st.columns(2)
+                _of_state = _ob1.selectbox("State", ["All", "Chhattisgarh", "Uttar Pradesh"], key="off_b_state")
+                _of_dlist = (["All"] + sorted(set(CG_DISTRICTS + UP_DISTRICTS))
+                             if _of_state == "All" else ["All"] + _districts_for_state(_of_state))
+                _of_dist = _ob2.selectbox("District", _of_dlist, key="off_b_dist")
+                _ofilt = [r for r in _orows
+                          if (_of_state == "All" or _v(r.get("state")) == _of_state)
+                          and (_of_dist == "All"
+                               or _v(r.get("district", "")).lower() == _of_dist.lower())]
+                st.markdown(f'<div class="sec-badge" style="display:inline-block;margin:6px 0 12px">'
+                            f'{len(_ofilt)} offline tenders</div>', unsafe_allow_html=True)
+                from collections import defaultdict as _dd
+                _bydist = _dd(list)
+                for r in _ofilt:
+                    _bydist[_v(r.get("district"), "Unspecified district")].append(r)
+                if not _ofilt:
+                    st.caption("None for this filter yet.")
+                for _dname in sorted(_bydist):
+                    st.markdown(f'<div class="profile-section-title">📍 {_html.escape(_dname)} · '
+                                f'{len(_bydist[_dname])}</div>', unsafe_allow_html=True)
+                    for r in _bydist[_dname][:40]:
+                        _render_offline_card(r)
+
+        # ---- Tab 2: add offline tenders by reading an e-paper page (Vision) ----
+        with _ot2:
+            _ep_ai = bool(os.getenv("GEMINI_API_KEY") or _secret("GEMINI_API_KEY"))
+            if not _ep_ai:
+                st.warning("Opporta Intelligence (GEMINI_API_KEY) is needed to read e-paper pages. "
+                           "Add it to your secrets to enable extraction.")
+            st.caption("Upload one or more newspaper / e-paper PAGES (photo, screenshot or PDF). "
+                       "Opporta Intelligence reads each page and pulls out every government tender "
+                       "notice printed on it — tagged district-wise.")
+            _ec1, _ec2, _ec3 = st.columns(3)
+            _ep_state = _ec1.selectbox("State", ["Chhattisgarh", "Uttar Pradesh"], key="ep_state")
+            _ep_dist  = _ec2.selectbox("District (optional)",
+                                       ["(auto-detect)"] + _districts_for_state(_ep_state), key="ep_dist")
+            _ep_paper = _ec3.text_input("Newspaper (optional)", placeholder="e.g. Dainik Bhaskar", key="ep_paper")
+            _ep_files = st.file_uploader("E-paper page(s)", type=["jpg", "jpeg", "png", "pdf"],
+                                         accept_multiple_files=True, key="ep_files",
+                                         label_visibility="collapsed")
+            if st.button("🔎  Extract offline tenders from page(s)", width="stretch",
+                         key="ep_extract", disabled=not _ep_ai):
+                if not _ep_files:
+                    st.warning("Upload at least one e-paper page first.")
+                else:
+                    import data_engine as _de
+                    core.clear_ai_error()
+                    _all, _ok_pages = [], 0
+                    with st.spinner("Opporta Intelligence is reading the page(s) and extracting tender notices…"):
+                        for _f in _ep_files:
+                            try:
+                                _recs, _stt = _de.extract_tenders_from_epaper(
+                                    _f.read(), _f.type or "image/jpeg",
+                                    district_hint=(None if _ep_dist == "(auto-detect)" else _ep_dist),
+                                    state_hint=_ep_state,
+                                    newspaper_hint=(_ep_paper.strip() or None),
+                                    added_by=(email or None))
+                                if _stt == "ok":
+                                    _ok_pages += 1
+                                _all += _recs
+                            except Exception:
+                                pass
+                    # de-dup by source_id across pages
+                    _seen, _ded = set(), []
+                    for r in _all:
+                        if r["source_id"] not in _seen:
+                            _seen.add(r["source_id"]); _ded.append(r)
+                    st.session_state["offline_extracted"] = _ded
+                    if not _ded:
+                        if core.ai_error_message():
+                            _render_ai_error()
+                        else:
+                            st.info("No government tender notices were found on the uploaded page(s). "
+                                    "Try a clearer scan of the tenders / classifieds page.")
+
+            _ext = st.session_state.get("offline_extracted")
+            if _ext:
+                st.success(f"✓ Found {len(_ext)} tender notice(s). Review, then save them district-wise.")
+                for r in _ext:
+                    _render_offline_card(r)
+                if st.button(f"💾  Save these {len(_ext)} to Offline Tenders", width="stretch", key="ep_save"):
+                    _n = save_offline_tenders(_ext)
+                    if _n:
+                        load_table.clear()   # refresh the cached Browse table
+                        st.session_state.pop("offline_extracted", None)
+                        st.success(f"Saved {_n} offline tender(s) — they now appear under "
+                                   "**📂 Browse (district-wise)** for everyone.")
+                        st.rerun()
+
+        # ---- Tab 3: real district-wise newspaper e-paper directory ------------
+        with _ot3:
+            import data_engine as _de
+            _nd1, _nd2 = st.columns(2)
+            _nd_state = _nd1.selectbox("State", ["Chhattisgarh", "Uttar Pradesh"], key="np_state")
+            _nd_dist  = _nd2.selectbox("District", _districts_for_state(_nd_state), key="np_dist")
+            st.caption(f"Open each paper's e-paper, choose the **{_nd_dist}** edition, then scan the "
+                       "tender / classifieds pages for निविदा सूचना · NIT notices.")
+            for _paper in _de.NEWSPAPER_DIRECTORY.get(_nd_state, []):
+                st.markdown(f'**{_paper["name"]}** — <span style="color:#94A3B8">{_paper.get("note","")}</span>',
+                            unsafe_allow_html=True)
+                st.link_button(f'🗞 Open {_paper["name"]} e-paper', _paper["url"], width="stretch")
 
     # Category options = clean buckets present in the data (by frequency).
     all_cats = ["All"] + [c for c in TENDER_CATS_BY_FREQ]

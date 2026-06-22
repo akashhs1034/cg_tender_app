@@ -1308,7 +1308,8 @@ def compute_smart_alerts(email, token, scored_list, df_tenders) -> list[dict]:
 # pages that actually consume `scored` (Dashboard KPIs/matches + Alerts panel)
 # instead of on every rerun of every page.
 _cur_page = st.session_state.current_page
-_scored_needed = ("Dashboard" in _cur_page) or ("Alerts" in _cur_page)
+_scored_needed = (("Dashboard" in _cur_page) or ("Alerts" in _cur_page)
+                  or ("Tenders" in _cur_page))   # Tenders now hosts the alert strip
 scored          = get_scored(df_t, profile) if (PROFILE_READY and _scored_needed) else []
 eligible_count  = sum(1 for _, e, _, _ in scored if e)
 high_conf_count = sum(1 for s, _, _, _ in scored if s >= 80)
@@ -1962,6 +1963,26 @@ elif "Tenders" in page:
       <span class="sec-badge">Category › State › District</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
+
+    # ── Personalised alert strip — deadline reminders + new high-fit nudges ──
+    # Only renders when the user has a real profile and there's something worth
+    # nudging about, so it stays out of the way otherwise.
+    if st.session_state.authenticated and PROFILE_READY:
+        _alerts = compute_smart_alerts(email, _token, scored, df_t)
+        if _alerts:
+            _n_dl = sum(1 for _a in _alerts if _a["icon"] == "⏰")
+            _n_hi = sum(1 for _a in _alerts if _a["icon"] == "🎯")
+            _summary = " · ".join(x for x in [
+                (f"⏰ {_n_dl} closing soon" if _n_dl else ""),
+                (f"🎯 {_n_hi} new high-fit" if _n_hi else ""),
+            ] if x)
+            with st.expander(f"🔔 For you — {_summary}", expanded=bool(_n_dl)):
+                for _a in _alerts[:6]:
+                    st.markdown(
+                        f'<div class="alert-item" style="border-left-color:{_a["color"]}">'
+                        f'<div class="alert-title">{_a["icon"]} {_html.escape(_a["title"])}</div>'
+                        f'<div class="alert-meta" style="color:#94A3B8">{_html.escape(_a["detail"])}</div>'
+                        f'</div>', unsafe_allow_html=True)
 
     # ── FILTERS (on top — users filter first) ────────────────────────────────
     all_cats = ["All"] + [c for c in TENDER_CATS_BY_FREQ]

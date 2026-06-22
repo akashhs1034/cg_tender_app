@@ -862,6 +862,140 @@ def _compliance_csv(bid, elig) -> bytes:
                         _v(m.get("status"), "Compliant")])
     return buf.getvalue().encode("utf-8-sig")   # BOM so Excel opens it cleanly
 
+
+def _render_bid_workshop() -> None:
+    """Ready-to-Bid generator: upload tender + firm docs -> eligibility verdict,
+    editable cover letter, compliance sheet, .docx and a manual-actions checklist.
+    Uses module globals (profile, email, _token). Lives under the Tenders page."""
+    st.markdown("""<div class="sec-hd">
+      <span class="sec-title">🛠 Bid Workshop</span>
+      <span class="sec-badge-green">Ready-to-Bid File Generator</span>
+      <div class="sec-divider"></div>
+    </div>""", unsafe_allow_html=True)
+
+    with st.expander("⚡  Generate a Ready-to-Bid file  —  upload your firm documents + the tender document", expanded=False):
+        _ws_ai = bool(
+            os.getenv("GEMINI_API_KEY") or _secret("GEMINI_API_KEY") or
+            os.getenv("ANTHROPIC_API_KEY") or _secret("ANTHROPIC_API_KEY"))
+        if not _ws_ai:
+            st.warning("⚡ Opporta Intelligence needs GEMINI_API_KEY (or ANTHROPIC_API_KEY) to read the tender and draft the bid. Add it to your secrets to enable generation.")
+
+        st.markdown("**Step 1 — Tender document** (the NIT / tender notice PDF)")
+        _ws_tender = st.file_uploader("Tender document", type=["pdf", "jpg", "jpeg", "png"],
+                                      key="ws_tender_doc", label_visibility="collapsed")
+
+        st.markdown("**Step 2 — Your firm documents** (GST, registration, experience, turnover — optional but recommended)")
+        _ws_firm = st.file_uploader("Firm documents", type=["pdf", "txt", "jpg", "jpeg", "png"],
+                                    accept_multiple_files=True, key="ws_firm_docs",
+                                    label_visibility="collapsed")
+
+        if st.button("⚡  Generate Ready-to-Bid File", width="stretch", key="ws_generate"):
+            if not _ws_tender:
+                st.warning("Upload the tender document first.")
+            elif not _ws_ai:
+                st.error("Opporta Intelligence not configured — cannot read the tender. Add GEMINI_API_KEY to secrets.")
+            else:
+                import bid_engine, vault_evaluator as _ve
+                _ws_firm_texts: list[str] = []
+                for _ff in (_ws_firm or []):
+                    try:
+                        _txt = (_read_pdf_text(_ff) if _ff.name.lower().endswith(".pdf")
+                                else _ff.read().decode("utf-8", errors="ignore"))
+                        if _txt.strip():
+                            _ws_firm_texts.append(_txt)
+                    except Exception:
+                        pass
+                core.clear_ai_error()
+                with st.spinner("Opporta Intelligence is reading the tender, checking your eligibility & drafting the bid…"):
+                    _ws_t   = bid_engine.extract_tender(_ws_tender.read(),
+                                                        _ws_tender.type or "application/pdf")
+                    _ws_chk = bid_engine.readiness_check(_ws_t, profile, _ws_firm_texts)
+                    _ws_bid = bid_engine.generate_bid_content(_ws_t, profile, _ws_firm_texts)
+                    _ws_docx = bid_engine.build_docx(_ws_bid, _ws_t, profile) if _ws_bid else None
+
+                if _ws_t.get("_extraction_failed"):
+                    st.session_state.pop("ws_result", None)
+                    if core.ai_error_message():
+                        _render_ai_error()
+                    else:
+                        st.error("Could not read the tender document automatically. Try a clearer PDF.")
+                else:
+                    _vault_docs = _cached_vault_docs(email, _token) if email else []
+                    _elig = _ve.evaluate(_ws_t, profile, _vault_docs)
+                    _slug = safe_str(_ws_t.get('tender_no') or _ws_t.get('title') or 'tender', 30)
+                    _slug = _re.sub(r'[^A-Za-z0-9]+', '_', _slug).strip('_') or 'tender'
+                    _cl   = _ws_bid.get("cover_letter", {}) if isinstance(_ws_bid, dict) else {}
+                    st.session_state["ws_result"] = {
+                        "title":    safe_str(_ws_t.get("title"), 90),
+                        "slug":     _slug,
+                        "elig":     _elig,
+                        "vault_n":  len(_vault_docs),
+                        "cover":    _compose_cover_letter(_cl, _ws_t, profile),
+                        "csv":      _compliance_csv(_ws_bid, _elig),
+                        "docx":     _ws_docx,
+                        "warnings": [w for w in (_ws_chk.get("warnings") or []) if "deadline" in w.lower()][:2],
+                        "no_docx":  _ws_docx is None,
+                    }
+
+        _wr = st.session_state.get("ws_result")
+        if _wr:
+            import vault_evaluator as _ve
+            st.divider()
+            st.success(f"✓ Bid package ready for: {_wr['title']}")
+            _verd = _wr["elig"]["verdict"]
+            _vc   = ("yes" if _verd == _ve.ELIGIBLE
+                     else "no" if _verd == _ve.NOT_ELIGIBLE else "partial")
+            _vi   = {"yes": "✅", "no": "⛔", "partial": "🔎"}[_vc]
+            st.markdown(
+                f'<div class="elig-{_vc}" style="margin:6px 0 4px;font-size:.95rem;'
+                f'padding:12px 20px">{_vi}&nbsp; {_verd} &nbsp;·&nbsp; '
+                f'{_html.escape(_wr["elig"]["summary"])}</div>', unsafe_allow_html=True)
+            st.caption(
+                f"Checked against your profile + {_wr['vault_n']} vault document(s). "
+                "Always confirm against the official tender PDF before bidding.")
+            for _b in _wr["elig"].get("blockers", [])[:3]:
+                st.caption(f"⛔ {_b}")
+            if _wr["elig"].get("missing_docs"):
+                st.caption("📎 Not in your vault: " + ", ".join(_wr["elig"]["missing_docs"]))
+            for _w in _wr.get("warnings", []):
+                st.caption(f"⏳ {_w}")
+
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            _colA, _colB = st.columns(2)
+            with _colA:
+                st.markdown('<div class="profile-section-title">📦 Auto-Generated Package</div>', unsafe_allow_html=True)
+                st.caption("Ready to copy / download for the online submission.")
+                _ck = f"ws_cover_{_wr['slug']}"
+                if _ck not in st.session_state:
+                    st.session_state[_ck] = _wr["cover"]
+                st.text_area("Technical cover letter (editable)", key=_ck, height=230)
+                st.download_button(
+                    "📊  Compliance / Deviation sheet (.csv)",
+                    data=_wr["csv"], file_name=f"OPPORTA_Compliance_{_wr['slug']}.csv",
+                    mime="text/csv", width="stretch", key="ws_csv")
+                if not _wr["no_docx"]:
+                    st.download_button(
+                        "📄  Full Bid Document (.docx)",
+                        data=_wr["docx"], file_name=f"OPPORTA_Bid_{_wr['slug']}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        width="stretch", key="ws_download")
+                else:
+                    st.info("Full .docx draft unavailable — the cover letter + compliance "
+                            "sheet above are still ready to use.")
+            with _colB:
+                st.markdown('<div class="profile-section-title">✍️ Manual Actions Required</div>', unsafe_allow_html=True)
+                st.caption("Physical / legal papers you must arrange yourself — tick as you go:")
+                _done = 0
+                for _i, (_lbl, _hint) in enumerate(_MANUAL_BID_TASKS):
+                    if st.checkbox(_lbl, key=f"ws_manual_{_i}", help=_hint):
+                        _done += 1
+                _all = len(_MANUAL_BID_TASKS)
+                st.markdown(
+                    f'<div class="elig-{"yes" if _done == _all else "partial"}" '
+                    f'style="margin-top:10px">{_done}/{_all} manual items ready</div>',
+                    unsafe_allow_html=True)
+
+
 def _plain(val) -> str:
     """Strip HTML tags from scraped text so st.write() doesn't show raw markup."""
     s = _v(val, "")
@@ -1012,6 +1146,7 @@ with st.sidebar:
                 st.session_state.authenticated = True
                 st.session_state.email    = auth_email.strip().lower()
                 st.session_state.sb_token = token or ""
+                st.session_state.current_page = "📄  Tenders"
                 st.rerun()
             elif msg in ("EMAIL_NOT_CONFIRMED", "RATE_LIMIT"):
                 st.warning("📧 Please confirm your email (check inbox/spam), then log in — or wait a moment and retry.")
@@ -1025,6 +1160,7 @@ with st.sidebar:
                     st.session_state.authenticated = True
                     st.session_state.email    = auth_email.strip().lower()
                     st.session_state.sb_token = token or ""
+                    st.session_state.current_page = "📄  Tenders"
                     st.rerun()
                 else:
                     st.success("✅ Account created — click Login.")
@@ -1041,8 +1177,7 @@ with st.sidebar:
         # Exactly 5 primary modules. Analytics + Alerts fold into Dashboard,
         # the AI Workspace opens from a tender's detail, the Vault lives under Profile.
         pages = [
-            "👤  Profile", "🏠  Dashboard", "🔍  Explore",
-            "📄  Tenders", "💼  Jobs",
+            "📄  Tenders", "💼  Jobs", "📊  Analytics", "👤  Profile",
         ]
         for p in pages:
             is_active = st.session_state.current_page == p
@@ -1183,16 +1318,21 @@ total_value     = df_t["value_lakhs"].fillna(0).sum() if not df_t.empty and "val
 
 page = st.session_state.current_page
 
+# Once authenticated, Dashboard/Explore fold into Tenders (cleaner 4-tab nav:
+# Tenders · Jobs · Analytics · Profile). Redirect any stale page to Tenders.
+if st.session_state.authenticated and (("Dashboard" in page) or ("Explore" in page)):
+    st.session_state.current_page = "📄  Tenders"
+    page = "📄  Tenders"
+
 # ── MOBILE BOTTOM TAB BAR (fixed, thumb-friendly — visible only on phones) ─────
 # Scoped via st.container(key=…) → wrapper gets class .st-key-mobilenav, which we
 # pin to the bottom of the viewport in CSS. Hidden on desktop (sidebar takes over).
 if st.session_state.authenticated:
     _bottom_items = [
-        ("🏠", "Home",    "🏠  Dashboard"),
-        ("🔍", "Explore", "🔍  Explore"),
-        ("📄", "Tenders", "📄  Tenders"),
-        ("💼", "Jobs",    "💼  Jobs"),
-        ("👤", "You",     "👤  Profile"),
+        ("📄", "Tenders",   "📄  Tenders"),
+        ("💼", "Jobs",      "💼  Jobs"),
+        ("📊", "Analytics", "📊  Analytics"),
+        ("👤", "Profile",   "👤  Profile"),
     ]
     _mnav = st.container(key="mobilenav")
     with _mnav:
@@ -1823,6 +1963,47 @@ elif "Tenders" in page:
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
+    # ── FILTERS (on top — users filter first) ────────────────────────────────
+    all_cats = ["All"] + [c for c in TENDER_CATS_BY_FREQ]
+    st.markdown('<div class="filter-row">', unsafe_allow_html=True)
+    f1, f2, f3, f4 = st.columns([3, 1.5, 1.5, 1.5])
+    with f1:
+        new_search = st.text_input("Search", value=st.session_state.explore_search,
+                                   placeholder="Search title, org, district, scope of work...",
+                                   label_visibility="collapsed", key="ex_search")
+        st.session_state.explore_search = new_search.lower()
+    with f2:
+        if st.session_state.explore_category not in all_cats:
+            st.session_state.explore_category = "All"
+        st.session_state.explore_category = st.selectbox(
+            "Category", all_cats,
+            index=all_cats.index(st.session_state.explore_category),
+            label_visibility="collapsed", key="ex_cat")
+    with f3:
+        states_opts = ["All", "Chhattisgarh", "Uttar Pradesh"]
+        if st.session_state.explore_state not in states_opts:
+            st.session_state.explore_state = "All"
+        prev_state = st.session_state.explore_state
+        st.session_state.explore_state = st.selectbox(
+            "State", states_opts,
+            index=states_opts.index(st.session_state.explore_state),
+            label_visibility="collapsed", key="ex_state")
+        if st.session_state.explore_state != prev_state:
+            st.session_state.explore_district = "All"
+    with f4:
+        sel_state = st.session_state.explore_state
+        if sel_state == "All":
+            dist_opts = ["All"] + sorted(set(CG_DISTRICTS + UP_DISTRICTS))
+        else:
+            dist_opts = ["All"] + _districts_for_state(sel_state)
+        if st.session_state.explore_district not in dist_opts:
+            st.session_state.explore_district = "All"
+        st.session_state.explore_district = st.selectbox(
+            "District", dist_opts,
+            index=dist_opts.index(st.session_state.explore_district),
+            label_visibility="collapsed", key="ex_dist")
+    st.markdown('</div>', unsafe_allow_html=True)
+
     # ── Tender Amendments (Corrigendums) — closes the "missed amendment" gap ──
     df_corrig = load_table("corrigendums")
     if not df_corrig.empty:
@@ -1980,52 +2161,7 @@ elif "Tenders" in page:
                             unsafe_allow_html=True)
                 st.link_button(f'🗞 Open {_paper["name"]} e-paper', _paper["url"], width="stretch")
 
-    # Category options = clean buckets present in the data (by frequency).
-    all_cats = ["All"] + [c for c in TENDER_CATS_BY_FREQ]
-
-    # Filters
-    st.markdown('<div class="filter-row">', unsafe_allow_html=True)
-    f1, f2, f3, f4 = st.columns([3, 1.5, 1.5, 1.5])
-    with f1:
-        new_search = st.text_input("Search", value=st.session_state.explore_search,
-                                   placeholder="Search title, org, district, scope of work...",
-                                   label_visibility="collapsed", key="ex_search")
-        st.session_state.explore_search = new_search.lower()
-    with f2:
-        if st.session_state.explore_category not in all_cats:
-            st.session_state.explore_category = "All"
-        st.session_state.explore_category = st.selectbox(
-            "Category", all_cats,
-            index=all_cats.index(st.session_state.explore_category),
-            label_visibility="collapsed", key="ex_cat")
-    with f3:
-        states_opts = ["All", "Chhattisgarh", "Uttar Pradesh"]
-        if st.session_state.explore_state not in states_opts:
-            st.session_state.explore_state = "All"
-        prev_state = st.session_state.explore_state
-        st.session_state.explore_state = st.selectbox(
-            "State", states_opts,
-            index=states_opts.index(st.session_state.explore_state),
-            label_visibility="collapsed", key="ex_state")
-        if st.session_state.explore_state != prev_state:
-            st.session_state.explore_district = "All"
-    with f4:
-        # Dynamic district list based on selected state
-        sel_state = st.session_state.explore_state
-        if sel_state == "All":
-            dist_opts = ["All"] + sorted(set(CG_DISTRICTS + UP_DISTRICTS))
-        else:
-            dist_opts = ["All"] + _districts_for_state(sel_state)
-
-        if st.session_state.explore_district not in dist_opts:
-            st.session_state.explore_district = "All"
-        st.session_state.explore_district = st.selectbox(
-            "District", dist_opts,
-            index=dist_opts.index(st.session_state.explore_district),
-            label_visibility="collapsed", key="ex_dist")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    # Apply filters
+    # Apply filters (widgets are rendered at the top of the page)
     q    = st.session_state.explore_search
     fcat = st.session_state.explore_category
     fst  = st.session_state.explore_state
@@ -2113,14 +2249,13 @@ elif "Tenders" in page:
             if doc_url and str(doc_url) not in ("nan","None","—",""):
                 _pdf_widget(doc_url, rec.get("source_id",""), ctx="exp")
             if st.session_state.authenticated:
-                _sv, _an = st.columns(2)
-                if _sv.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}"):
+                if st.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}", width="stretch"):
                     accounts.save_tender(email, rec.get("source_id"), token=_token)
                     st.toast("✓ Saved to your pipeline")
-                if _an.button("⚡ Analyze with Opporta Intelligence", key=f"e_an_{rec.get('source_id')}"):
-                    st.session_state["ws_prefill"] = safe_str(rec.get("title"), 110)
-                    st.session_state.current_page = "⚡  Opporta Workspace"
-                    st.rerun()
+
+    # ── Bid Workshop — ready-to-bid generator + Eligible / Not-Eligible gate ──
+    st.markdown("<br>", unsafe_allow_html=True)
+    _render_bid_workshop()
 
     # ── Direct Portals: Official State Procurement Pipelines (bottom of page) ──
     st.markdown("<br>", unsafe_allow_html=True)
@@ -2678,6 +2813,20 @@ elif "Jobs" in page:
               <div style="font-size:.9rem;color:#64748B">No job data. Run ingest.py to fetch live listings.</div>
             </div>""", unsafe_allow_html=True)
         else:
+            # Job filters (on top — users filter first)
+            st.markdown('<div class="filter-row">', unsafe_allow_html=True)
+            jf1, jf2, jf3 = st.columns([3, 1.5, 1.5])
+            with jf1:
+                jsearch = st.text_input("Search jobs", placeholder="Title, department, qualification...",
+                                        label_visibility="collapsed", key="jsearch").lower()
+            with jf2:
+                jstates = ["All", "Chhattisgarh", "Uttar Pradesh"]
+                jstate  = st.selectbox("State", jstates, label_visibility="collapsed", key="jstate")
+            with jf3:
+                jcats = ["All"] + sorted(df_j["category"].dropna().unique().tolist()) if "category" in df_j else ["All"]
+                jcat  = st.selectbox("Category", jcats, label_visibility="collapsed", key="jcat")
+            st.markdown('</div>', unsafe_allow_html=True)
+
             # Job KPIs
             jk1, jk2, jk3, jk4 = st.columns(4)
             jk1.markdown(f'<div class="stat-card"><div class="stat-num">{len(df_j)}</div><div class="stat-lbl">Total Jobs</div></div>', unsafe_allow_html=True)
@@ -2692,20 +2841,6 @@ elif "Jobs" in page:
             jk4.markdown(f'<div class="stat-card"><div class="stat-num">{total_vac:,}</div><div class="stat-lbl">Total Vacancies</div></div>', unsafe_allow_html=True)
 
             st.markdown("<br>", unsafe_allow_html=True)
-
-            # Job filters
-            st.markdown('<div class="filter-row">', unsafe_allow_html=True)
-            jf1, jf2, jf3 = st.columns([3, 1.5, 1.5])
-            with jf1:
-                jsearch = st.text_input("Search jobs", placeholder="Title, department, qualification...",
-                                        label_visibility="collapsed", key="jsearch").lower()
-            with jf2:
-                jstates = ["All", "Chhattisgarh", "Uttar Pradesh"]
-                jstate  = st.selectbox("State", jstates, label_visibility="collapsed", key="jstate")
-            with jf3:
-                jcats = ["All"] + sorted(df_j["category"].dropna().unique().tolist()) if "category" in df_j else ["All"]
-                jcat  = st.selectbox("Category", jcats, label_visibility="collapsed", key="jcat")
-            st.markdown('</div>', unsafe_allow_html=True)
 
             jobs_filtered = []
             for _, r in df_j.iterrows():

@@ -1767,7 +1767,7 @@ elif "Explore" in page:
                 _val = _v(_rec.get("value_text")) or (
                     f"₹{float(_rec.get('value_lakhs',0)):.0f}L" if _rec.get("value_lakhs") else "—")
                 st.markdown(
-                    f'<div class="ocard"><div class="ocard-title">{_html.escape(safe_str(_rec.get("title"),100))}</div>'
+                    f'<div class="ocard"><div class="ocard-title">{_clickable_title(_rec.get("title"), _rec.get("document_url"), 100)}</div>'
                     f'<div class="ocard-org">🏛 {_esc(_rec.get("organization"))} · {_esc(_rec.get("state"))}</div>'
                     f'<div class="ocard-tags"><span class="tag tag-val">💰 {_html.escape(_val)}</span>'
                     f'<span class="tag tag-loc">📍 {_esc(_rec.get("district"),"State-wide")}</span>'

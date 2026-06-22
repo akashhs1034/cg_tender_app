@@ -9,7 +9,8 @@ own modules here so every run re-imports the just-deployed source.
 import sys
 import runpy
 
-for _mod in ("core", "accounts", "evaluator", "bid_engine", "alerts"):
+for _mod in ("core", "accounts", "evaluator", "bid_engine", "alerts",
+             "vault_evaluator", "data_engine"):
     sys.modules.pop(_mod, None)
 
 runpy.run_path("app.py", run_name="__main__")

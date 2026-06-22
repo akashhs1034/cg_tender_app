@@ -716,13 +716,88 @@ def _v(val, fallback="—") -> str:
     return s if s and s.lower() not in ("nan","none","nat","") else fallback
 
 def safe_str(text, length=90) -> str:
+    """Truncate any value to a display string — never raises.
+
+    `text` is cast through _v() (None / NaN -> 'Untitled'). `length` is
+    coerced to a positive int so a stray non-int (e.g. a fallback string
+    accidentally passed in this slot) degrades to the default instead of
+    crashing the whole page with a TypeError on Streamlit Cloud.
+    """
     t = _v(text, "Untitled")
+    try:
+        length = int(length)
+        if length <= 0:
+            length = 90
+    except (TypeError, ValueError):
+        length = 90
     return t[:length] + ("..." if len(t) > length else "")
 
 import re as _re, html as _html
 def _esc(val, fallback="—") -> str:
     """Return HTML-escaped version of _v() — safe to embed in HTML templates."""
     return _html.escape(_v(val, fallback))
+
+
+# ── Bid Workshop helpers ──────────────────────────────────────────────────────
+# Physical / legal documents that genuinely cannot be auto-compiled and must be
+# arranged by the contractor. Surfaced as a manual checklist in the workshop.
+_MANUAL_BID_TASKS = [
+    ("Non-blacklisting Affidavit (₹100 stamp paper, notarized)",
+     "Sworn affidavit that your firm isn't blacklisted by any govt body. Must be on "
+     "judicial stamp paper and notarized — cannot be produced digitally."),
+    ("Bank Solvency Certificate",
+     "Issued by your banker on letterhead certifying solvency for the tender value. "
+     "Request it from your branch."),
+    ("CA-Audited Net-Worth Certificate (with UDIN)",
+     "Latest net-worth / turnover certificate signed by a Chartered Accountant, "
+     "carrying a valid UDIN for online verification."),
+    ("EMD — Demand Draft / Bank Guarantee / FDR",
+     "Earnest Money Deposit in the exact instrument and amount the tender specifies, "
+     "in favour of the named authority."),
+    ("Class-3 Digital Signature Certificate (DSC)",
+     "Needed to sign & upload the bid on the e-procurement portal. Must be valid "
+     "(not expired) on submission day."),
+    ("Sealed hard-copy set (if offline submission)",
+     "Some tenders still need a physical sealed set in the tender box — check the "
+     "NIT's submission mode."),
+]
+
+
+def _compose_cover_letter(cl: dict, tender: dict, profile: dict) -> str:
+    """Flatten the AI cover-letter JSON into an editable plain-text letter."""
+    cl = cl or {}
+    cname = _v(profile.get("company_name") or profile.get("full_name"), "Our Firm")
+    out = [_v(cl.get("to"), f"To,\nThe Tender Committee,\n{_v(tender.get('organization'))}"), ""]
+    if _v(cl.get("subject"), "") != "":
+        out.append(_v(cl.get("subject")))
+    if _v(cl.get("ref"), "") != "":
+        out.append(_v(cl.get("ref")))
+    out += ["", _v(cl.get("salutation"), "Respected Sir/Madam,"), ""]
+    for para in (cl.get("body_paragraphs") or []):
+        p = _v(para, "")
+        if p and p != "—":
+            out += [p, ""]
+    if _v(cl.get("closing"), "") != "":
+        out += [_v(cl.get("closing")), ""]
+    out += ["Yours faithfully,", f"\nFor {cname}\nAuthorized Signatory"]
+    return "\n".join(out).strip()
+
+
+def _compliance_csv(bid, elig) -> bytes:
+    """Compliance / deviation spreadsheet (CSV bytes) from the gate + AI matrix."""
+    import csv as _csv, io as _io2
+    buf = _io2.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["Requirement", "Our Response / Status", "Compliance"])
+    for c in (elig or {}).get("checks", []):
+        ok = c.get("ok")
+        status = "Compliant" if ok is True else "Deviation" if ok is False else "To verify"
+        w.writerow([_v(c.get("label")), _v(c.get("detail")), status])
+    if isinstance(bid, dict):
+        for m in (bid.get("compliance_matrix") or []):
+            w.writerow([_v(m.get("requirement")), _v(m.get("our_response")),
+                        _v(m.get("status"), "Compliant")])
+    return buf.getvalue().encode("utf-8-sig")   # BOM so Excel opens it cleanly
 
 def _plain(val) -> str:
     """Strip HTML tags from scraped text so st.write() doesn't show raw markup."""
@@ -942,15 +1017,23 @@ def _cached_profile(user_email: str, user_token: str):
     return accounts.get_profile(user_email, token=user_token)
 
 @st.cache_data(ttl=300, show_spinner=False)
+def _cached_vault_docs(user_email: str, user_token: str) -> list:
+    try:
+        return accounts.list_documents(user_email, token=user_token) or []
+    except Exception:
+        return []
+
+@st.cache_data(ttl=300, show_spinner=False)
 def _cached_vault_count(user_email: str, user_token: str) -> int:
     try:
-        return len(accounts.list_documents(user_email, token=user_token))
+        return len(_cached_vault_docs(user_email, user_token))
     except Exception:
         return 0
 
 def _bust_user_cache():
     """Call after saving profile or uploading a document so reads refresh."""
     _cached_profile.clear()
+    _cached_vault_docs.clear()
     _cached_vault_count.clear()
 
 profile  = _cached_profile(email, _token) if email else dict(core.DEFAULT_PROFILE)
@@ -1458,7 +1541,7 @@ if "Dashboard" in page:
                 elif not _ws_ai:
                     st.error("Opporta Intelligence not configured — cannot read the tender. Add GEMINI_API_KEY to secrets.")
                 else:
-                    import bid_engine
+                    import bid_engine, vault_evaluator as _ve
                     # Parse firm documents into text for the readiness + bid context.
                     _ws_firm_texts: list[str] = []
                     for _ff in (_ws_firm or []):
@@ -1470,7 +1553,7 @@ if "Dashboard" in page:
                         except Exception:
                             pass
                     core.clear_ai_error()
-                    with st.spinner("Opporta Intelligence is reading the tender, checking your readiness & drafting the bid…"):
+                    with st.spinner("Opporta Intelligence is reading the tender, checking your eligibility & drafting the bid…"):
                         _ws_t   = bid_engine.extract_tender(_ws_tender.read(),
                                                             _ws_tender.type or "application/pdf")
                         _ws_chk = bid_engine.readiness_check(_ws_t, profile, _ws_firm_texts)
@@ -1478,31 +1561,102 @@ if "Dashboard" in page:
                         _ws_docx = bid_engine.build_docx(_ws_bid, _ws_t, profile) if _ws_bid else None
 
                     if _ws_t.get("_extraction_failed"):
+                        st.session_state.pop("ws_result", None)
                         # Show the precise reason (quota / key / network) when we have it.
                         if core.ai_error_message():
                             _render_ai_error()
                         else:
                             st.error("Could not read the tender document automatically. Try a clearer PDF, or use the Opporta Intelligence Analyzer to enter details manually.")
                     else:
-                        st.success(f"✓ Bid drafted for: {safe_str(_ws_t.get('title'), 90)}")
-                        # Readiness summary (uses real profile + uploaded firm docs only)
-                        _rp = _ws_chk.get("overall_pct", 0)
-                        st.markdown(
-                            f'<div class="elig-{"yes" if _rp>=70 else "partial" if _rp>=40 else "no"}" '
-                            f'style="margin:8px 0 12px">Readiness {_rp}% · '
-                            f'{len(_ws_chk.get("met",[]))} met · {len(_ws_chk.get("missing",[]))} missing</div>',
-                            unsafe_allow_html=True)
-                        for _w in _ws_chk.get("warnings", [])[:4]:
-                            st.caption(f"⚠ {_w}")
-                        if _ws_docx:
-                            st.download_button(
-                                "📥  Download Ready-to-Bid File (.docx)",
-                                data=_ws_docx,
-                                file_name=f"OPPORTA_Bid_{safe_str(_ws_t.get('tender_no') or _ws_t.get('title'),'tender')[:30].replace(' ','_')}.docx",
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                width="stretch", key="ws_download")
-                        else:
-                            _render_ai_error("Bid drafting did not return content — please try again.")
+                        # Binary eligibility gate — reads profile + the user's Vault
+                        # REGISTRY (file metadata), so it still works when a scanned
+                        # document can't be OCR'd. Never raises.
+                        _vault_docs = _cached_vault_docs(email, _token) if email else []
+                        _elig = _ve.evaluate(_ws_t, profile, _vault_docs)
+                        _slug = safe_str(_ws_t.get('tender_no') or _ws_t.get('title') or 'tender', 30)
+                        _slug = _re.sub(r'[^A-Za-z0-9]+', '_', _slug).strip('_') or 'tender'
+                        _cl   = _ws_bid.get("cover_letter", {}) if isinstance(_ws_bid, dict) else {}
+                        # Stash everything so the workspace below survives reruns
+                        # (checkbox toggles / text edits / downloads don't wipe it).
+                        st.session_state["ws_result"] = {
+                            "title":    safe_str(_ws_t.get("title"), 90),
+                            "slug":     _slug,
+                            "elig":     _elig,
+                            "vault_n":  len(_vault_docs),
+                            "cover":    _compose_cover_letter(_cl, _ws_t, profile),
+                            "csv":      _compliance_csv(_ws_bid, _elig),
+                            "docx":     _ws_docx,
+                            "warnings": [w for w in (_ws_chk.get("warnings") or []) if "deadline" in w.lower()][:2],
+                            "no_docx":  _ws_docx is None,
+                        }
+
+            # ── Persistent dual-workspace (renders from session_state, so it
+            #    stays put across reruns: ticking a box or editing the letter
+            #    no longer makes the whole package disappear) ─────────────────
+            _wr = st.session_state.get("ws_result")
+            if _wr:
+                import vault_evaluator as _ve
+                st.divider()
+                st.success(f"✓ Bid package ready for: {_wr['title']}")
+
+                _verd = _wr["elig"]["verdict"]
+                _vc   = ("yes" if _verd == _ve.ELIGIBLE
+                         else "no" if _verd == _ve.NOT_ELIGIBLE else "partial")
+                _vi   = {"yes": "✅", "no": "⛔", "partial": "🔎"}[_vc]
+                st.markdown(
+                    f'<div class="elig-{_vc}" style="margin:6px 0 4px;font-size:.95rem;'
+                    f'padding:12px 20px">{_vi}&nbsp; {_verd} &nbsp;·&nbsp; '
+                    f'{_html.escape(_wr["elig"]["summary"])}</div>', unsafe_allow_html=True)
+                st.caption(
+                    f"Checked against your profile + {_wr['vault_n']} vault document(s). "
+                    "Always confirm against the official tender PDF before bidding.")
+                for _b in _wr["elig"].get("blockers", [])[:3]:
+                    st.caption(f"⛔ {_b}")
+                if _wr["elig"].get("missing_docs"):
+                    st.caption("📎 Not in your vault: " + ", ".join(_wr["elig"]["missing_docs"]))
+                for _w in _wr.get("warnings", []):
+                    st.caption(f"⏳ {_w}")
+
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+                _colA, _colB = st.columns(2)
+
+                # Column 1 — auto-generated online package
+                with _colA:
+                    st.markdown('<div class="profile-section-title">📦 Auto-Generated Package</div>',
+                                unsafe_allow_html=True)
+                    st.caption("Ready to copy / download for the online submission.")
+                    _ck = f"ws_cover_{_wr['slug']}"
+                    if _ck not in st.session_state:
+                        st.session_state[_ck] = _wr["cover"]
+                    st.text_area("Technical cover letter (editable)", key=_ck, height=230)
+                    st.download_button(
+                        "📊  Compliance / Deviation sheet (.csv)",
+                        data=_wr["csv"], file_name=f"OPPORTA_Compliance_{_wr['slug']}.csv",
+                        mime="text/csv", width="stretch", key="ws_csv")
+                    if not _wr["no_docx"]:
+                        st.download_button(
+                            "📄  Full Bid Document (.docx)",
+                            data=_wr["docx"], file_name=f"OPPORTA_Bid_{_wr['slug']}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            width="stretch", key="ws_download")
+                    else:
+                        st.info("Full .docx draft unavailable — the cover letter + compliance "
+                                "sheet above are still ready to use.")
+
+                # Column 2 — manual actions the user must do physically
+                with _colB:
+                    st.markdown('<div class="profile-section-title">✍️ Manual Actions Required</div>',
+                                unsafe_allow_html=True)
+                    st.caption("Physical / legal papers you must arrange yourself — tick as you go:")
+                    _done = 0
+                    for _i, (_lbl, _hint) in enumerate(_MANUAL_BID_TASKS):
+                        if st.checkbox(_lbl, key=f"ws_manual_{_i}", help=_hint):
+                            _done += 1
+                    _all = len(_MANUAL_BID_TASKS)
+                    st.markdown(
+                        f'<div class="elig-{"yes" if _done == _all else "partial"}" '
+                        f'style="margin-top:10px">{_done}/{_all} manual items ready</div>',
+                        unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── EXPLORE — general system discovery (unified search: tenders + jobs) ────────

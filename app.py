@@ -1859,8 +1859,15 @@ elif "Tenders" in page:
                 _orows = df_off.to_dict("records")
                 _ob1, _ob2 = st.columns(2)
                 _of_state = _ob1.selectbox("State", ["All", "Chhattisgarh", "Uttar Pradesh"], key="off_b_state")
-                _of_dlist = (["All"] + sorted(set(CG_DISTRICTS + UP_DISTRICTS))
-                             if _of_state == "All" else ["All"] + _districts_for_state(_of_state))
+                # Build the district list from the standard set UNION the districts
+                # actually present in the data (so official names like Bastar /
+                # Surguja that aren't in the city-based standard list still appear).
+                _std = (CG_DISTRICTS + UP_DISTRICTS if _of_state == "All"
+                        else _districts_for_state(_of_state))
+                _present = {_v(r.get("district")) for r in _orows
+                            if r.get("district")
+                            and (_of_state == "All" or _v(r.get("state")) == _of_state)}
+                _of_dlist = ["All"] + sorted({d for d in _std} | {d for d in _present if d != "—"})
                 _of_dist = _ob2.selectbox("District", _of_dlist, key="off_b_dist")
                 _ofilt = [r for r in _orows
                           if (_of_state == "All" or _v(r.get("state")) == _of_state)

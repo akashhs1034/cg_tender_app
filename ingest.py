@@ -259,6 +259,39 @@ def push_corrigendums(corrigs):
         print(f"   corrigendums push failed: {e}")
 
 
+def push_offline_tenders(offline):
+    """Upsert district-collectorate offline tenders; clean ones long expired."""
+    if not offline:
+        print("   offline tenders: none scraped — skipping push.")
+        return
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+    if not (url and key):
+        print("   offline tenders: Supabase keys not set — skipping push.")
+        return
+    try:
+        from supabase import create_client
+        sb = create_client(url, key)
+        chunk = 200
+        for i in range(0, len(offline), chunk):
+            sb.table("offline_tenders").upsert(offline[i:i+chunk], on_conflict="source_id").execute()
+        print(f"   upserted {len(offline)} rows -> offline_tenders")
+        # Drop offline tenders whose closing date passed > 3 days ago.
+        from datetime import timedelta
+        cutoff = (date.today() - timedelta(days=3)).isoformat()
+        try:
+            resp = (sb.table("offline_tenders").delete()
+                      .lt("deadline", cutoff)
+                      .not_.is_("deadline", "null").execute())
+            n = len(resp.data) if resp.data else 0
+            if n:
+                print(f"   cleaned {n} expired offline tenders")
+        except Exception as e:
+            print(f"   offline tender cleanup warning: {e}")
+    except Exception as e:
+        print(f"   offline tenders push failed: {e}")
+
+
 def _cleanup_expired(sb):
     """Delete records whose deadline passed more than 3 days ago from Supabase."""
     from datetime import timedelta
@@ -333,6 +366,15 @@ def main():
         corrigs = []
     scraper_counts["cppp_corrig  (eprocure.gov.in/cppp)     "] = len(corrigs)
 
+    print("2c. Scraping district-collectorate OFFLINE tenders...")
+    try:
+        from scrapers import district_notices
+        offline = dedup(district_notices.scrape())
+    except Exception as e:
+        print(f"   offline tender scrape failed: {e}")
+        offline = []
+    scraper_counts["district_off (CG/UP collectorate sites)  "] = len(offline)
+
     _print_scraper_summary(scraper_counts, len(tenders), len(jobs))
 
     if args.dry_run:
@@ -344,6 +386,7 @@ def main():
         print("4. Pushing to cloud...")
         push_supabase(tenders, jobs)
         push_corrigendums(corrigs)
+        push_offline_tenders(offline)
 
     if args.dry_run or args.no_alerts:
         label = "DRY RUN" if args.dry_run else "--no-alerts"

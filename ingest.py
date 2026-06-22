@@ -123,7 +123,7 @@ def run_live_scrapers():
     from scrapers import (
         cg_eproc, up_etender, cppp_state, cg_jobs, up_jobs,
         cg_vyapam, up_upsssc, cspdcl,
-        gem, secl, pwd_cg, uppcl,
+        gem, secl, pwd_cg, uppcl, cppp_central,
     )
 
     # cppp_cg: reuse cppp_state module with CG env override
@@ -153,6 +153,7 @@ def run_live_scrapers():
         ("pwd_cg       (pwd.cg.gov.in)             ", pwd_cg.scrape),
         ("uppcl        (uppclonline.com)            ", uppcl.scrape),
         ("gem          (gem.gov.in)                ", gem.scrape),
+        ("cppp_central (eprocure.gov.in - central) ", cppp_central.scrape),
     ]
     _JOB_SCRAPERS = [
         ("cg_jobs      (psc.cg.gov.in)             ", cg_jobs.scrape),

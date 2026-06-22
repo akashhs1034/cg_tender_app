@@ -341,7 +341,7 @@ Use null for any field not printed. If there are NO government tender notices on
 Do NOT invent or guess tenders — extract only what is actually printed on the page."""
 
 
-def _gemini_vision_json(file_bytes: bytes, mime_type: str):
+def _gemini_vision_json(file_bytes: bytes, mime_type: str, prompt: str | None = None):
     """POST a page image / PDF to Gemini and return parsed JSON (list/dict).
 
     Returns (data, status). Mirrors bid_engine's REST call: direct endpoint +
@@ -370,7 +370,7 @@ def _gemini_vision_json(file_bytes: bytes, mime_type: str):
             json={"contents": [{"parts": [
                 {"inline_data": {"mime_type": actual,
                                  "data": base64.b64encode(file_bytes).decode()}},
-                {"text": _EPAPER_VISION_PROMPT},
+                {"text": prompt or _EPAPER_VISION_PROMPT},
             ]}], "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
             timeout=180,
         )
@@ -475,6 +475,49 @@ def extract_tenders_from_epaper(file_bytes: bytes, mime_type: str = "image/jpeg"
         return out, status
     except Exception as exc:
         return [], f"error:{type(exc).__name__}"
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Part E — vault document expiry / validity reader (Opporta Intelligence)
+# ──────────────────────────────────────────────────────────────────────────────
+_DOC_EXPIRY_PROMPT = """You are reading ONE business / compliance document that a contractor uploaded
+to a tender platform (e.g. contractor license / registration, GST certificate, ISO certificate,
+bank solvency certificate, Class-3 Digital Signature Certificate, insurance, EMD/bank guarantee,
+CA net-worth certificate, experience/completion certificate, PAN card).
+
+Find the date until which this document is VALID. Look for: "Valid up to", "Valid till",
+"Valid until", "Expiry date", "Date of Expiry", "Valid from <date> to <date>", "Renewal date",
+"Date of validity", or a printed certificate validity period. If the document clearly has NO
+expiry (e.g. a PAN card or an experience/completion certificate), set has_expiry to false.
+
+Return ONLY this JSON (no markdown fences):
+{"expiry_date": "YYYY-MM-DD or null", "doc_type": "short label e.g. GST Certificate / Contractor License / ISO 9001 / DSC / Solvency Certificate", "has_expiry": true or false}
+If two validity dates appear, use the LATER 'valid to' date. Never invent a date that is not printed."""
+
+
+def extract_document_expiry(file_bytes: bytes, mime_type: str = "application/pdf") -> dict:
+    """Read a vault document with Gemini Vision and return its validity info.
+
+    Returns: {expiry_date: 'YYYY-MM-DD'|None, doc_type: str|None,
+              has_expiry: bool, status: 'ok'|'no_key'|'error:*'}. Never raises.
+    """
+    try:
+        data, status = _gemini_vision_json(file_bytes, mime_type, prompt=_DOC_EXPIRY_PROMPT)
+        if not isinstance(data, dict):
+            return {"expiry_date": None, "doc_type": None,
+                    "has_expiry": False, "status": status}
+        raw = data.get("expiry_date")
+        iso = None
+        if raw and str(raw).strip().lower() not in ("null", "none", ""):
+            d = core.parse_date(raw)
+            iso = d.isoformat() if d else None
+        return {"expiry_date": iso,
+                "doc_type": (str(data.get("doc_type")).strip() if data.get("doc_type") else None),
+                "has_expiry": bool(data.get("has_expiry")),
+                "status": "ok"}
+    except Exception as exc:
+        return {"expiry_date": None, "doc_type": None,
+                "has_expiry": False, "status": f"error:{type(exc).__name__}"}
 
 
 # ──────────────────────────────────────────────────────────────────────────────

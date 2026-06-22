@@ -616,6 +616,43 @@ def days_left(d) -> int | None:
     dd = core.parse_date(d)
     return (dd - date.today()).days if dd else None
 
+# ── Vault document expiry helpers ─────────────────────────────────────────────
+def _doc_expiry_status(doc: dict):
+    """Return (label, color, badge_text, days) for a vault doc's validity, or
+    None when no expiry is tracked. days < 0 ⇒ already expired."""
+    exp = core.parse_date(doc.get("expiry_date"))
+    if not exp:
+        return None
+    dd  = (exp - date.today()).days
+    iso = exp.isoformat()
+    if dd < 0:
+        return ("EXPIRED", "#F87171", f"⛔ Expired {iso}", dd)
+    if dd <= 30:
+        return ("EXPIRING", "#F59E0B", f"⚠ Expires in {dd}d · {iso}", dd)
+    return ("VALID", "#10B981", f"✅ Valid until {iso}", dd)
+
+def _doc_expiry_alerts(docs) -> list[dict]:
+    """Opporta-Intelligence document alerts (expired / expiring ≤30d), shaped
+    like compute_smart_alerts() output so they slot into the 'For you' strip."""
+    out = []
+    for d in (docs or []):
+        stt = _doc_expiry_status(d)
+        if not stt:
+            continue
+        label, color, _badge, dd = stt
+        name = safe_str(d.get("name"), 58)
+        if label == "EXPIRED":
+            out.append({"icon": "⛔", "color": color,
+                        "title": f"Document expired — {name}",
+                        "detail": f"Expired {abs(dd)} day(s) ago · upload a renewed copy to stay bid-ready",
+                        "sort": (0, dd)})
+        elif label == "EXPIRING":
+            out.append({"icon": "📄", "color": color,
+                        "title": f"Document expiring soon — {name}",
+                        "detail": f"{dd} day(s) left · renew before your next bid",
+                        "sort": (0, dd)})
+    return out
+
 def save_offline_tenders(records: list[dict]) -> int:
     """Upsert extracted offline (newspaper) tenders to the shared store.
 
@@ -1964,20 +2001,25 @@ elif "Tenders" in page:
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
-    # ── Personalised alert strip — deadline reminders + new high-fit nudges ──
-    # Only renders when the user has a real profile and there's something worth
-    # nudging about, so it stays out of the way otherwise.
-    if st.session_state.authenticated and PROFILE_READY:
-        _alerts = compute_smart_alerts(email, _token, scored, df_t)
-        if _alerts:
-            _n_dl = sum(1 for _a in _alerts if _a["icon"] == "⏰")
-            _n_hi = sum(1 for _a in _alerts if _a["icon"] == "🎯")
+    # ── Personalised alert strip — deadlines, new high-fit, document expiry ──
+    # Document-expiry alerts show whenever signed in (an expired licence matters
+    # regardless of profile completeness); match nudges need a configured profile.
+    if st.session_state.authenticated:
+        _vdocs  = _cached_vault_docs(email, _token) if email else []
+        _doc_al = _doc_expiry_alerts(_vdocs)
+        _alerts = compute_smart_alerts(email, _token, scored, df_t) if PROFILE_READY else []
+        _all_al = _doc_al + _alerts          # documents first (expired = most urgent)
+        if _all_al:
+            _n_doc = len(_doc_al)
+            _n_dl  = sum(1 for _a in _alerts if _a["icon"] == "⏰")
+            _n_hi  = sum(1 for _a in _alerts if _a["icon"] == "🎯")
             _summary = " · ".join(x for x in [
+                (f"⛔ {_n_doc} document alert{'s' if _n_doc != 1 else ''}" if _n_doc else ""),
                 (f"⏰ {_n_dl} closing soon" if _n_dl else ""),
                 (f"🎯 {_n_hi} new high-fit" if _n_hi else ""),
             ] if x)
-            with st.expander(f"🔔 For you — {_summary}", expanded=bool(_n_dl)):
-                for _a in _alerts[:6]:
+            with st.expander(f"🔔 For you — {_summary}", expanded=bool(_n_dl or _n_doc)):
+                for _a in _all_al[:8]:
                     st.markdown(
                         f'<div class="alert-item" style="border-left-color:{_a["color"]}">'
                         f'<div class="alert-title">{_a["icon"]} {_html.escape(_a["title"])}</div>'
@@ -3521,9 +3563,45 @@ elif "Profile" in page:
         _vault_file = st.file_uploader("Select file", type=["pdf", "jpg", "jpeg", "png", "txt", "docx"],
                                        key="vault_file_up")
 
+        # ── Validity / expiry tracking → powers Opporta Intelligence renewal alerts ──
+        import datetime as _dt
+        _ex1, _ex2 = st.columns([1.5, 1])
+        _exp_val = None
+        with _ex1:
+            _track_exp = st.checkbox(
+                "This document has a validity / expiry date",
+                key="vault_track_exp",
+                value=bool(st.session_state.get("vault_ai_expiry")))
+            if _track_exp:
+                _ai_exp = st.session_state.get("vault_ai_expiry")
+                _def_d  = core.parse_date(_ai_exp) if _ai_exp else _dt.date.today()
+                _exp_d  = st.date_input("Valid until", value=_def_d, key="vault_exp_date",
+                                        min_value=_dt.date(2000, 1, 1),
+                                        max_value=_dt.date(2100, 12, 31))
+                _exp_val = _exp_d.isoformat() if _exp_d else None
+        with _ex2:
+            st.caption("Let Opporta Intelligence read the file & find its expiry date:")
+            if st.button("🔎  Auto-detect expiry", width="stretch", key="vault_ai_detect"):
+                if _vault_file:
+                    import data_engine as _de
+                    with st.spinner("Opporta Intelligence is reading the document…"):
+                        _info = _de.extract_document_expiry(
+                            _vault_file.getvalue(), _vault_file.type or "application/pdf")
+                    if _info.get("expiry_date"):
+                        st.session_state["vault_ai_expiry"] = _info["expiry_date"]
+                        st.rerun()
+                    elif _info.get("status") == "ok":
+                        st.info("No expiry date found — this document may not have one.")
+                    elif _info.get("status") == "no_key":
+                        st.warning("Opporta Intelligence needs GEMINI_API_KEY — set the date manually.")
+                    else:
+                        st.warning("Couldn't read it automatically — set the date manually.")
+                else:
+                    st.warning("Choose a file first.")
+
         if st.button("⬆️  Upload to Vault & Index", width="stretch", key="vault_do_upload"):
             if _vault_file and _vault_label:
-                _raw = _vault_file.read()
+                _raw = _vault_file.getvalue()
                 # Extraction parser → feed text into the Intelligence core.
                 _parsed = ""
                 try:
@@ -3537,14 +3615,15 @@ elif "Profile" in page:
                 with st.spinner("Uploading securely & indexing for match scoring…"):
                     _did = accounts.save_document(
                         email, f"[{_vault_kind}] {_vault_label}", _vault_file.name,
-                        _raw, _vault_file.type or "application/octet-stream", token=_token)
+                        _raw, _vault_file.type or "application/octet-stream", token=_token,
+                        expiry_date=_exp_val, doc_type=_vault_kind)
                 if _did:
                     _bust_user_cache()
-                    if _parsed.strip():
-                        st.success(f"✓ Uploaded & parsed {len(_parsed):,} characters — "
-                                   f"suggested match scoring is now active.")
-                    else:
-                        st.success("✓ Uploaded. Suggested match scoring is now active.")
+                    st.session_state.pop("vault_ai_expiry", None)
+                    _msg = "✓ Uploaded. Suggested match scoring is now active."
+                    if _exp_val:
+                        _msg += f"  Validity tracked ({_exp_val}) — we'll alert you before it expires."
+                    st.success(_msg)
                     st.rerun()
                 else:
                     st.error("Upload failed. Check logs.")
@@ -3554,6 +3633,21 @@ elif "Profile" in page:
         st.markdown('<div class="profile-section-title" style="margin-top:22px">Stored Documents</div>',
                     unsafe_allow_html=True)
         _docs = accounts.list_documents(email, token=_token)
+
+        # ── Opporta Intelligence vault-health banner (expired / expiring soon) ──
+        _expired_n  = sum(1 for _d in _docs if (_s := _doc_expiry_status(_d)) and _s[0] == "EXPIRED")
+        _expiring_n = sum(1 for _d in _docs if (_s := _doc_expiry_status(_d)) and _s[0] == "EXPIRING")
+        if _expired_n or _expiring_n:
+            _hc = "#F87171" if _expired_n else "#F59E0B"
+            _parts = ([f"⛔ {_expired_n} expired"] if _expired_n else []) + \
+                     ([f"⚠ {_expiring_n} expiring within 30 days"] if _expiring_n else [])
+            st.markdown(
+                f'<div class="alert-item" style="border-left-color:{_hc};margin-bottom:14px">'
+                f'<div class="alert-title">🔔 Opporta Intelligence — document attention needed</div>'
+                f'<div class="alert-meta" style="color:#94A3B8">{" · ".join(_parts)} — '
+                f'upload renewed copies below so your bids stay valid.</div></div>',
+                unsafe_allow_html=True)
+
         if _docs:
             st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:12px">{len(_docs)} documents · feeding the engine</div>',
                         unsafe_allow_html=True)
@@ -3562,13 +3656,18 @@ elif "Profile" in page:
                 _mime = _doc.get("mime_type", "")
                 _icon = "📄" if "pdf" in _mime else "🖼️" if "image" in _mime else "📁"
                 _up   = str(_doc.get("uploaded_at", ""))[:10]
+                _stt  = _doc_expiry_status(_doc)
+                if _stt:
+                    _badge = (f'<span class="tag" style="flex-shrink:0;background:{_stt[1]}1a;'
+                              f'color:{_stt[1]};border:1px solid {_stt[1]}55">{_stt[2]}</span>')
+                else:
+                    _badge = f'<span class="tag tag-cat" style="flex-shrink:0">{_mime.split("/")[-1].upper()[:8]}</span>'
                 st.markdown(
                     f'<div class="doc-card"><div class="doc-icon">{_icon}</div>'
                     f'<div style="flex:1;min-width:0">'
                     f'<div class="doc-name">{_esc(_doc.get("name"))}</div>'
                     f'<div class="doc-meta">{_esc(_doc.get("filename"))} · {_kb} KB · {_up}</div></div>'
-                    f'<span class="tag tag-cat" style="flex-shrink:0">{_mime.split("/")[-1].upper()[:8]}</span>'
-                    f'</div>', unsafe_allow_html=True)
+                    f'{_badge}</div>', unsafe_allow_html=True)
         else:
             st.markdown("""<div class="ocard" style="text-align:center;padding:30px">
               <div style="font-size:1.8rem;margin-bottom:8px">📂</div>

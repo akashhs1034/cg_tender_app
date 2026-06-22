@@ -296,8 +296,13 @@ def list_documents(email: str, token: str | None = None) -> list[dict]:
 
 def save_document(email: str, name: str, filename: str, content: bytes,
                   mime_type: str = "application/pdf",
-                  token: str | None = None) -> str | None:
-    """Store a document securely in Supabase Storage + metadata table."""
+                  token: str | None = None,
+                  expiry_date: str | None = None,
+                  doc_type: str | None = None) -> str | None:
+    """Store a document securely in Supabase Storage + metadata table.
+
+    expiry_date (ISO 'YYYY-MM-DD') powers proactive renewal alerts.
+    """
     email  = email.strip().lower()
     doc_id = uuid.uuid4().hex[:16]
     meta   = {
@@ -308,6 +313,8 @@ def save_document(email: str, name: str, filename: str, content: bytes,
         "mime_type":   mime_type,
         "size_bytes":  len(content),
         "uploaded_at": _now_iso(),
+        "expiry_date": (expiry_date or None),
+        "doc_type":    (doc_type or None),
     }
     sb = _sb_user(token)
     if sb:

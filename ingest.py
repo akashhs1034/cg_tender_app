@@ -226,6 +226,39 @@ def push_supabase(tenders, jobs):
         print("   Local CSVs are up-to-date — app will use them as fallback.")
 
 
+def push_corrigendums(corrigs):
+    """Upsert scraped corrigendums to Supabase; clean ones whose closing date passed."""
+    if not corrigs:
+        print("   corrigendums: none scraped — skipping push.")
+        return
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+    if not (url and key):
+        print("   corrigendums: Supabase keys not set — skipping push.")
+        return
+    try:
+        from supabase import create_client
+        sb = create_client(url, key)
+        chunk = 200
+        for i in range(0, len(corrigs), chunk):
+            sb.table("corrigendums").upsert(corrigs[i:i+chunk], on_conflict="source_id").execute()
+        print(f"   upserted {len(corrigs)} rows -> corrigendums")
+        # Drop corrigendums whose bid-closing date passed > 3 days ago
+        from datetime import timedelta
+        cutoff = (date.today() - timedelta(days=3)).isoformat()
+        try:
+            resp = (sb.table("corrigendums").delete()
+                      .lt("closing_date", cutoff)
+                      .not_.is_("closing_date", "null").execute())
+            n = len(resp.data) if resp.data else 0
+            if n:
+                print(f"   cleaned {n} expired corrigendums")
+        except Exception as e:
+            print(f"   corrigendum cleanup warning: {e}")
+    except Exception as e:
+        print(f"   corrigendums push failed: {e}")
+
+
 def _cleanup_expired(sb):
     """Delete records whose deadline passed more than 3 days ago from Supabase."""
     from datetime import timedelta
@@ -291,6 +324,15 @@ def main():
     tenders = dedup(t1 + t2 + t3)
     jobs    = dedup(j1 + j3)
 
+    print("2b. Scraping tender corrigendums (amendments)...")
+    try:
+        from scrapers import cppp_corrigendum
+        corrigs = dedup(cppp_corrigendum.scrape())
+    except Exception as e:
+        print(f"   corrigendum scrape failed: {e}")
+        corrigs = []
+    scraper_counts["cppp_corrig  (eprocure.gov.in/cppp)     "] = len(corrigs)
+
     _print_scraper_summary(scraper_counts, len(tenders), len(jobs))
 
     if args.dry_run:
@@ -301,6 +343,7 @@ def main():
         write_local(tenders, jobs)
         print("4. Pushing to cloud...")
         push_supabase(tenders, jobs)
+        push_corrigendums(corrigs)
 
     if args.dry_run or args.no_alerts:
         label = "DRY RUN" if args.dry_run else "--no-alerts"

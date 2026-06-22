@@ -1605,6 +1605,33 @@ elif "Tenders" in page:
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
+    # ── Tender Amendments (Corrigendums) — closes the "missed amendment" gap ──
+    df_corrig = load_table("corrigendums")
+    if not df_corrig.empty:
+        _crows = df_corrig.to_dict("records")
+        # Newest first by published date
+        _crows.sort(key=lambda r: str(r.get("published_date") or ""), reverse=True)
+        with st.expander(f"⚠  Recent Tender Amendments (Corrigendums) · {len(_crows)} — dates/specs changed, don't miss these",
+                         expanded=False):
+            st.caption("A corrigendum changes a live tender (new closing date, specs or EMD). "
+                       "Missing one can disqualify a bid — verify before you submit.")
+            for _cr in _crows[:25]:
+                _ctitle = _html.escape(safe_str(_cr.get("title"), 110))
+                _cstate = _esc(_cr.get("state"))
+                _cclose = _esc(_cr.get("closing_date"))
+                _cpub   = _esc(_cr.get("published_date"))
+                st.markdown(
+                    f'<div class="alert-item" style="border-left-color:#F59E0B">'
+                    f'<div class="alert-title">⚠ {_ctitle}</div>'
+                    f'<div class="alert-meta" style="color:#94A3B8">📍 {_cstate} &nbsp;·&nbsp; '
+                    f'🔁 amended {_cpub} &nbsp;·&nbsp; ⏰ new closing {_cclose}</div></div>',
+                    unsafe_allow_html=True)
+                _cc1, _cc2 = st.columns(2)
+                if _cr.get("corrigendum_url"):
+                    _cc1.link_button("📄 View Corrigendum", _cr["corrigendum_url"], width="stretch")
+                if _cr.get("tender_url"):
+                    _cc2.link_button("🌐 View Tender", _cr["tender_url"], width="stretch")
+
     # Category options = clean buckets present in the data (by frequency).
     all_cats = ["All"] + [c for c in TENDER_CATS_BY_FREQ]
 

@@ -163,6 +163,9 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .ocard-row{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
 .ocard-body{flex:1;min-width:0}
 .ocard-title{font-size:.9rem;font-weight:700;color:#E2E8F0;line-height:1.45;margin-bottom:5px;letter-spacing:-.01em}
+.ocard-link{color:inherit;text-decoration:none;cursor:pointer}
+.ocard-link:hover{color:#00C4FF}
+.ocard-link .ext{color:#00C4FF;font-size:.78em;font-weight:700;white-space:nowrap}
 .ocard-org{font-size:.73rem;color:#7C8AA0;margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .ocard-tags{display:flex;gap:6px;flex-wrap:wrap}
 
@@ -635,10 +638,21 @@ def save_offline_tenders(records: list[dict]) -> int:
         st.error(f"Could not save offline tenders: {e}")
         return 0
 
+def _clickable_title(text, url, length: int = 115) -> str:
+    """Render a tender title as a tappable link (opens the official portal / PDF
+    in a new tab) when a usable URL exists, else plain escaped text. This is what
+    makes every card directly clickable — no 'view details' tap needed first."""
+    t = _html.escape(safe_str(text, length))
+    u = str(url or "").strip()
+    if u and u.lower() not in ("nan", "none", "—", "") and (u.startswith("http") or u.startswith("/")):
+        return (f'<a href="{_html.escape(u)}" target="_blank" rel="noopener" '
+                f'class="ocard-link">{t} <span class="ext">↗ open</span></a>')
+    return t
+
 def _render_offline_card(r: dict) -> None:
     """Render one newspaper/offline tender as a card (no fit score — these are
     raw newspaper extractions, so we show the printed facts honestly)."""
-    _t     = _html.escape(safe_str(r.get("title"), 120))
+    _t     = _clickable_title(r.get("title"), r.get("document_url"), 120)
     _org   = _esc(r.get("organization"))
     _dist  = _esc(r.get("district"))
     _nit   = _v(r.get("nit_no"))
@@ -1430,7 +1444,7 @@ if "Dashboard" in page:
                 st.markdown(f"""<div class="ocard">
                   <div class="ocard-row">
                     <div class="ocard-body">
-                      <div class="ocard-title">{safe_str(rec.get('title'))}</div>
+                      <div class="ocard-title">{_clickable_title(rec.get('title'), rec.get('document_url'))}</div>
                       <div class="ocard-org">🏛 {safe_str(rec.get('organization'), 60)} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
                       <div class="ocard-tags">
                         <span class="tag tag-val">💰 {val}</span>
@@ -2070,7 +2084,7 @@ elif "Tenders" in page:
         st.markdown(f"""<div class="ocard">
           <div class="ocard-row">
             <div class="ocard-body">
-              <div class="ocard-title">{safe_str(rec.get('title'), 115)}</div>
+              <div class="ocard-title">{_clickable_title(rec.get('title'), rec.get('document_url'), 115)}</div>
               <div class="ocard-org">🏛 {safe_str(rec.get('organization'), 55)} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
               <div class="ocard-tags">
                 <span class="tag tag-val">💰 {val}</span>
@@ -2084,7 +2098,7 @@ elif "Tenders" in page:
           </div>
         </div>""", unsafe_allow_html=True)
 
-        with st.expander(f"Details · Save — {safe_str(rec.get('title'), 55)}"):
+        with st.expander(f"➕ Save · ⚡ Analyze · more details"):
             dc1, dc2 = st.columns(2)
             dc1.write(f"**Organization:** {_v(rec.get('organization'))}")
             dc1.write(f"**Category:** {_v(rec.get('category'))}")

@@ -20,10 +20,12 @@ Standalone:  python -m scrapers.district_notices
 
 from __future__ import annotations
 
+import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -159,21 +161,97 @@ def _fetch_one(district: str, state: str, slug: str) -> list[dict]:
         return []
 
 
+# ── State authorities / corporations with their own tender tables ─────────────
+# Different layout: S.No | Tender No | Title | Uploaded | Submission | Opening [| Cat]
+# PDF links are relative -> urljoin against the page URL.
+_AUTHORITY_SITES = [
+    ("Noida Authority", "Uttar Pradesh", "Gautam Buddha Nagar",
+     "https://noidaauthorityonline.in/en/tenders/"),
+    ("UP State Road Transport Corp (UPSRTC)", "Uttar Pradesh", None,
+     "https://upsrtc.up.gov.in/en/tenders/"),
+]
+
+
+def _first_date(s):
+    if not s:
+        return None
+    return re.split(r"[&]", str(s))[0].strip() or None
+
+
+def _parse_authority(html, name, state, district, page_url) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    out: list[dict] = []
+    for table in soup.find_all("table"):
+        heads = [th.get_text(strip=True).lower() for th in table.find_all("th")]
+        hjoin = " ".join(heads)
+        if "title" not in hjoin or "tender" not in hjoin:
+            continue
+
+        def idx(key, default):
+            return next((i for i, h in enumerate(heads) if key in h), default)
+        i_no, i_ti = idx("tender no", 1), idx("title", 2)
+        i_up, i_sub, i_op = idx("upload", 3), idx("submission", 4), idx("opening", 5)
+
+        for tr in table.find_all("tr"):
+            tds = tr.find_all("td")
+            if len(tds) <= i_ti:
+                continue
+            cells = [td.get_text(" ", strip=True) for td in tds]
+            title = cells[i_ti] if i_ti < len(cells) else ""
+            if not title:
+                continue
+            nit = cells[i_no] if i_no < len(cells) else None
+            if nit:
+                nit = re.split(r"\[", nit)[0].strip()   # drop "[2 MB] Language: .."
+            link = None
+            for a in tr.find_all("a"):
+                href = a.get("href") or ""
+                if href.lower().endswith(".pdf") or "tender" in href.lower():
+                    link = urljoin(page_url, href)
+                    break
+            out.append(data_engine.offline_tender_record(
+                title=title, organization=name, district=district, state=state,
+                nit_no=nit,
+                published_date=_first_date(cells[i_up] if i_up < len(cells) else None),
+                closing_date=_first_date(cells[i_sub] if i_sub < len(cells) else None),
+                opening_date=_first_date(cells[i_op] if i_op < len(cells) else None),
+                document_url=link or page_url, description=title, newspaper=None))
+        if out:
+            break
+    return out
+
+
+def _fetch_authority(item) -> list[dict]:
+    name, state, district, url = item
+    try:
+        r = requests.get(url, headers=_UA, timeout=15)
+        if r.status_code != 200:
+            return []
+        r.encoding = "utf-8"
+        recs = _parse_authority(r.text, name, state, district, url)
+        for rec in recs:
+            rec["source_portal"] = "govt-authority"
+        return recs
+    except Exception:
+        return []
+
+
 def scrape() -> list[dict]:
-    """Fetch all CG + UP district collectorate tender pages (parallel)."""
+    """Fetch all CG + UP district collectorate + authority tender pages (parallel)."""
     jobs = ([(d, "Chhattisgarh", s) for d, s in _CG.items()] +
             [(d, "Uttar Pradesh", s) for d, s in _UP.items()])
     records: list[dict] = []
     seen: set[str] = set()
     with ThreadPoolExecutor(max_workers=16) as ex:
-        futs = {ex.submit(_fetch_one, d, st, s): d for d, st, s in jobs}
+        futs = [ex.submit(_fetch_one, d, st, s) for d, st, s in jobs]
+        futs += [ex.submit(_fetch_authority, a) for a in _AUTHORITY_SITES]
         for fut in as_completed(futs):
             for rec in fut.result():
                 if rec["source_id"] not in seen:
                     seen.add(rec["source_id"])
                     records.append(rec)
-    print(f"   district_notices: {len(records)} CG/UP district-collectorate "
-          f"tenders from {len(jobs)} district sites")
+    print(f"   district_notices: {len(records)} CG/UP offline tenders from "
+          f"{len(jobs)} district sites + {len(_AUTHORITY_SITES)} authorities")
     if not records:
         print("   district_notices: WARNING — 0 records; site template may have changed")
     return records

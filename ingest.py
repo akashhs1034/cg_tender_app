@@ -123,7 +123,7 @@ def run_live_scrapers():
     from scrapers import (
         cg_eproc, up_etender, cppp_state, cg_jobs, up_jobs,
         cg_vyapam, up_upsssc, cspdcl,
-        gem, secl, pwd_cg, uppcl, cppp_central, dprcg,
+        gem, secl, pwd_cg, uppcl, cppp_central, dprcg, samvad,
     )
 
     # cppp_cg: reuse cppp_state module with CG env override
@@ -155,6 +155,7 @@ def run_live_scrapers():
         ("gem          (gem.gov.in)                ", gem.scrape),
         ("cppp_central (eprocure.gov.in - central) ", cppp_central.scrape),
         ("dprcg        (dprcg.gov.in - DPR/Samvad)  ", dprcg.scrape),
+        ("samvad       (samvad.cg.nic.in - Samvad)  ", samvad.scrape_tenders),
     ]
     _JOB_SCRAPERS = [
         ("cg_jobs      (psc.cg.gov.in)             ", cg_jobs.scrape),
@@ -368,13 +369,19 @@ def main():
         corrigs = []
     scraper_counts["cppp_corrig  (eprocure.gov.in/cppp)     "] = len(corrigs)
 
-    print("2c. Scraping district-collectorate OFFLINE tenders...")
+    print("2c. Scraping OFFLINE / newspaper tenders (district sites + CG Samvad ads)...")
+    offline = []
     try:
         from scrapers import district_notices
-        offline = dedup(district_notices.scrape())
+        offline += district_notices.scrape()
     except Exception as e:
-        print(f"   offline tender scrape failed: {e}")
-        offline = []
+        print(f"   district offline scrape failed: {e}")
+    try:
+        from scrapers import samvad as _samvad
+        offline += _samvad.scrape_published_ads()
+    except Exception as e:
+        print(f"   samvad newspaper-ad scrape failed: {e}")
+    offline = dedup(offline)
     scraper_counts["district_off (CG/UP collectorate sites)  "] = len(offline)
 
     _print_scraper_summary(scraper_counts, len(tenders), len(jobs))

@@ -1218,7 +1218,7 @@ with st.sidebar:
         # Exactly 5 primary modules. Analytics + Alerts fold into Dashboard,
         # the AI Workspace opens from a tender's detail, the Vault lives under Profile.
         pages = [
-            "📄  Tenders", "💼  Jobs", "📊  Analytics", "👤  Profile",
+            "👤  Profile", "📄  Tenders", "💼  Jobs", "📊  Analytics",
         ]
         for p in pages:
             is_active = st.session_state.current_page == p
@@ -1335,8 +1335,8 @@ def compute_smart_alerts(email, token, scored_list, df_tenders) -> list[dict]:
         if s >= 80 and eligible and rec.get("source_id") not in saved_ids:
             alerts.append({
                 "icon": "🎯", "color": "#10B981",
-                "title": f"New high-match ({s}%) — {safe_str(rec.get('title'), 62)}",
-                "detail": (f"Clears your qualification bar · {_v(rec.get('category'),'General')}"
+                "title": f"New eligible tender — {safe_str(rec.get('title'), 62)}",
+                "detail": (f"You meet this tender's criteria · {_v(rec.get('category'),'General')}"
                            f" · {_v(rec.get('district'),'State-wide')}"),
                 "sort": (1, 100 - s),
             })
@@ -1366,15 +1366,40 @@ if st.session_state.authenticated and (("Dashboard" in page) or ("Explore" in pa
     st.session_state.current_page = "📄  Tenders"
     page = "📄  Tenders"
 
+# ── UNIVERSAL ☰ MENU — jump to any section from phone OR web ──────────────────
+# A single hamburger menu that works everywhere (popover on desktop & mobile),
+# in addition to the sidebar (desktop) and bottom bar (phone).
+if st.session_state.authenticated:
+    try:
+        _hmenu = st.popover("☰  Menu", use_container_width=False)
+    except Exception:
+        _hmenu = st.expander("☰  Menu")
+    with _hmenu:
+        st.markdown("**Go to**")
+        for _ml, _mp in [("👤  Profile", "👤  Profile"), ("📄  Tenders", "📄  Tenders"),
+                         ("💼  Jobs", "💼  Jobs"), ("📊  Analytics", "📊  Analytics")]:
+            if st.button(_ml, key=f"hm_{_mp}", width="stretch",
+                         type="primary" if st.session_state.current_page == _mp else "secondary"):
+                st.session_state.current_page = _mp
+                st.rerun()
+        st.divider()
+        if st.button("⏏  Log out", key="hm_logout", width="stretch"):
+            st.session_state.authenticated = False
+            st.session_state.email = ""
+            st.session_state.sb_token = ""
+            st.session_state.entered_platform = False
+            st.session_state.auth_mode = "login"
+            st.rerun()
+
 # ── MOBILE BOTTOM TAB BAR (fixed, thumb-friendly — visible only on phones) ─────
 # Scoped via st.container(key=…) → wrapper gets class .st-key-mobilenav, which we
 # pin to the bottom of the viewport in CSS. Hidden on desktop (sidebar takes over).
 if st.session_state.authenticated:
     _bottom_items = [
+        ("👤", "Profile",   "👤  Profile"),
         ("📄", "Tenders",   "📄  Tenders"),
         ("💼", "Jobs",      "💼  Jobs"),
         ("📊", "Analytics", "📊  Analytics"),
-        ("👤", "Profile",   "👤  Profile"),
     ]
     _mnav = st.container(key="mobilenav")
     with _mnav:
@@ -2005,6 +2030,9 @@ elif "Tenders" in page:
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
+    # ── Bid Workshop at the TOP — easy to find (ready-to-bid + eligibility) ──
+    _render_bid_workshop()
+
     # ── Personalised alert strip — deadlines, new high-fit, document expiry ──
     # Document-expiry alerts show whenever signed in (an expired licence matters
     # regardless of profile completeness); match nudges need a configured profile.
@@ -2020,7 +2048,7 @@ elif "Tenders" in page:
             _summary = " · ".join(x for x in [
                 (f"⛔ {_n_doc} document alert{'s' if _n_doc != 1 else ''}" if _n_doc else ""),
                 (f"⏰ {_n_dl} closing soon" if _n_dl else ""),
-                (f"🎯 {_n_hi} new high-fit" if _n_hi else ""),
+                (f"🎯 {_n_hi} new eligible" if _n_hi else ""),
             ] if x)
             with st.expander(f"🔔 For you — {_summary}", expanded=bool(_n_dl or _n_doc)):
                 for _a in _all_al[:8]:
@@ -2249,7 +2277,8 @@ elif "Tenders" in page:
             # No verified telemetry → show neutral market score, never a fit verdict.
             rows.append((int(rec.get("ai_score") or 0), None, rec))
 
-    rows.sort(key=lambda x: x[0], reverse=True)
+    # Eligible tenders float to the top (score kept only as a hidden tiebreaker).
+    rows.sort(key=lambda x: (1 if x[1] else 0, x[0]), reverse=True)
 
     # Results header
     count_col, _ = st.columns([1, 3])
@@ -2258,9 +2287,9 @@ elif "Tenders" in page:
                     unsafe_allow_html=True)
 
     if not st.session_state.authenticated:
-        st.info("🔐 Sign in to see your personalized Opporta Intelligence fit score for each tender.")
+        st.info("🔐 Sign in and complete your profile to see which tenders you're eligible for.")
     elif not PROFILE_READY:
-        st.info("ℹ️ Update your profile to see suggested, personalized fit scores for each tender. Showing general market scores for now.")
+        st.info("ℹ️ Update your profile (contractor class, turnover, experience) to see which tenders you're eligible for.")
 
     if not rows:
         st.markdown("""<div class="ocard" style="text-align:center;padding:40px;color:#7C8AA0">
@@ -2270,19 +2299,19 @@ elif "Tenders" in page:
         </div>""", unsafe_allow_html=True)
 
     for s, eligible, rec in rows[:80]:
-        rc       = ring_cls(s)
         dl       = days_left(rec.get("deadline"))
         dl_txt   = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
         val      = _v(rec.get("value_text")) or (f"₹{float(rec.get('value_lakhs',0)):.0f}L" if rec.get("value_lakhs") else "—")
         district = _v(rec.get("district"), "State-wide")
-        color    = score_color(s)
+        # Binary verdict only — no percentage score. Eligible / Not Eligible
+        # is decided from the user's profile (class, turnover, experience).
         if eligible is None:
-            # No profile/resume → STRICTLY no percentage shown at all.
-            elig_cls, elig_txt = "tag-cat", "🔒 Complete profile for fit score"
-            ring_html = ""
+            elig_html = '<span class="tag tag-cat">🔒 Complete profile to check eligibility</span>'
+        elif eligible:
+            elig_html = '<span class="tag tag-green">✅ Eligible</span>'
         else:
-            elig_cls, elig_txt = ("tag-green", "✅ Eligible") if eligible else ("tag-warn", "⚠ Review")
-            ring_html = f'<div class="ring {rc}" style="color:{color};border-color:{color}">{s}</div>'
+            elig_html = ('<span class="tag" style="background:rgba(239,68,68,.1);color:#F87171;'
+                         'border:1px solid rgba(239,68,68,.25)">❌ Not Eligible</span>')
 
         st.markdown(f"""<div class="ocard">
           <div class="ocard-row">
@@ -2294,10 +2323,9 @@ elif "Tenders" in page:
                 <span class="tag tag-dl">{dl_txt}</span>
                 <span class="tag tag-loc">📍 {district}</span>
                 <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
-                <span class="tag {elig_cls}">{elig_txt}</span>
+                {elig_html}
               </div>
             </div>
-            {ring_html}
           </div>
         </div>""", unsafe_allow_html=True)
 
@@ -2319,10 +2347,6 @@ elif "Tenders" in page:
                 if st.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}", width="stretch"):
                     accounts.save_tender(email, rec.get("source_id"), token=_token)
                     st.toast("✓ Saved to your pipeline")
-
-    # ── Bid Workshop — ready-to-bid generator + Eligible / Not-Eligible gate ──
-    st.markdown("<br>", unsafe_allow_html=True)
-    _render_bid_workshop()
 
     # ── Direct Portals: Official State Procurement Pipelines (bottom of page) ──
     st.markdown("<br>", unsafe_allow_html=True)
@@ -3555,7 +3579,7 @@ elif "Profile" in page:
         st.markdown('<div class="profile-section-title">Secure Document Vault</div>',
                     unsafe_allow_html=True)
         st.caption("Contractor licenses, capacity certificates, resumes, GST / turnover statements. "
-                   "Uploaded files are parsed and fed into Opporta Intelligence to calibrate your match scores.")
+                   "Uploaded files help Opporta Intelligence decide which tenders you're eligible for.")
 
         _vc1, _vc2 = st.columns([2, 1])
         with _vc1:

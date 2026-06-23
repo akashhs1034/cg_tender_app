@@ -5,10 +5,11 @@ the web app (auth, tenders, jobs, offline tenders, profile, document vault). The
 Python scrapers + Supabase + Gemini stay exactly as they are — this is just a
 fast native client on top of them.
 
-> **Status: v1 foundation.** These source files were written without a Flutter
-> toolchain on the build machine, so they have **not been compiled here yet**.
-> Follow the steps below to run it; we then iterate on any issues and add the
-> Bid Workshop, document upload, and push notifications screen by screen.
+> **Status: v1 foundation — verified.** `flutter analyze` is clean and
+> `flutter build web` compiles the whole app successfully (Flutter 3.44.3).
+> The Android build uses the identical Dart code. Follow the steps below to run
+> it on a device/emulator; we then add the Bid Workshop, document upload, and
+> push notifications screen by screen.
 
 ---
 

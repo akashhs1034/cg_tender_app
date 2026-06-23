@@ -28,7 +28,7 @@ class _HomeShellState extends State<HomeShell> {
       bottomNavigationBar: NavigationBar(
         selectedIndex: _i,
         backgroundColor: Brand.surface,
-        indicatorColor: Brand.cyan.withOpacity(0.18),
+        indicatorColor: Brand.cyan.withValues(alpha: 0.18),
         onDestinationSelected: (v) => setState(() => _i = v),
         destinations: const [
           NavigationDestination(

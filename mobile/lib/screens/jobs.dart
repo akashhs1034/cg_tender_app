@@ -81,7 +81,7 @@ class _JobsScreenState extends State<JobsScreen> {
                 label: Text(s),
                 selected: _state == s,
                 onSelected: (_) => setState(() => _state = s),
-                selectedColor: Brand.cyan.withOpacity(0.2),
+                selectedColor: Brand.cyan.withValues(alpha: 0.2),
               ),
           ]),
           Padding(

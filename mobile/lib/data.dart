@@ -44,7 +44,7 @@ class Data {
           .select()
           .eq('email', email)
           .maybeSingle();
-      return (r as Map<String, dynamic>?) ?? {};
+      return r ?? {};
     } catch (_) {
       return {};
     }

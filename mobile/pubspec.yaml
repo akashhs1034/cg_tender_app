@@ -1,0 +1,21 @@
+name: opporta
+description: Opporta — CG/UP government tender & job intelligence (native Android).
+publish_to: "none"
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+  supabase_flutter: ^2.5.6     # auth + DB (same Supabase backend as the web app)
+  url_launcher: ^6.3.0         # open official tender / PDF links
+  intl: ^0.19.0                # date formatting
+
+dev_dependencies:
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

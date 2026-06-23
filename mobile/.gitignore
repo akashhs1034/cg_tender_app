@@ -1,0 +1,27 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+
+# Generated platform folders (created by `flutter create .`)
+# Keep these out of git until the app is established; remove these lines if you
+# want to version the native shells.
+android/
+ios/
+linux/
+macos/
+windows/
+web/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Signing — NEVER commit these
+key.properties
+*.jks
+*.keystore

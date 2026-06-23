@@ -13,6 +13,7 @@ dependencies:
   supabase_flutter: ^2.5.6     # auth + DB (same Supabase backend as the web app)
   url_launcher: ^6.3.0         # open official tender / PDF links
   intl: ^0.19.0                # date formatting
+  file_picker: ^8.1.2          # pick documents to upload to the vault
 
 dev_dependencies:
   flutter_lints: ^4.0.0

@@ -1,7 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import '../config.dart';
 import '../data.dart';
 import 'widgets.dart';
+import 'profile_edit.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -26,6 +29,102 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _profile = results[0] as Map<String, dynamic>;
     _docs = results[1] as List<Map<String, dynamic>>;
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _editProfile() async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (_) => ProfileEditScreen(initial: _profile)),
+    );
+    if (changed == true) _load();
+  }
+
+  String _mime(String fn) {
+    final e = fn.toLowerCase();
+    if (e.endsWith('.pdf')) return 'application/pdf';
+    if (e.endsWith('.png')) return 'image/png';
+    if (e.endsWith('.jpg') || e.endsWith('.jpeg')) return 'image/jpeg';
+    if (e.endsWith('.txt')) return 'text/plain';
+    return 'application/octet-stream';
+  }
+
+  Future<void> _uploadDoc() async {
+    final res = await FilePicker.platform.pickFiles(
+      withData: true,
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'txt', 'docx'],
+    );
+    if (res == null || res.files.isEmpty || res.files.first.bytes == null) return;
+    final f = res.files.first;
+    if (!mounted) return;
+
+    final labelCtrl = TextEditingController(text: f.name);
+    DateTime? expiry;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: Brand.surface,
+          title: const Text('Add to vault', style: TextStyle(fontSize: 16)),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(
+                controller: labelCtrl,
+                decoration: const InputDecoration(labelText: 'Document label')),
+            const SizedBox(height: 12),
+            Row(children: [
+              Expanded(
+                  child: Text(
+                      expiry == null
+                          ? 'No expiry set'
+                          : 'Valid until ${expiry!.toIso8601String().substring(0, 10)}',
+                      style: const TextStyle(color: Brand.muted, fontSize: 12))),
+              TextButton(
+                onPressed: () async {
+                  final d = await showDatePicker(
+                    context: ctx,
+                    initialDate: DateTime.now().add(const Duration(days: 365)),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2100),
+                  );
+                  if (d != null) setSt(() => expiry = d);
+                },
+                child: const Text('Set expiry'),
+              ),
+            ]),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
+            FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: const Text('Upload')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+
+    try {
+      await Data.uploadDocument(
+        name: labelCtrl.text.trim().isEmpty ? f.name : labelCtrl.text.trim(),
+        filename: f.name,
+        bytes: Uint8List.fromList(f.bytes!),
+        mimeType: _mime(f.name),
+        expiryDate: expiry?.toIso8601String().substring(0, 10),
+        docType: 'Other',
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('✓ Uploaded to vault')));
+        _load();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      }
+    }
   }
 
   String _f(String key, [String d = 'Not set']) {
@@ -60,7 +159,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           if (!configured)
             const InfoBanner(
-                'ℹ️ Add your contractor class, turnover & experience (on the web app for now) so Opporta can tell you which tenders you are eligible for.'),
+                'ℹ️ Add your contractor class, turnover & experience so Opporta can tell you which tenders you are eligible for.'),
+          const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: _editProfile,
+            icon: const Icon(Icons.edit, size: 18),
+            label: const Text('Edit profile'),
+          ),
           const SizedBox(height: 6),
           _row('Company', _f('company_name')),
           _row('Contractor class', _f('contractor_class')),
@@ -71,6 +176,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 16),
           const SectionTitle('📄 Document Vault'),
           const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: _uploadDoc,
+            icon: const Icon(Icons.upload_file, size: 18, color: Brand.cyan),
+            label: const Text('Upload document',
+                style: TextStyle(color: Brand.cyan)),
+            style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(46),
+                side: const BorderSide(color: Brand.border)),
+          ),
+          const SizedBox(height: 10),
           Text('${_docs.length} document(s)',
               style: const TextStyle(color: Brand.muted, fontSize: 12)),
           const SizedBox(height: 6),

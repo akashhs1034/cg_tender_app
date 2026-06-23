@@ -12,10 +12,12 @@ class TendersScreen extends StatefulWidget {
 
 class _TendersScreenState extends State<TendersScreen> {
   List<Tender> _all = [];
+  List<Tender> _offline = [];
   Map<String, dynamic> _profile = {};
   bool _loading = true;
   String? _error;
 
+  bool _showOffline = false;
   String _q = '';
   String _state = 'All';
   String _sector = 'All';
@@ -32,9 +34,11 @@ class _TendersScreenState extends State<TendersScreen> {
       _error = null;
     });
     try {
-      final results = await Future.wait([Data.tenders(), Data.profile()]);
+      final results = await Future.wait(
+          [Data.tenders(), Data.profile(), Data.offlineTenders()]);
       _all = results[0] as List<Tender>;
       _profile = results[1] as Map<String, dynamic>;
+      _offline = results[2] as List<Tender>;
     } catch (e) {
       _error = e.toString();
     } finally {
@@ -44,20 +48,24 @@ class _TendersScreenState extends State<TendersScreen> {
 
   List<Tender> get _filtered {
     final q = _q.toLowerCase();
-    final out = _all.where((t) {
+    final src = _showOffline ? _offline : _all;
+    final out = src.where((t) {
       if (q.isNotEmpty &&
           !('${t.title} ${t.org} ${t.district}'.toLowerCase().contains(q))) {
         return false;
       }
       if (_state != 'All' && t.state != _state) return false;
-      if (_sector != 'All' && t.sector != _sector) return false;
+      if (!_showOffline && _sector != 'All' && t.sector != _sector) return false;
       return true;
     }).toList();
-    // Eligible tenders first.
-    out.sort((a, b) {
-      int rank(Tender t) => Eligibility.verdict(t, _profile) == 'ELIGIBLE' ? 1 : 0;
-      return rank(b).compareTo(rank(a));
-    });
+    if (!_showOffline) {
+      // Eligible tenders first.
+      out.sort((a, b) {
+        int rank(Tender t) =>
+            Eligibility.verdict(t, _profile) == 'ELIGIBLE' ? 1 : 0;
+        return rank(b).compareTo(rank(a));
+      });
+    }
     return out;
   }
 
@@ -89,6 +97,22 @@ class _TendersScreenState extends State<TendersScreen> {
         children: [
           const SectionTitle('📄 Tender Portal'),
           const SizedBox(height: 10),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                  value: false,
+                  label: Text('Online'),
+                  icon: Icon(Icons.public, size: 15)),
+              ButtonSegment(
+                  value: true,
+                  label: Text('Newspaper'),
+                  icon: Icon(Icons.newspaper, size: 15)),
+            ],
+            selected: {_showOffline},
+            showSelectedIcon: false,
+            onSelectionChanged: (s) => setState(() => _showOffline = s.first),
+          ),
+          const SizedBox(height: 10),
           TextField(
             decoration: const InputDecoration(
                 hintText: 'Search title, org, district…',
@@ -107,15 +131,18 @@ class _TendersScreenState extends State<TendersScreen> {
                     (v) => setState(() => _sector = v))),
           ]),
           const SizedBox(height: 10),
-          if (!configured)
+          if (!configured && !_showOffline)
             const InfoBanner(
                 '🔒 Complete your profile (class, turnover, experience) to see which tenders you are eligible for.'),
+          if (_showOffline)
+            const InfoBanner(
+                '🗞 Government tenders advertised in CG/UP newspapers (via Samvad + district sites). Tap to view the official notice.'),
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text('${rows.length} tenders',
+            child: Text('${rows.length} ${_showOffline ? "newspaper " : ""}tenders',
                 style: const TextStyle(color: Brand.muted, fontSize: 12)),
           ),
-          ...rows.take(120).map((t) => _card(t)),
+          ...rows.take(120).map((t) => _showOffline ? _offlineCard(t) : _card(t)),
         ],
       ),
     );
@@ -165,6 +192,44 @@ class _TendersScreenState extends State<TendersScreen> {
                   const Chip2('❌ Not Eligible', color: Brand.red),
                 if (verdict == null)
                   const Chip2('🔒 Check eligibility', color: Brand.muted),
+              ]),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _offlineCard(Tender t) {
+    return Card(
+      child: InkWell(
+        onTap: t.url.isNotEmpty ? () => _open(t.url) : null,
+        borderRadius: BorderRadius.circular(14),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(
+                  child: Text('📰 ${t.title}',
+                      style: const TextStyle(
+                          color: Brand.text,
+                          fontWeight: FontWeight.w700,
+                          height: 1.3)),
+                ),
+                if (t.url.isNotEmpty)
+                  const Icon(Icons.open_in_new, size: 16, color: Brand.cyan),
+              ]),
+              const SizedBox(height: 6),
+              Text('🏛 ${t.org}  ·  📍 ${t.district}',
+                  style: const TextStyle(color: Brand.muted, fontSize: 12)),
+              const SizedBox(height: 10),
+              Wrap(spacing: 6, runSpacing: 6, children: [
+                if (t.newspaper.isNotEmpty)
+                  Chip2('🗞 ${t.newspaper}', color: Brand.cyan),
+                if (t.deadline.isNotEmpty) Chip2('⏱ ${t.deadline}'),
+                Chip2('📍 ${t.state}'),
               ]),
             ],
           ),

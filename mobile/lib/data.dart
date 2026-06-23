@@ -1,3 +1,5 @@
+import 'dart:math';
+import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Thin data layer over the SAME Supabase backend the web app uses.
@@ -62,6 +64,48 @@ class Data {
     } catch (_) {
       return [];
     }
+  }
+
+  // ── Writes (RLS-scoped to the signed-in user) ───────────────────────────────
+  /// Upsert the contractor profile. Only the given fields are written.
+  static Future<void> saveProfile(Map<String, dynamic> fields) async {
+    final row = <String, dynamic>{...fields, 'email': email};
+    await _sb.from('profiles').upsert(row, onConflict: 'email');
+  }
+
+  /// Upload a document to the `vault` storage bucket + insert its metadata row.
+  /// expiryDate is ISO 'YYYY-MM-DD' (drives renewal alerts on the web app).
+  static Future<void> uploadDocument({
+    required String name,
+    required String filename,
+    required Uint8List bytes,
+    required String mimeType,
+    String? expiryDate,
+    String? docType,
+  }) async {
+    final docId = _randId();
+    final path = '$email/$docId/$filename';
+    await _sb.storage.from('vault').uploadBinary(
+          path,
+          bytes,
+          fileOptions: FileOptions(contentType: mimeType, upsert: true),
+        );
+    await _sb.from('documents').insert({
+      'doc_id': docId,
+      'email': email,
+      'name': name,
+      'filename': filename,
+      'mime_type': mimeType,
+      'size_bytes': bytes.length,
+      'uploaded_at': DateTime.now().toUtc().toIso8601String(),
+      'expiry_date': expiryDate,
+      'doc_type': docType,
+    });
+  }
+
+  static String _randId() {
+    final r = Random();
+    return List.generate(16, (_) => r.nextInt(16).toRadixString(16)).join();
   }
 }
 

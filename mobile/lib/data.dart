@@ -107,6 +107,28 @@ class Data {
     final r = Random();
     return List.generate(16, (_) => r.nextInt(16).toRadixString(16)).join();
   }
+
+  /// Call the bid-engine Edge Function (Gemini key stays server-side).
+  /// Returns {tender:{...}, cover_letter, compliance:[...], manual_actions:[...]}
+  /// or {error: ...}. Never throws.
+  static Future<Map<String, dynamic>> draftBid({
+    required String docBase64,
+    required String mimeType,
+    required Map<String, dynamic> profile,
+  }) async {
+    try {
+      final res = await _sb.functions.invoke('bid-engine', body: {
+        'docBase64': docBase64,
+        'mimeType': mimeType,
+        'profile': profile,
+      });
+      final d = res.data;
+      if (d is Map) return Map<String, dynamic>.from(d);
+      return {'error': 'unexpected response'};
+    } catch (e) {
+      return {'error': '$e'};
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

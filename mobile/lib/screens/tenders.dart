@@ -3,6 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../data.dart';
 import 'widgets.dart';
+import 'bid_workshop.dart';
 
 class TendersScreen extends StatefulWidget {
   const TendersScreen({super.key});
@@ -97,6 +98,16 @@ class _TendersScreenState extends State<TendersScreen> {
         children: [
           const SectionTitle('📄 Tender Portal'),
           const SizedBox(height: 10),
+          FilledButton.icon(
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const BidWorkshopScreen())),
+            icon: const Icon(Icons.build, size: 18),
+            label: const Text('🛠  Bid Workshop — draft a ready-to-bid file'),
+            style: FilledButton.styleFrom(
+                backgroundColor: Brand.green,
+                foregroundColor: const Color(0xFF02040A)),
+          ),
+          const SizedBox(height: 12),
           SegmentedButton<bool>(
             segments: const [
               ButtonSegment(

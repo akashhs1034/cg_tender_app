@@ -22,10 +22,22 @@ fast native client on top of them.
 - **Profile**: your details + document vault (with expiry status), log out.
 - **Analytics**: live counts + tenders-by-sector.
 
+## Bid Workshop — deploy the Edge Function (one time)
+The Bid Workshop screen calls a Supabase **Edge Function** (`supabase/functions/
+bid-engine`) that holds the Gemini key server-side (never shipped in the APK).
+Deploy it once from the repo root:
+```bash
+# install the Supabase CLI first: https://supabase.com/docs/guides/cli
+supabase login
+supabase link --project-ref iujzepmdnkawbmpupuzk
+supabase functions deploy bid-engine
+supabase secrets set GEMINI_API_KEY=<your AQ. Gemini key>
+```
+Until it's deployed, the Bid Workshop shows a clear "function not deployed" message;
+everything else works without it.
+
 ## Not yet ported (next sessions)
-Bid Workshop (Gemini — must go via a Supabase Edge Function so the API key stays
-server-side), profile editing + document upload, offline/newspaper tenders tab,
-push notifications (deadline / document-expiry alerts), app icon + splash.
+Push notifications (deadline / document-expiry alerts via FCM), app icon + splash.
 
 ---
 

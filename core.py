@@ -267,6 +267,7 @@ CATEGORY_BUCKETS = [
     "Civil & Construction", "Water & Irrigation", "Electrical & Energy",
     "Medical & Healthcare", "IT & Technology", "Transport & Logistics",
     "Manufacturing & Goods", "Municipal Projects", "Consultancy & Survey",
+    "Police & Security", "Government & Administration", "Printing & Advertising",
     "Miscellaneous",
 ]
 
@@ -302,6 +303,48 @@ def normalize_category(raw) -> str:
         if any(kw in s for kw in kws):
             return bucket
     return "Miscellaneous"
+
+
+# Sector signals that live in the TITLE / ORGANISATION rather than the scraped
+# 'category' field — so police, collectorate/admin and printing work surfaces as
+# its own filterable sector instead of vanishing into "Civil"/"Miscellaneous".
+# Keywords are kept specific to avoid false positives (e.g. "collectorate" not a
+# bare "collector", which would catch "dust collector").
+_SECTOR_OVERRIDES = [
+    ("Police & Security", [
+        "police", "आरक्षी", "थाना", "thana ", "constab", "home guard", "homeguard",
+        "jail", "prison", "जेल", "forensic", "superintendent of police", "sp office",
+        "central jail", "police line", "police station", "armed force", "lock-up",
+    ]),
+    ("Government & Administration", [
+        "collectorate", "कलेक्टर", "office of the collector", "collector office",
+        "district collector", "district administration", "tehsil", "तहसील", "tahsil",
+        "revenue department", "janpad panchayat", "जनपद", "zila panchayat", "जिला पंचायत",
+        "sachivalaya", "mantralaya", "मंत्रालय", "vidhan sabha", "विधानसभा",
+        "sdm office", "tahsildar", "naib tehsildar",
+    ]),
+    ("Printing & Advertising", [
+        "printing", "मुद्रण", "advertis", "विज्ञापन", "publicity", "प्रचार-प्रसार",
+        "jansampark", "जनसंपर्क", "samvad", "हाेर्डिंग", "hoarding", "calendar printing",
+        "diary printing", "stationery printing",
+    ]),
+]
+
+
+def classify_sector(title=None, organization=None, category=None) -> str:
+    """Sector bucket from title + organisation + category.
+
+    Checks the title/org for police / administration / printing signals first
+    (these never appear in the scraped 'category' field), then falls back to
+    normalize_category(category). Used for both filtering and sector scoring so
+    the vocabulary stays consistent end-to-end.
+    """
+    blob = f"{title or ''} {organization or ''} {category or ''}"
+    low  = blob.lower()
+    for bucket, kws in _SECTOR_OVERRIDES:
+        if any(kw in low or kw in blob for kw in kws):
+            return bucket
+    return normalize_category(category)
 
 
 # Light keyword router so the Jobs tab's category pills actually do something.
@@ -482,7 +525,8 @@ def score_tender_for_user(tender: dict, profile: dict):
 
     # --- Sector relevance (bucket-to-bucket, consistent vocabulary) ---
     sectors = [s.lower() for s in profile.get("sectors", [])]
-    cat_bucket = normalize_category(tender.get("category")).lower()
+    cat_bucket = classify_sector(tender.get("title"), tender.get("organization"),
+                                 tender.get("category")).lower()
     raw_cat    = str(tender.get("category") or "").lower()
     if sectors:
         # Match on the clean bucket, but still honour an exact raw-category pick.

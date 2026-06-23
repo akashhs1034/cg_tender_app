@@ -1076,7 +1076,11 @@ df_j = load_table("jobs")
 # and use those everywhere — filters, chips, the Profile sector picker, scoring —
 # so the vocabulary is consistent and every option returns results.
 if not df_t.empty and "category" in df_t:
-    df_t["category_bucket"] = df_t["category"].map(core.normalize_category)
+    # Classify on title + organisation + category so police / collectorate /
+    # printing work surfaces as its own sector (it never shows in 'category').
+    df_t["category_bucket"] = df_t.apply(
+        lambda r: core.classify_sector(r.get("title"), r.get("organization"), r.get("category")),
+        axis=1)
     TENDER_CATS_BY_FREQ = df_t["category_bucket"].value_counts().index.tolist()
 else:
     TENDER_CATS_BY_FREQ = list(core.CATEGORY_BUCKETS)

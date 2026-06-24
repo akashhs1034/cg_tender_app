@@ -440,8 +440,6 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#7C8AA0!
 .auth-tab-row{display:flex;gap:4px;background:rgba(0,0,0,.3);border-radius:12px;padding:4px;margin-bottom:24px}
 .auth-tab{flex:1;padding:10px;text-align:center;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;color:#7C8AA0;transition:all .2s;border:none;background:none}
 .auth-tab.active{background:linear-gradient(135deg,#00C4FF,#1B6CF7);color:#fff}
-.google-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:12px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px;color:#E2E8F0;font-size:.85rem;font-weight:600;margin-bottom:16px;text-decoration:none;transition:all .2s}
-.google-btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.2)}
 .auth-divider{display:flex;align-items:center;gap:12px;margin:16px 0;color:#566179;font-size:.72rem;font-weight:600;letter-spacing:.05em}
 .auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:rgba(255,255,255,.06)}
 .otp-hint{font-size:.75rem;color:#7C8AA0;text-align:center;margin-top:10px}
@@ -1095,6 +1093,17 @@ _CAT_EMOJI = {
 def _emoji_for(cat: str) -> str:
     return _CAT_EMOJI.get(cat, "📋")
 
+def _rec_key(prefix: str, rec: dict) -> str:
+    """Stable, collision-safe Streamlit widget key for a tender/job row.
+
+    source_id is the unique upsert key (NOT NULL in the DB), but scraped rows can
+    occasionally arrive with a missing/NaN id; falling back to a hash of the
+    identifying fields keeps widget keys unique so the page never crashes."""
+    sid = rec.get("source_id")
+    if sid is None or str(sid).strip().lower() in ("", "nan", "none", "nat"):
+        sid = abs(hash((rec.get("title"), rec.get("organization"), rec.get("deadline"))))
+    return f"{prefix}_{sid}"
+
 # ── OFFICIAL GOVERNMENT DATA SOURCE NETWORK ───────────────────────────────────
 # Authoritative fallback / direct-routing directory. All links open in a new tab
 # via st.link_button. Grouped by region so they stay clean and never collide
@@ -1478,10 +1487,6 @@ if "Dashboard" in page:
 
             _ac, _sp = st.columns([1.4, 1])
             with _ac:
-                # Google Sign-In is temporarily disabled while Google reviews/
-                # verifies the app. Email + password (instant, no OTP) is the
-                # active method. Re-enable Google once verification is approved.
-
                 # ── Auth mode tabs ──
                 _t1, _t2 = st.columns(2)
                 if _t1.button("🔑  Login", width="stretch",
@@ -1681,7 +1686,7 @@ if "Dashboard" in page:
                     doc_url = rec.get("document_url")
                     if doc_url and str(doc_url) not in ("nan","None","—"):
                         _pdf_widget(doc_url, rec.get("source_id",""), ctx="dash")
-                    if st.button("➕ Save to Pipeline", key=f"d_save_{rec.get('source_id')}"):
+                    if st.button("➕ Save to Pipeline", key=_rec_key("d_save", rec)):
                         accounts.save_tender(email, rec.get("source_id"), token=_token)
                         st.toast("✓ Saved to pipeline")
 
@@ -1927,98 +1932,6 @@ if "Dashboard" in page:
                         f'<div class="elig-{"yes" if _done == _all else "partial"}" '
                         f'style="margin-top:10px">{_done}/{_all} manual items ready</div>',
                         unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ── EXPLORE — general system discovery (unified search: tenders + jobs) ────────
-# ══════════════════════════════════════════════════════════════════════════════
-elif "Explore" in page:
-    st.markdown("""<div class="sec-hd">
-      <span class="sec-title">🔍 Explore</span>
-      <span class="sec-badge">Unified discovery</span>
-      <div class="sec-divider"></div>
-    </div>""", unsafe_allow_html=True)
-
-    _xq = st.text_input("Search everything", value="",
-                        placeholder="Search across all tenders & jobs — keyword, organisation, district…",
-                        label_visibility="collapsed", key="explore_global_q")
-    _xql = _xq.strip().lower()
-
-    _t_hits, _j_hits = [], []
-    if _xql:
-        if not df_t.empty:
-            for _, _r in df_t.iterrows():
-                _rec = _r.to_dict()
-                _hay = (f"{_v(_rec.get('title'))} {_v(_rec.get('organization'))} "
-                        f"{_v(_rec.get('district'))} {_v(_rec.get('category'))} "
-                        f"{_v(_rec.get('state'))}").lower()
-                if _xql in _hay:
-                    _t_hits.append(_rec)
-        if not df_j.empty:
-            for _, _r in df_j.iterrows():
-                _rec = _r.to_dict()
-                _hay = (f"{_v(_rec.get('title'))} {_v(_rec.get('department'))} "
-                        f"{_v(_rec.get('category'))} {_v(_rec.get('state'))}").lower()
-                if _xql in _hay:
-                    _j_hits.append(_rec)
-
-    if _xql:
-        st.markdown(
-            f'<div class="brief-stats" style="margin:4px 0 18px">'
-            f'<div class="bstat">📄 <b>{len(_t_hits)}</b> tenders</div>'
-            f'<div class="bstat">💼 <b>{len(_j_hits)}</b> jobs</div>'
-            f'</div>', unsafe_allow_html=True)
-
-        if _t_hits:
-            st.markdown('<div class="profile-section-title">📄 Tender matches</div>', unsafe_allow_html=True)
-            for _rec in _t_hits[:6]:
-                _val = _v(_rec.get("value_text")) or (
-                    f"₹{float(_rec.get('value_lakhs',0)):.0f}L" if _rec.get("value_lakhs") else "—")
-                st.markdown(
-                    f'<div class="ocard"><div class="ocard-title">{_clickable_title(_rec.get("title"), _rec.get("document_url"), 100)}</div>'
-                    f'<div class="ocard-org">🏛 {_esc(_rec.get("organization"))} · {_esc(_rec.get("state"))}</div>'
-                    f'<div class="ocard-tags"><span class="tag tag-val">💰 {_html.escape(_val)}</span>'
-                    f'<span class="tag tag-loc">📍 {_esc(_rec.get("district"),"State-wide")}</span>'
-                    f'<span class="tag tag-cat">{_esc(_rec.get("category"),"General")}</span></div></div>',
-                    unsafe_allow_html=True)
-            if st.button("📄  Open full Tender Portal  →", width="stretch", key="exp_to_tenders"):
-                st.session_state.explore_search = _xql
-                st.session_state.current_page = "📄  Tenders"
-                st.rerun()
-
-        if _j_hits:
-            st.markdown('<div class="profile-section-title" style="margin-top:18px">💼 Job matches</div>', unsafe_allow_html=True)
-            for _rec in _j_hits[:6]:
-                _vac = _v(_rec.get("vacancies"))
-                _vb = f'<div class="jvac">{_vac} posts</div>' if _vac not in ("—","") else ''
-                st.markdown(
-                    f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
-                    f'<div class="jcard-title">{_html.escape(safe_str(_rec.get("title"),95))}</div>'
-                    f'<div class="jcard-dept">🏛 {_esc(_rec.get("department"))} · {_esc(_rec.get("state"))}</div>'
-                    f'</div>{_vb}</div></div>', unsafe_allow_html=True)
-            if st.button("💼  Open full Job Board  →", width="stretch", key="exp_to_jobs"):
-                st.session_state.current_page = "💼  Jobs"
-                st.rerun()
-
-        if not _t_hits and not _j_hits:
-            st.info("No tenders or jobs match that search. Try a broader keyword.")
-    else:
-        # No query → discovery shortcuts built from the REAL top categories,
-        # so every chip is guaranteed to return tenders.
-        st.caption("Jump straight into a category, or open a dedicated portal.")
-        _disc = [(_emoji_for(_c), _c) for _c in TENDER_CATS_BY_FREQ[:8]]
-        if _disc:
-            _dc = st.columns(4)
-            for _i, (_em, _nm) in enumerate(_disc):
-                if _dc[_i % 4].button(f"{_em}  {_nm}", width="stretch", key=f"disc_{_nm}"):
-                    st.session_state.explore_category = _nm
-                    st.session_state.current_page = "📄  Tenders"
-                    st.rerun()
-        st.markdown("<br>", unsafe_allow_html=True)
-        _pc1, _pc2 = st.columns(2)
-        if _pc1.button("📄  Tender Portal", width="stretch", key="exp_portal_t"):
-            st.session_state.current_page = "📄  Tenders"; st.rerun()
-        if _pc2.button("💼  Job Board", width="stretch", key="exp_portal_j"):
-            st.session_state.current_page = "💼  Jobs"; st.rerun()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── TENDERS — dedicated portal w/ multi-tier cascading filters ─────────────────
@@ -2344,7 +2257,7 @@ elif "Tenders" in page:
             if doc_url and str(doc_url) not in ("nan","None","—",""):
                 _pdf_widget(doc_url, rec.get("source_id",""), ctx="exp")
             if st.session_state.authenticated:
-                if st.button("➕ Save to Pipeline", key=f"e_save_{rec.get('source_id')}", width="stretch"):
+                if st.button("➕ Save to Pipeline", key=_rec_key("e_save", rec), width="stretch"):
                     accounts.save_tender(email, rec.get("source_id"), token=_token)
                     st.toast("✓ Saved to your pipeline")
 
@@ -3039,12 +2952,12 @@ elif "Jobs" in page:
                         # Optional resume upload for deeper AI analysis
                         resume_up = st.file_uploader("Upload resume for Opporta Intelligence analysis (optional)",
                                                      type=["pdf","txt"],
-                                                     key=f"jr_{rec.get('source_id')}")
+                                                     key=_rec_key("jr", rec))
                         if resume_up:
                             rtext = (_read_pdf_text(resume_up)
                                      if resume_up.name.lower().endswith(".pdf")
                                      else resume_up.read().decode("utf-8", errors="ignore"))
-                            if st.button("⚡ Deep Analysis", key=f"jra_{rec.get('source_id')}"):
+                            if st.button("⚡ Deep Analysis", key=_rec_key("jra", rec)):
                                 with st.spinner("Opporta Intelligence analyzing resume..."):
                                     res = evaluator.evaluate_resume_for_job(rec, rtext)
                                 pct   = res["readiness_pct"]
@@ -3113,145 +3026,6 @@ elif "Jobs" in page:
         st.caption("Verified free government & education platforms — courses, textbooks, current affairs.")
         for _region, _items in STUDY_RESOURCES.items():
             _portal_region(_region, "Free · official · open-access", _items, cols=2)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ── DOCUMENTS ─────────────────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════════════════════════════
-elif "Documents" in page:
-    if not st.session_state.authenticated:
-        st.warning("Sign in to access your secure document vault.")
-        st.stop()
-
-    st.markdown("""<div class="sec-hd">
-      <span class="sec-title">📄 Secure Document Vault</span>
-      <span class="sec-badge-green">Encrypted</span>
-      <div class="sec-divider"></div>
-    </div>""", unsafe_allow_html=True)
-
-    with st.expander("⬆️ Upload New Document", expanded=True):
-        up1, up2 = st.columns(2)
-        with up1:
-            doc_name = st.text_input("Document label",
-                                     placeholder="e.g. GST Registration, Experience Certificate")
-        with up2:
-            doc_file = st.file_uploader("Select file", type=["pdf","jpg","jpeg","png","txt"],
-                                        key="vault_upload")
-        if st.button("⬆️ Upload to Vault", width="stretch") and doc_file and doc_name:
-            with st.spinner("Uploading securely..."):
-                doc_id = accounts.save_document(email, doc_name, doc_file.name,
-                                                doc_file.read(), doc_file.type or "application/octet-stream",
-                                                token=_token)
-            if doc_id:
-                _bust_user_cache()
-                st.success(f"✓ '{doc_name}' uploaded successfully.")
-                st.rerun()
-            else:
-                st.error("Upload failed. Check console logs.")
-
-    st.markdown("""<div class="sec-hd" style="margin-top:28px">
-      <span class="sec-title">My Documents</span>
-      <div class="sec-divider"></div>
-    </div>""", unsafe_allow_html=True)
-
-    docs = accounts.list_documents(email, token=_token)
-    if docs:
-        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:14px">{len(docs)} documents</div>',
-                    unsafe_allow_html=True)
-        for doc in docs:
-            size_kb = round(doc.get("size_bytes", 0) / 1024, 1)
-            mime    = doc.get("mime_type","")
-            icon    = "📄" if "pdf" in mime else "🖼️" if "image" in mime else "📁"
-            uploaded = str(doc.get("uploaded_at",""))[:10]
-            st.markdown(f"""<div class="doc-card">
-              <div class="doc-icon">{icon}</div>
-              <div style="flex:1;min-width:0">
-                <div class="doc-name">{doc.get('name','—')}</div>
-                <div class="doc-meta">{doc.get('filename','—')} &nbsp;·&nbsp; {size_kb} KB &nbsp;·&nbsp; {uploaded}</div>
-              </div>
-              <span class="tag tag-cat" style="flex-shrink:0">{mime.split('/')[-1].upper()[:8]}</span>
-            </div>""", unsafe_allow_html=True)
-    else:
-        st.markdown("""<div class="ocard" style="text-align:center;padding:36px">
-          <div style="font-size:2rem;margin-bottom:12px">📂</div>
-          <div style="font-size:.88rem;color:#64748B">No documents uploaded yet</div>
-          <div style="font-size:.76rem;color:#566179;margin-top:6px">
-            Upload your GST cert, experience proofs, contractor registration, and bid documents above.
-          </div>
-        </div>""", unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# ── ALERTS ────────────────────────────────────────────────────────────────────
-# ══════════════════════════════════════════════════════════════════════════════
-elif "Alerts" in page:
-    if not st.session_state.authenticated:
-        st.warning("Sign in to view your alert history.")
-        st.stop()
-
-    st.markdown("""<div class="sec-hd">
-      <span class="sec-title">🔔 Smart Pipeline Alerts</span>
-      <span class="sec-badge">Deadlines &amp; new high-matches only</span>
-      <div class="sec-divider"></div>
-    </div>""", unsafe_allow_html=True)
-
-    # Live, calibrated alerts (same engine as the Dashboard panel).
-    _live = compute_smart_alerts(email, _token, scored, df_t)
-    if _live:
-        for _al in _live:
-            st.markdown(
-                f'<div class="alert-item" style="border-left-color:{_al["color"]}">'
-                f'<div class="alert-title">{_al["icon"]} {_html.escape(_al["title"])}</div>'
-                f'<div class="alert-meta" style="color:#94A3B8">{_html.escape(_al["detail"])}</div>'
-                f'</div>', unsafe_allow_html=True)
-    else:
-        st.markdown("""<div class="ocard" style="text-align:center;padding:26px">
-          <div style="font-size:1.5rem;margin-bottom:6px">🔕</div>
-          <div style="font-size:.84rem;color:#94A3B8;font-weight:600">No critical alerts right now</div>
-          <div style="font-size:.74rem;color:#7C8AA0;margin-top:4px">Save tenders to your pipeline and complete your profile to receive deadline & high-match alerts.</div>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown("""<div class="sec-hd" style="margin-top:30px">
-      <span class="sec-title">📧 Dispatch History</span>
-      <div class="sec-divider"></div>
-    </div>""", unsafe_allow_html=True)
-
-    log_path = Path(__file__).parent / "data" / "alert_log.json"
-    user_logs = []
-    if log_path.exists():
-        try:
-            all_logs  = json.loads(log_path.read_text(encoding="utf-8"))
-            user_logs = [e for e in all_logs if e.get("email","").lower() == email.lower()]
-        except Exception: pass
-
-    if user_logs:
-        tender_lookup = ({r["source_id"]: r for _, r in df_t.iterrows()}
-                         if not df_t.empty else {})
-        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(user_logs)} alerts dispatched</div>',
-                    unsafe_allow_html=True)
-
-        for entry in sorted(user_logs, key=lambda x: x.get("sent_at",""), reverse=True)[:50]:
-            sid    = entry.get("source_id","")
-            tender = tender_lookup.get(sid, {})
-            title  = safe_str(tender.get("title") or sid, 90)
-            sent   = str(entry.get("sent_at",""))[:10]
-            org    = _v(tender.get("organization"))
-            rtype  = entry.get("record_type","tender").title()
-            st.markdown(f"""<div class="alert-item">
-              <div class="alert-title">{title}</div>
-              <div style="font-size:.73rem;color:#7C8AA0;margin:4px 0 8px">{org}</div>
-              <div class="ocard-tags">
-                <span class="tag tag-dl">📧 Sent {sent}</span>
-                <span class="tag tag-cat">{rtype}</span>
-              </div>
-            </div>""", unsafe_allow_html=True)
-    else:
-        st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
-          <div style="font-size:2rem;margin-bottom:12px">🔔</div>
-          <div style="font-size:.9rem;color:#64748B;font-weight:600">No alerts sent yet</div>
-          <div style="font-size:.77rem;color:#566179;margin-top:8px;line-height:1.6">
-            Alerts are emailed each time the pipeline runs and finds new matches for your profile.<br>
-            Complete your Profile → add RESEND_API_KEY to .env → run: <code>python ingest.py</code>
-          </div>
-        </div>""", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── ANALYTICS ─────────────────────────────────────────────────────────────────
@@ -3745,20 +3519,14 @@ if _qp == "privacy":
         even Opporta administrators cannot view your private data.
       </p>
 
-      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">4. Google Sign-In</h2>
-      <p style="color:#64748B;font-size:.85rem;line-height:1.75">
-        If you sign in with Google, we receive your name and email address from Google. We do not
-        access your Google contacts, Gmail, Drive, or any other Google data.
-      </p>
-
-      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">5. Your Rights</h2>
+      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">4. Your Rights</h2>
       <p style="color:#64748B;font-size:.85rem;line-height:1.75">
         You may request deletion of your account and all associated data at any time by contacting
         us at <span style="color:#00C4FF">support@opporta.in</span>. You can also delete your
-        uploaded documents directly from the Documents section.
+        uploaded documents directly from your Profile vault.
       </p>
 
-      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">6. Contact</h2>
+      <h2 style="font-size:1rem;color:#E2E8F0;font-weight:700;margin:24px 0 8px">5. Contact</h2>
       <p style="color:#64748B;font-size:.85rem;line-height:1.75">
         For any privacy concerns, email us at
         <span style="color:#00C4FF">support@opporta.in</span>

@@ -371,7 +371,8 @@ def _gemini_vision_json(file_bytes: bytes, mime_type: str, prompt: str | None = 
                 {"inline_data": {"mime_type": actual,
                                  "data": base64.b64encode(file_bytes).decode()}},
                 {"text": prompt or _EPAPER_VISION_PROMPT},
-            ]}], "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
+            ]}], "generationConfig": {"responseMimeType": "application/json",
+                                       "thinkingConfig": {"thinkingBudget": 0}}},
             timeout=180,
         )
         resp.raise_for_status()

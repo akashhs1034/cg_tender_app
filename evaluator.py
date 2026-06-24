@@ -59,7 +59,8 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
                     # ~8x fewer tokens per call (less quota, faster) with no quality loss
                     # on these structured JSON tasks.
                     json={"contents": [{"parts": parts}],
-                          "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
+                          "generationConfig": {"responseMimeType": "application/json",
+                                               "thinkingConfig": {"thinkingBudget": 0}}},
                     timeout=90,
                 )
                 # Gemini's free tier intermittently 503/429s ("high demand") — retry.

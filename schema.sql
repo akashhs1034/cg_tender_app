@@ -54,16 +54,12 @@ create index if not exists idx_jobs_category    on jobs (category);
 alter table tenders enable row level security;
 alter table jobs    enable row level security;
 
--- Public read (browser + app)
+-- Public READ only (browser + app). Writes are intentionally NOT granted to
+-- anon/authenticated: the ingest pipeline writes with the SUPABASE_SERVICE_KEY,
+-- which bypasses RLS. This way the public anon key (it ships in the mobile app)
+-- can never insert, modify, or delete this authoritative scraped data.
 create policy "public read tenders"  on tenders for select using (true);
 create policy "public read jobs"     on jobs    for select using (true);
-
--- Pipeline write: tenders and jobs are public government data, no user-specific secrets.
--- The anon key is used by the local ingest pipeline (no user auth context).
-create policy "pipeline insert tenders" on tenders for insert with check (true);
-create policy "pipeline update tenders" on tenders for update using (true);
-create policy "pipeline insert jobs"    on jobs    for insert with check (true);
-create policy "pipeline update jobs"    on jobs    for update using (true);
 
 
 -- ===========================================================================

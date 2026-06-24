@@ -15,9 +15,9 @@ import json
 import base64
 import core
 
-# Latest Gemini Flash. "gemini-flash-latest" auto-tracks the newest flash model
-# and works with the AQ. key format; gemini-2.0-flash is quota-limited (429).
-GEMINI_MODEL = "gemini-flash-latest"
+# Pinned to gemini-2.5-flash: the "-latest" alias returns 503 and 2.0-flash 429s
+# for AQ.-format keys; 2.5-flash authenticates and serves reliably (verified 200).
+GEMINI_MODEL = "gemini-2.5-flash"
 
 # ---------------------------------------------------------------------------
 # Core LLM extraction — tries Gemini first, falls back to Claude

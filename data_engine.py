@@ -317,7 +317,7 @@ def scan_epapers() -> list[dict]:
 # ──────────────────────────────────────────────────────────────────────────────
 # Part D — Gemini-Vision e-paper extractor (page image / PDF -> offline tenders)
 # ──────────────────────────────────────────────────────────────────────────────
-_VISION_MODEL = "gemini-flash-latest"
+_VISION_MODEL = "gemini-2.5-flash"
 
 _EPAPER_VISION_PROMPT = """You are reading a scanned PAGE of an Indian newspaper / e-paper from the state of Chhattisgarh or Uttar Pradesh. The text may be in Hindi (Devanagari) or English, printed in dense columns.
 

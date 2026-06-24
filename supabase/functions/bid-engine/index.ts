@@ -7,7 +7,7 @@
 //   supabase functions deploy bid-engine
 //   supabase secrets set GEMINI_API_KEY=<your AQ. key>
 //
-// Mirrors the web app's bid_engine.py prompts (gemini-flash-latest, thinking off).
+// Mirrors the web app's bid_engine.py prompts (gemini-2.5-flash, thinking off).
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -63,7 +63,7 @@ serve(async (req: Request) => {
     parts.push({ text: PROMPT + profileLine });
 
     const resp = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent",
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
       {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-goog-api-key": key },

@@ -18,8 +18,9 @@ import core
 
 logger = logging.getLogger(__name__)
 
-# Latest Gemini Flash via "-latest" alias (works with AQ. keys; 2.0-flash 429s).
-GEMINI_MODEL = "gemini-flash-latest"
+# Pinned to gemini-2.5-flash: the "-latest" alias returns 503 and 2.0-flash 429s
+# for AQ.-format keys; 2.5-flash authenticates and serves reliably (verified 200).
+GEMINI_MODEL = "gemini-2.5-flash"
 
 
 # ---------------------------------------------------------------------------

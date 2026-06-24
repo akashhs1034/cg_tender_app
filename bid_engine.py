@@ -68,7 +68,8 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
                     # thinkingBudget:0 -> far fewer tokens/quota per call, no quality
                     # loss on these heavily-structured prompts.
                     json={"contents": [{"parts": parts}],
-                          "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
+                          "generationConfig": {"responseMimeType": "application/json",
+                                               "thinkingConfig": {"thinkingBudget": 0}}},
                     timeout=120,
                 )
                 # Gemini's free tier intermittently 503/429s ("high demand") — retry

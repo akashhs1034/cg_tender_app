@@ -82,7 +82,10 @@ serve(async (req: Request) => {
 
     const resp = await callGemini(key, {
       contents: [{ parts }],
-      generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
+      generationConfig: {
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingBudget: 0 },
+      },
     });
 
     if (!resp.ok) {

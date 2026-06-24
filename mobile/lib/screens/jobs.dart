@@ -3,6 +3,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../data.dart';
 import 'widgets.dart';
+import 'resume_analyzer.dart';
+import 'study_matrix.dart';
+import 'portals_screen.dart';
 
 class JobsScreen extends StatefulWidget {
   const JobsScreen({super.key});
@@ -66,8 +69,25 @@ class _JobsScreenState extends State<JobsScreen> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 24),
         children: [
-          const SectionTitle('💼 Government Jobs'),
-          const SizedBox(height: 10),
+          Row(children: [
+            const Expanded(child: SectionTitle('💼 Government Jobs')),
+            IconButton(
+              tooltip: 'Recruitment portals',
+              icon: const Icon(Icons.public, color: Brand.cyan),
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const PortalsScreen())),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          FilledButton.icon(
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const StudyMatrixScreen())),
+            icon: const Icon(Icons.auto_stories, size: 18),
+            label: const Text('🧭  Exams & Study Matrix'),
+            style: FilledButton.styleFrom(
+                backgroundColor: Brand.blue, foregroundColor: Colors.white),
+          ),
+          const SizedBox(height: 12),
           TextField(
             decoration: const InputDecoration(
                 hintText: 'Search title, department, qualification…',
@@ -90,33 +110,57 @@ class _JobsScreenState extends State<JobsScreen> {
                 style: const TextStyle(color: Brand.muted, fontSize: 12)),
           ),
           ...rows.take(120).map((j) => Card(
-                child: InkWell(
-                  onTap: j.url.isNotEmpty ? () => _open(j.url) : null,
-                  borderRadius: BorderRadius.circular(14),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(j.title,
-                            style: const TextStyle(
-                                color: Brand.text,
-                                fontWeight: FontWeight.w700,
-                                height: 1.3)),
-                        const SizedBox(height: 6),
-                        Text('🏛 ${j.dept}  ·  ${j.state}',
-                            style: const TextStyle(
-                                color: Brand.muted, fontSize: 12)),
-                        const SizedBox(height: 10),
-                        Wrap(spacing: 6, runSpacing: 6, children: [
-                          if (j.vacancies.isNotEmpty)
-                            Chip2('👥 ${j.vacancies} posts'),
-                          if (j.qualification.isNotEmpty)
-                            Chip2('🎓 ${j.qualification}'),
-                          if (j.deadline.isNotEmpty) Chip2('⏱ ${j.deadline}'),
-                        ]),
-                      ],
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InkWell(
+                        onTap: j.url.isNotEmpty ? () => _open(j.url) : null,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(j.title,
+                                  style: const TextStyle(
+                                      color: Brand.text,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1.3)),
+                            ),
+                            if (j.url.isNotEmpty)
+                              const Icon(Icons.open_in_new,
+                                  size: 16, color: Brand.cyan),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text('🏛 ${j.dept}  ·  ${j.state}',
+                          style: const TextStyle(color: Brand.muted, fontSize: 12)),
+                      const SizedBox(height: 10),
+                      Wrap(spacing: 6, runSpacing: 6, children: [
+                        if (j.vacancies.isNotEmpty)
+                          Chip2('👥 ${j.vacancies} posts'),
+                        if (j.qualification.isNotEmpty)
+                          Chip2('🎓 ${j.qualification}'),
+                        if (j.deadline.isNotEmpty) Chip2('⏱ ${j.deadline}'),
+                      ]),
+                      const Divider(height: 20, color: Brand.border),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton.icon(
+                          onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => ResumeAnalyzerScreen(job: j))),
+                          icon: const Icon(Icons.fact_check_outlined,
+                              size: 16, color: Brand.cyan),
+                          label: const Text('Resume match',
+                              style: TextStyle(color: Brand.cyan, fontSize: 12.5)),
+                          style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8)),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               )),

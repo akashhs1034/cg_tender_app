@@ -129,6 +129,113 @@ class Data {
       return {'error': '$e'};
     }
   }
+
+  // ── Corrigendums (public read) ──────────────────────────────────────────────
+  static Future<List<Corrigendum>> corrigendums() async {
+    try {
+      final rows = await _sb
+          .from('corrigendums')
+          .select()
+          .order('published_date', ascending: false)
+          .limit(200);
+      return (rows as List)
+          .cast<Map<String, dynamic>>()
+          .map(Corrigendum.fromMap)
+          .toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ── Saved tenders / pipeline (RLS-scoped) ───────────────────────────────────
+  static Future<Set<String>> savedTenderIds() async {
+    if (!signedIn) return {};
+    try {
+      final r = await _sb.from('saved_tenders').select('source_id').eq('email', email);
+      return (r as List).map((e) => '${e['source_id']}').toSet();
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> savedTenders() async {
+    if (!signedIn) return [];
+    try {
+      final r = await _sb
+          .from('saved_tenders')
+          .select()
+          .eq('email', email)
+          .order('saved_at', ascending: false);
+      return (r as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<void> saveTender(String sourceId, {String status = 'interested'}) async {
+    await _sb.from('saved_tenders').upsert(
+      {'email': email, 'source_id': sourceId, 'status': status},
+      onConflict: 'email,source_id',
+    );
+  }
+
+  static Future<void> unsaveTender(String sourceId) async {
+    await _sb.from('saved_tenders').delete().match({'email': email, 'source_id': sourceId});
+  }
+
+  // ── Offline / newspaper tender capture (public insert policy) ───────────────
+  static Future<int> saveOfflineTenders(List<Map<String, dynamic>> records) async {
+    if (records.isEmpty) return 0;
+    await _sb.from('offline_tenders').upsert(records, onConflict: 'source_id');
+    return records.length;
+  }
+
+  // ── Document vault extras ───────────────────────────────────────────────────
+  /// A time-limited download/preview URL for a vault document.
+  static Future<String?> documentUrl(Map<String, dynamic> doc) async {
+    final path = '$email/${doc['doc_id']}/${doc['filename']}';
+    try {
+      return await _sb.storage.from('vault').createSignedUrl(path, 60 * 60);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> deleteDocument(Map<String, dynamic> doc) async {
+    final path = '$email/${doc['doc_id']}/${doc['filename']}';
+    try {
+      await _sb.storage.from('vault').remove([path]);
+    } catch (_) {/* metadata removal below is what matters most */}
+    await _sb.from('documents').delete().match({'email': email, 'doc_id': doc['doc_id']});
+  }
+
+  // ── Opporta Intelligence Edge Function (resume match + study plan) ───────────
+  /// Calls the `intelligence` Edge Function. Returns {} on any failure so callers
+  /// can fall back to the on-device rule-based version. Never throws.
+  static Future<Map<String, dynamic>> _intelligence(Map<String, dynamic> body) async {
+    try {
+      final res = await _sb.functions.invoke('intelligence', body: body);
+      final d = res.data;
+      if (d is Map) return Map<String, dynamic>.from(d);
+      return {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static Future<Map<String, dynamic>> analyzeResume({
+    required Map<String, dynamic> job,
+    required String resumeText,
+  }) =>
+      _intelligence({'task': 'resume', 'job': job, 'resume': resumeText});
+
+  static Future<Map<String, dynamic>> studyPlan({
+    required String exam,
+    String examDate = '',
+    int hours = 4,
+  }) =>
+      _intelligence(
+          {'task': 'study_plan', 'exam': exam, 'exam_date': examDate, 'hours': hours});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -183,7 +290,27 @@ class Job {
   String get qualification => _s(raw['qualification']);
   String get vacancies => _s(raw['vacancies']);
   String get deadline => _s(raw['deadline']);
-  String get url => _s(raw['document_url'], _s(raw['source_url']));
+  String get description => _s(raw['description']);
+  String get url => _s(raw['document_url'], _s(raw['apply_link'], _s(raw['source_url'])));
+
+  int? get daysLeft {
+    final d = DateTime.tryParse(deadline);
+    if (d == null) return null;
+    return d.difference(DateTime.now()).inDays;
+  }
+}
+
+class Corrigendum {
+  final Map<String, dynamic> raw;
+  Corrigendum(this.raw);
+  factory Corrigendum.fromMap(Map<String, dynamic> m) => Corrigendum(m);
+
+  String get title => _s(raw['title'], 'Tender amendment');
+  String get state => _s(raw['state']);
+  String get closingDate => _s(raw['closing_date']);
+  String get publishedDate => _s(raw['published_date']);
+  String get corrigendumUrl => _s(raw['corrigendum_url']);
+  String get tenderUrl => _s(raw['tender_url']);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

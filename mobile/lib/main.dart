@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config.dart';
+import 'notifications.dart';
 import 'screens/login.dart';
 import 'screens/shell.dart';
 
@@ -10,6 +11,7 @@ Future<void> main() async {
     url: Config.supabaseUrl,
     anonKey: Config.supabaseAnonKey,
   );
+  await Notifications.init();
   runApp(const OpportaApp());
 }
 

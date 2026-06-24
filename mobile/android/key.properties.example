@@ -1,0 +1,18 @@
+# Release signing credentials for the Play Store build.
+#
+# 1. Copy this file to  android/key.properties  (that name is git-ignored — NEVER commit it).
+# 2. Generate an upload keystore (run from android/app/, keep the .jks safe & backed up):
+#
+#      keytool -genkey -v -keystore upload-keystore.jks -storetype JKS \
+#              -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+#    It will prompt for a password and your name/org — remember the password you set.
+# 3. Fill in the values below to match what you chose.
+#
+# storeFile is resolved relative to android/app/, so if the .jks lives there just use
+# its filename. If you ever lose this keystore you can no longer update the app on Play.
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=upload
+storeFile=upload-keystore.jks

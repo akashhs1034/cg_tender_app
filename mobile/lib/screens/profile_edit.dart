@@ -10,6 +10,14 @@ const _sectors = [
   'Police & Security', 'Government & Administration', 'Printing & Advertising',
 ];
 const _statesOpts = ['Chhattisgarh', 'Uttar Pradesh'];
+const _degreeOptions = [
+  'B.Tech / B.E. (Engineering)', 'MBA / PGDM', 'MCA', 'M.Tech / M.E.',
+  'B.Ed (Teacher Training)', 'MBBS / Medical Degree', 'GNM / B.Sc Nursing',
+  '12th / Intermediate', 'Diploma', 'B.Sc / B.A. / B.Com (Graduate)',
+  'Ph.D / Post-Graduate (Other)',
+];
+const _categoryOptions = ['General', 'OBC', 'SC', 'ST', 'EWS'];
+const _langOptions = ['Hindi', 'English', 'Chhattisgarhi', 'Awadhi', 'Bhojpuri', 'Urdu'];
 
 class ProfileEditScreen extends StatefulWidget {
   final Map<String, dynamic> initial;
@@ -25,6 +33,14 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
   late String _class;
   late Set<String> _selSectors;
   late Set<String> _selStates;
+  // Job-seeker fields
+  late final TextEditingController _fullName;
+  late final TextEditingController _jobExp;
+  late final TextEditingController _skills;
+  late final TextEditingController _qualification;
+  late String _degree;
+  late String _jobCategory;
+  late Set<String> _languages;
   bool _saving = false;
   String? _msg;
 
@@ -43,6 +59,19 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
     _selSectors = _toSet(p['sectors']);
     _selStates = _toSet(p['states']);
     if (_selStates.isEmpty) _selStates = {'Chhattisgarh', 'Uttar Pradesh'};
+
+    _fullName = TextEditingController(text: '${p['full_name'] ?? ''}');
+    _jobExp = TextEditingController(
+        text: p['job_experience_years'] == null ? '' : '${p['job_experience_years']}');
+    _skills = TextEditingController(
+        text: (p['job_skills'] is List) ? (p['job_skills'] as List).join(', ') : '');
+    _qualification = TextEditingController(text: '${p['qualification'] ?? ''}');
+    _degree =
+        _degreeOptions.contains('${p['degree_type']}') ? '${p['degree_type']}' : _degreeOptions.first;
+    _jobCategory =
+        _categoryOptions.contains('${p['job_category']}') ? '${p['job_category']}' : 'General';
+    _languages = _toSet(p['languages']);
+    if (_languages.isEmpty) _languages = {'Hindi', 'English'};
   }
 
   Set<String> _toSet(dynamic v) =>
@@ -61,6 +90,18 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
         'experience_years': int.tryParse(_exp.text.trim()) ?? 0,
         'sectors': _selSectors.toList(),
         'states': _selStates.toList(),
+        // Job-seeker profile (drives Resume Analyzer + job matching)
+        'full_name': _fullName.text.trim(),
+        'degree_type': _degree,
+        'job_category': _jobCategory,
+        'job_experience_years': int.tryParse(_jobExp.text.trim()) ?? 0,
+        'languages': _languages.toList(),
+        'job_skills': _skills.text
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty)
+            .toList(),
+        'qualification': _qualification.text.trim(),
       });
       if (mounted) Navigator.pop(context, true);
     } catch (e) {
@@ -115,6 +156,68 @@ class _ProfileEditScreenState extends State<ProfileEditScreen> {
           const SizedBox(height: 18),
           _label('Sectors'),
           _chips(_sectors, _selSectors),
+
+          const SizedBox(height: 26),
+          const Divider(color: Brand.border),
+          const SizedBox(height: 8),
+          const Text('💼 Job Seeker Profile',
+              style: TextStyle(
+                  color: Brand.text, fontSize: 15, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          const Text('Powers the Resume Analyzer & job-match — optional.',
+              style: TextStyle(color: Brand.muted, fontSize: 12)),
+          const SizedBox(height: 16),
+          _label('Full name'),
+          TextField(controller: _fullName),
+          const SizedBox(height: 14),
+          _label('Highest degree / qualification'),
+          DropdownButtonFormField<String>(
+            initialValue: _degree,
+            dropdownColor: Brand.surface,
+            isExpanded: true,
+            items: _degreeOptions
+                .map((c) => DropdownMenuItem(
+                    value: c, child: Text(c, overflow: TextOverflow.ellipsis)))
+                .toList(),
+            onChanged: (v) => setState(() => _degree = v ?? _degree),
+          ),
+          const SizedBox(height: 14),
+          Row(children: [
+            Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _label('Reservation category'),
+              DropdownButtonFormField<String>(
+                initialValue: _jobCategory,
+                dropdownColor: Brand.surface,
+                items: _categoryOptions
+                    .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                    .toList(),
+                onChanged: (v) => setState(() => _jobCategory = v ?? _jobCategory),
+              ),
+            ])),
+            const SizedBox(width: 12),
+            Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _label('Work experience (yrs)'),
+              TextField(controller: _jobExp, keyboardType: TextInputType.number),
+            ])),
+          ]),
+          const SizedBox(height: 14),
+          _label('Languages known'),
+          _chips(_langOptions, _languages),
+          const SizedBox(height: 14),
+          _label('Key skills (comma-separated)'),
+          TextField(
+              controller: _skills,
+              decoration: const InputDecoration(
+                  hintText: 'e.g. AutoCAD, MS Office, Tally, Python')),
+          const SizedBox(height: 14),
+          _label('Qualification details'),
+          TextField(
+              controller: _qualification,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                  hintText: 'e.g. B.Tech Civil, NIT Raipur, 2018, 75%')),
           if (_msg != null) ...[
             const SizedBox(height: 14),
             Text(_msg!, style: const TextStyle(color: Brand.red, fontSize: 12.5)),

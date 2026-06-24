@@ -14,9 +14,35 @@ dependencies:
   url_launcher: ^6.3.0         # open official tender / PDF links
   intl: ^0.19.0                # date formatting
   file_picker: ^8.1.2          # pick documents to upload to the vault
+  flutter_local_notifications: ^17.2.4  # on-device deadline / doc-expiry alerts
+  timezone: ^0.9.4             # zoned scheduling for the alerts above
 
 dev_dependencies:
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.1   # generates the launcher icon from the logo
+  flutter_native_splash: ^2.4.1     # generates the cold-start splash
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/
+
+# ── App launcher icon (run: dart run flutter_launcher_icons) ──────────────────
+flutter_launcher_icons:
+  android: true
+  ios: false
+  min_sdk_android: 21
+  image_path: "assets/icon.png"                  # legacy / round icon (mark on obsidian)
+  adaptive_icon_background: "#02040A"             # Opporta obsidian
+  adaptive_icon_foreground: "assets/icon_foreground.png"  # transparent mark, safe-zone padded
+
+# ── Cold-start splash (run: dart run flutter_native_splash:create) ────────────
+flutter_native_splash:
+  color: "#02040A"
+  image: assets/logo.png
+  android: true
+  ios: false
+  web: false
+  android_12:
+    color: "#02040A"
+    image: assets/icon_foreground.png

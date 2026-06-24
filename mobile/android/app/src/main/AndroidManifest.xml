@@ -1,6 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required for Supabase / all network calls (release builds have no internet without this). -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Required to show deadline / doc-expiry alerts on Android 13+ (requested at runtime). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <application
         android:label="Opporta"
         android:name="${applicationName}"

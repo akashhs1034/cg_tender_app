@@ -409,7 +409,35 @@ Return ONLY valid JSON (no markdown fences):
 }}"""
 
     result = _claude(PROMPT, max_tokens=4000)
-    return result if isinstance(result, dict) else None
+    return _coerce_to_dict(result)
+
+
+def _coerce_to_dict(result) -> dict | None:
+    """Rescue a bid payload into a dict.
+
+    _claude returns a dict on success, but hands back a raw string when the model
+    wraps its JSON in markdown fences or appends conversational text. Strip any
+    fences and attempt an explicit parse; as a last resort, extract the outermost
+    {...} block. Only return None if nothing usable can be recovered."""
+    if isinstance(result, dict):
+        return result
+    if isinstance(result, str):
+        cleaned = (result.strip()
+                   .removeprefix("```json").removeprefix("```")
+                   .removesuffix("```").strip())
+        try:
+            parsed = json.loads(cleaned)
+            return parsed if isinstance(parsed, dict) else None
+        except (json.JSONDecodeError, ValueError):
+            import re as _re
+            m = _re.search(r"\{.*\}", cleaned, _re.DOTALL)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                    return parsed if isinstance(parsed, dict) else None
+                except (json.JSONDecodeError, ValueError):
+                    pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -495,13 +523,25 @@ def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
     doc.add_paragraph()
 
     h("Firm Details", 2)
+    # Defensive: these may arrive as text strings (DB / profile) — a format spec on
+    # a string raises ValueError and would crash the whole bid build mid-way.
+    try:
+        _to_val = float(profile.get("turnover_lakhs") or 0)
+        if _to_val != _to_val:  # NaN guard
+            _to_val = 0.0
+    except (TypeError, ValueError):
+        _to_val = 0.0
+    try:
+        _exp_val = int(float(profile.get("experience_years") or 0))
+    except (TypeError, ValueError):
+        _exp_val = 0
     tbl = doc.add_table(rows=0, cols=2)
     tbl.style = "Table Grid"
     for label, val in [
         ("Company Name",     cname),
         ("Contractor Class", profile.get("contractor_class","—")),
-        ("Annual Turnover",  f"Rs {profile.get('turnover_lakhs',0):.0f} Lakhs"),
-        ("Experience",       f"{profile.get('experience_years',0)} years"),
+        ("Annual Turnover",  f"Rs {_to_val:.0f} Lakhs"),
+        ("Experience",       f"{_exp_val} years"),
         ("Sectors",          ", ".join(profile.get("sectors") or [])),
         ("States",           ", ".join(profile.get("states") or [])),
     ]:

@@ -100,11 +100,16 @@ create table if not exists saved_tenders (
 alter table profiles      enable row level security;
 alter table saved_tenders enable row level security;
 
--- PRODUCTION NOTE: replace these permissive policies with per-user policies
--- once Supabase Auth is wired, e.g.  using (auth.jwt()->>'email' = email),
--- so each contractor can read/write ONLY their own profile and saved tenders.
-create policy "mvp profiles rw"  on profiles      for all using (true) with check (true);
-create policy "mvp saved rw"     on saved_tenders for all using (true) with check (true);
+-- Strict per-user RLS: a signed-in user can read/write ONLY their own rows —
+-- the JWT's verified email claim must equal the row's email. Even the project
+-- owner cannot reach another user's data through the app; only the service-role
+-- key (never shipped in the app) bypasses this.
+create policy "profiles own row" on profiles for all
+    using      ((auth.jwt() ->> 'email') = email)
+    with check ((auth.jwt() ->> 'email') = email);
+create policy "saved own rows" on saved_tenders for all
+    using      ((auth.jwt() ->> 'email') = email)
+    with check ((auth.jwt() ->> 'email') = email);
 
 
 -- ===========================================================================
@@ -130,4 +135,7 @@ create table if not exists documents (
 create index if not exists idx_documents_email on documents (email);
 
 alter table documents enable row level security;
-create policy "mvp documents rw" on documents for all using (true) with check (true);
+-- Strict per-user RLS — a user can only ever touch their own document metadata.
+create policy "documents own rows" on documents for all
+    using      ((auth.jwt() ->> 'email') = email)
+    with check ((auth.jwt() ->> 'email') = email);

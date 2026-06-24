@@ -72,6 +72,47 @@ def _sb_user(token: str | None = None):
     return client
 
 
+def _auth_email(token: str | None) -> str | None:
+    """Return the email the JWT *actually* belongs to (verified with Supabase Auth).
+
+    Never trust the email string a caller passes — validate it against this.
+    Returns the lower-cased verified email, or None if the token is missing or
+    can't be validated."""
+    if not token:
+        return None
+    client = _sb()
+    if not client:
+        return None
+    try:
+        resp = client.auth.get_user(token)
+        user = getattr(resp, "user", None)
+        email = getattr(user, "email", None) if user else None
+        return email.strip().lower() if email else None
+    except Exception as e:
+        logging.warning(f"Token validation failed: {e}")
+        return None
+
+
+def _identity_ok(email: str, token: str | None) -> bool:
+    """Defense-in-depth identity gate for cloud user-data operations.
+
+    With a token present, the requested email MUST equal the token's verified
+    identity or we refuse — so a bug/forged email can never act on another user's
+    rows even before RLS sees the query. (DB RLS enforces the same rule.) With no
+    token we allow the email-scoped LOCAL fallback (offline dev), which carries no
+    cross-user exposure and is blocked from the cloud by RLS anyway."""
+    if not token:
+        return True
+    verified = _auth_email(token)
+    if verified is None:
+        logging.warning("Rejecting cloud op: token could not be validated.")
+        return False
+    if verified != email.strip().lower():
+        logging.warning("Rejecting cloud op: requested email != token identity.")
+        return False
+    return True
+
+
 def _load_json(path: Path) -> dict | list:
     if path.exists():
         try:
@@ -213,6 +254,8 @@ def login_user(email: str, password: str) -> tuple[bool, str, str | None]:
 
 def get_profile(email: str, token: str | None = None) -> dict | None:
     email = email.strip().lower()
+    if not _identity_ok(email, token):
+        return None
     sb = _sb_user(token)
     if sb:
         try:
@@ -225,6 +268,8 @@ def get_profile(email: str, token: str | None = None) -> dict | None:
 
 def save_profile(email: str, profile: dict, token: str | None = None) -> None:
     email  = email.strip().lower()
+    if not _identity_ok(email, token):
+        raise PermissionError("Identity check failed — cannot save another user's profile.")
     record = {**core.DEFAULT_PROFILE, **profile, "email": email}
     sb = _sb_user(token)
     if sb:
@@ -244,6 +289,8 @@ def save_profile(email: str, profile: dict, token: str | None = None) -> None:
 
 def list_saved(email: str, token: str | None = None) -> list[dict]:
     email = email.strip().lower()
+    if not _identity_ok(email, token):
+        return []
     sb = _sb_user(token)
     if sb:
         try:
@@ -256,6 +303,8 @@ def list_saved(email: str, token: str | None = None) -> list[dict]:
 def save_tender(email: str, source_id: str, status="interested", note="",
                 token: str | None = None) -> None:
     email = email.strip().lower()
+    if not _identity_ok(email, token):
+        raise PermissionError("Identity check failed — cannot modify another user's pipeline.")
     rec   = {"email": email, "source_id": source_id, "status": status, "note": note}
     sb    = _sb_user(token)
     if sb:
@@ -284,6 +333,8 @@ def _vault_dir(email: str) -> Path:
 
 def list_documents(email: str, token: str | None = None) -> list[dict]:
     email = email.strip().lower()
+    if not _identity_ok(email, token):
+        return []
     sb = _sb_user(token)
     if sb:
         try:
@@ -304,6 +355,8 @@ def save_document(email: str, name: str, filename: str, content: bytes,
     expiry_date (ISO 'YYYY-MM-DD') powers proactive renewal alerts.
     """
     email  = email.strip().lower()
+    if not _identity_ok(email, token):
+        raise PermissionError("Identity check failed — cannot upload to another user's vault.")
     doc_id = uuid.uuid4().hex[:16]
     meta   = {
         "doc_id":      doc_id,
@@ -338,6 +391,8 @@ def save_document(email: str, name: str, filename: str, content: bytes,
 def get_document_bytes(email: str, doc_id: str,
                        token: str | None = None) -> bytes | None:
     email = email.strip().lower()
+    if not _identity_ok(email, token):
+        return None
     sb = _sb_user(token)
     if sb:
         try:
@@ -354,6 +409,8 @@ def get_document_bytes(email: str, doc_id: str,
 
 def delete_document(email: str, doc_id: str, token: str | None = None) -> None:
     email = email.strip().lower()
+    if not _identity_ok(email, token):
+        raise PermissionError("Identity check failed — cannot delete another user's document.")
     sb = _sb_user(token)
     if sb:
         try:

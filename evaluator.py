@@ -49,16 +49,24 @@ def _llm_extract(prompt: str, document_bytes: bytes = None, mime_type: str = "ap
                 }})
             parts.append({"text": full_prompt})
 
-            resp = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                headers={"Content-Type": "application/json", "X-goog-api-key": gemini_key},
-                # thinkingBudget:0 disables the model's extended "thinking" step —
-                # ~8x fewer tokens per call (less quota, faster) with no quality loss
-                # on these structured JSON tasks.
-                json={"contents": [{"parts": parts}],
-                      "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
-                timeout=90,
-            )
+            import time as _time
+            resp = None
+            for _attempt in range(3):
+                resp = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                    headers={"Content-Type": "application/json", "X-goog-api-key": gemini_key},
+                    # thinkingBudget:0 disables the model's extended "thinking" step —
+                    # ~8x fewer tokens per call (less quota, faster) with no quality loss
+                    # on these structured JSON tasks.
+                    json={"contents": [{"parts": parts}],
+                          "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
+                    timeout=90,
+                )
+                # Gemini's free tier intermittently 503/429s ("high demand") — retry.
+                if resp.status_code not in (503, 429):
+                    break
+                if _attempt < 2:
+                    _time.sleep(1.0 * (_attempt + 1))
             resp.raise_for_status()
             _parts = resp.json()["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in _parts).strip()

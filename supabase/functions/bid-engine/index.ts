@@ -24,6 +24,24 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+// Gemini's free tier intermittently returns 503/429 ("high demand"); retry a few
+// times with backoff so a transient spike doesn't fail the whole request.
+async function callGemini(key: string, body: unknown): Promise<Response> {
+  const url =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  let resp!: Response;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-goog-api-key": key },
+      body: JSON.stringify(body),
+    });
+    if (resp.status !== 503 && resp.status !== 429) return resp;
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  return resp;
+}
+
 const PROMPT = `You are an expert Indian government tender bid consultant. You are given a tender / NIT document (and the contractor's profile). Do TWO things and return ONE JSON object.
 
 1) EXTRACT these tender fields (use null if absent):
@@ -62,17 +80,10 @@ serve(async (req: Request) => {
       : "";
     parts.push({ text: PROMPT + profileLine });
 
-    const resp = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-goog-api-key": key },
-        body: JSON.stringify({
-          contents: [{ parts }],
-          generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
-        }),
-      },
-    );
+    const resp = await callGemini(key, {
+      contents: [{ parts }],
+      generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
+    });
 
     if (!resp.ok) {
       const detail = await resp.text();

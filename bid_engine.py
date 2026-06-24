@@ -59,15 +59,24 @@ def _call_ai(prompt: str, doc_bytes: bytes | None = None,
                 }})
             parts.append({"text": full_prompt})
 
-            resp = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-                headers={"Content-Type": "application/json", "X-goog-api-key": gemini_key},
-                # thinkingBudget:0 -> far fewer tokens/quota per call, no quality
-                # loss on these heavily-structured prompts.
-                json={"contents": [{"parts": parts}],
-                      "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
-                timeout=120,
-            )
+            import time as _time
+            resp = None
+            for _attempt in range(3):
+                resp = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+                    headers={"Content-Type": "application/json", "X-goog-api-key": gemini_key},
+                    # thinkingBudget:0 -> far fewer tokens/quota per call, no quality
+                    # loss on these heavily-structured prompts.
+                    json={"contents": [{"parts": parts}],
+                          "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}}},
+                    timeout=120,
+                )
+                # Gemini's free tier intermittently 503/429s ("high demand") — retry
+                # with backoff so a transient spike doesn't fail the whole draft.
+                if resp.status_code not in (503, 429):
+                    break
+                if _attempt < 2:
+                    _time.sleep(1.0 * (_attempt + 1))
             resp.raise_for_status()
             _parts = resp.json()["candidates"][0]["content"]["parts"]
             text = "".join(p.get("text", "") for p in _parts).strip()

@@ -25,6 +25,24 @@ const json = (body: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+// Gemini's free tier intermittently returns 503/429 ("high demand"); retry a few
+// times with backoff so a transient spike doesn't fail the whole request.
+async function callGemini(key: string, body: unknown): Promise<Response> {
+  const url =
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+  let resp!: Response;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-goog-api-key": key },
+      body: JSON.stringify(body),
+    });
+    if (resp.status !== 503 && resp.status !== 429) return resp;
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+  }
+  return resp;
+}
+
 function resumePrompt(job: Record<string, unknown>, resume: string): string {
   const qual = (job.qualification as string) ||
     "Not specified — infer from job title and category";
@@ -107,17 +125,10 @@ serve(async (req: Request) => {
     prompt +=
       "\n\nRespond strictly with valid raw JSON only. Do not wrap in markdown code blocks or fences.";
 
-    const resp = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-goog-api-key": key },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
-        }),
-      },
-    );
+    const resp = await callGemini(key, {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { thinkingConfig: { thinkingBudget: 0 } },
+    });
 
     if (!resp.ok) {
       const detail = await resp.text();

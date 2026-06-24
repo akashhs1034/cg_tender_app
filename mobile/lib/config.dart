@@ -8,7 +8,7 @@ class Config {
   // Publishable key (sb_publishable_) — safe to ship; independent of the legacy
   // JWT keys, so disabling the exposed legacy anon/service_role keys won't break
   // the app. RLS still protects all user data.
-  static const supabaseAnonKey = 'sb_publishable__KC4z4MpzL4r0XIP1Xv2fg_vI8mhOoo';
+  static const supabaseAnonKey = 'sb_publishable_CmCGeCp_QlqseKtf8XaX9w_NSOt2vKe';
 }
 
 /// Opporta brand palette (mirrors the web app: obsidian + cyan/blue).

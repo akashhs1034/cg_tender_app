@@ -4,6 +4,7 @@
 
 # Frontend
 streamlit>=1.40
+streamlit-js-eval>=1.0.0   # read browser URL #fragment + localStorage (Google OAuth return + session restore) inside the component sandbox
 
 # Data
 pandas>=2.2

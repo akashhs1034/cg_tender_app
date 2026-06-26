@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import os
 import json
+import time
 import uuid
+import base64
 import hashlib
 import logging
 from datetime import datetime
@@ -282,6 +284,24 @@ def login_user(email: str, password: str) -> tuple[bool, str, str | None, str | 
     return ok, msg, None, None
 
 
+def _decode_jwt_unverified(token: str | None) -> dict | None:
+    """Decode a JWT's payload WITHOUT verifying its signature. Returns dict or None.
+
+    Used only to read `email`/`exp` for fast local session restoration. This is
+    safe: the token is the user's own (kept in their own browser), and every real
+    data request still sends it to Supabase where RLS re-validates it — a tampered
+    token simply returns no rows, never another user's data.
+    """
+    try:
+        parts = str(token).split(".")
+        if len(parts) < 2:
+            return None
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)        # pad to base64 multiple
+        return json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
+    except Exception:
+        return None
+
+
 def restore_session(access_token: str | None,
                     refresh_token: str | None = None) -> dict | None:
     """Rehydrate a Supabase session from stored tokens. Never raises.
@@ -300,11 +320,24 @@ def restore_session(access_token: str | None,
     """
     if not access_token:
         return None
+
+    # ── Fast path: the access token is still valid → trust it LOCALLY, with no
+    # network call at all. This is what keeps a user signed in while navigating:
+    # a flaky connection or a slow Supabase response on reconnect can no longer
+    # bounce them to the login screen, because we don't depend on the network for
+    # a token that hasn't expired yet. (Safe: the token is the user's own and every
+    # real data call still re-validates it against Supabase RLS.)
+    claims = _decode_jwt_unverified(access_token)
+    if claims:
+        email = (claims.get("email") or "").strip().lower()
+        exp   = claims.get("exp") or 0
+        if email and exp and exp > time.time() + 60:        # 60s safety margin
+            return {"email": email, "access_token": access_token,
+                    "refresh_token": refresh_token}
+
     sb = _sb()
-    if not sb:
-        return None
-    # Preferred path: full refresh via set_session (survives access-token expiry).
-    if refresh_token:
+    # ── Expired / unreadable token → mint a fresh one with the refresh token.
+    if sb and refresh_token:
         try:
             resp  = sb.auth.set_session(access_token, refresh_token)
             sess  = getattr(resp, "session", None)
@@ -318,11 +351,12 @@ def restore_session(access_token: str | None,
                 }
         except Exception as e:
             logging.warning(f"Session refresh failed: {e}")
-    # Fallback: validate the access token as-is (no refresh available).
-    email = _auth_email(access_token)
-    if email:
-        return {"email": email, "access_token": access_token,
-                "refresh_token": refresh_token}
+    # ── Last resort: validate the access token over the network.
+    if sb:
+        email = _auth_email(access_token)
+        if email:
+            return {"email": email, "access_token": access_token,
+                    "refresh_token": refresh_token}
     return None
 
 

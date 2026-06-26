@@ -104,17 +104,13 @@ if _QP_TOKEN:
             st.session_state.current_page  = "📄  Tenders"
             st.rerun()
         else:
-            # Recovery failed (expired / revoked token). CLEAR the stored
-            # credentials so the probe below does not redirect-loop, and let the
-            # user land cleanly on the login screen.
+            # Recovery did not succeed THIS time. Do NOT wipe the saved
+            # credentials — a transient network blip during refresh must never
+            # permanently log the user out. We only mark the probe as done for
+            # this session (which prevents a redirect loop); the next page load /
+            # reconnect retries recovery, and the long-lived refresh token keeps
+            # working. Credentials are cleared only on an explicit Log Out.
             st.session_state._ls_checked = True
-            _stc.html(
-                "<script>try{"
-                "localStorage.removeItem('_op_e');"
-                "localStorage.removeItem('_op_t');"
-                "localStorage.removeItem('_op_r');"
-                "}catch(x){}</script>",
-                height=0)
 
 # ── GOOGLE OAUTH RETURN HANDLER ──────────────────────────────────────────────
 # After a Google sign-in, Supabase redirects back to the app with the tokens in

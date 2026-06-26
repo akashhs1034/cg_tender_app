@@ -147,11 +147,13 @@ if not st.session_state.authenticated and not _QP_TOKEN and not _QP_PWRESET:
     except Exception:
         pass
 
-# ── GOOGLE OAUTH RETURN — JS FALLBACK ────────────────────────────────────────
-# Fallback for browsers where st.context.url omits the fragment: a same-origin
-# JS redirect that lifts the fragment tokens into query params (_rct/_rcr), which
-# the recovery block above then restores. (Same-origin nav, unlike the blocked
-# cross-origin hop to Google.)
+# ── GOOGLE OAUTH RETURN — JS (History API, sandbox-safe) ─────────────────────
+# The component iframe sandbox blocks ALL top-navigation (even same-origin), so a
+# location redirect just hangs. Instead we rewrite the URL with the History API
+# (replaceState — NOT navigation, so it's allowed) to lift the fragment tokens
+# into query params (_rct/_rcr), then fire a popstate event. Streamlit listens for
+# popstate, so it re-reads the URL and reruns — and the recovery block above then
+# restores the session from those query params.
 if not st.session_state.authenticated and not _QP_TOKEN:
     _stc.html(
         "<script>(function(){try{"
@@ -163,7 +165,8 @@ if not st.session_state.authenticated and not _QP_TOKEN:
         "var u=new URL(w.location.href);u.hash='';"
         "u.searchParams.set('_rct',at);if(rt){u.searchParams.set('_rcr',rt);}"
         "if(ty==='recovery'){u.searchParams.set('_pwreset','1');}"
-        "w.location.replace(u.toString());}}"
+        "w.history.replaceState({},'',u.pathname+u.search);"
+        "w.dispatchEvent(new PopStateEvent('popstate'));}}"
         "}catch(x){}})();</script>",
         height=0)
 
@@ -1411,7 +1414,8 @@ def _sync_session_storage() -> None:
             "u.searchParams.set('_rce',e);"
             "u.searchParams.set('_rct',t);"
             "if(r){u.searchParams.set('_rcr',r);}"
-            "w.location.replace(u.toString());}}"
+            "w.history.replaceState({},'',u.pathname+u.search);"
+            "w.dispatchEvent(new PopStateEvent('popstate'));}}"
             "}catch(x){}})();</script>",
             height=0)
 

@@ -1444,14 +1444,11 @@ with st.sidebar:
       <div class="sb-tagline">Every Opportunity · One Platform</div>
     </div>""", unsafe_allow_html=True)
 
-    # ── Language toggle (English / हिंदी) — for first-time & village users ──
-    _cur_lang = st.session_state.get("lang", "en")
-    _picked_lang = st.radio(
-        i18n.t("language", _cur_lang), ["English", "हिंदी"],
-        index=(1 if _cur_lang == "hi" else 0),
-        horizontal=True, key="lang_radio", label_visibility="collapsed")
-    st.session_state.lang = "hi" if _picked_lang == "हिंदी" else "en"
-    lang = st.session_state.lang
+    # Language is controlled by the single prominent "English | हिंदी" switch at the
+    # top of the page (one source of truth: st.session_state.lang). Here we only
+    # READ it for the sidebar nav labels — writing it here too would fight the top
+    # switch on every rerun and snap the choice back.
+    lang = st.session_state.get("lang", "en")
 
     if not st.session_state.authenticated:
         st.markdown('<div class="auth-panel">', unsafe_allow_html=True)

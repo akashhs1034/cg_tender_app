@@ -217,16 +217,22 @@ label,.stSelectbox label,.stTextInput label,.stTextArea label,.stNumberInput lab
 .stButton>button[kind="secondary"]{background:rgba(255,255,255,.04)!important;border:1px solid rgba(255,255,255,.08)!important;color:#94A3B8!important}
 .stButton>button[kind="secondary"]:hover{background:rgba(0,196,255,.08)!important;border-color:rgba(0,196,255,.3)!important;color:#F1F5F9!important}
 
-/* Language switcher (English | हिंदी): force BOTH buttons to identical size,
-   independent of which one is active. Same box-sizing, border width, height &
-   padding for primary+secondary — only the colour differs to mark the active one. */
+/* Language switcher (English | हिंदी): BOTH buttons share ONE identical design —
+   same size AND same look (the subtle outlined pill). The active one is only
+   gently tinted, not switched to a different bright gradient style. */
 .st-key-lang_switch_top .stButton>button{
-  box-sizing:border-box!important;border:1px solid rgba(0,196,255,.30)!important;
+  box-sizing:border-box!important;
+  background:rgba(255,255,255,.04)!important;
+  border:1px solid rgba(0,196,255,.30)!important;
+  color:#94A3B8!important;font-weight:600!important;
   height:40px!important;min-height:40px!important;padding:0 12px!important;
   border-radius:10px!important;line-height:1!important;
   display:flex!important;align-items:center!important;justify-content:center!important;}
 .st-key-lang_switch_top .stButton>button[kind="primary"]{
-  border-color:rgba(0,196,255,.55)!important;}
+  background:rgba(0,196,255,.16)!important;       /* gentle highlight for active */
+  border-color:rgba(0,196,255,.55)!important;color:#BAE6FD!important;}
+.st-key-lang_switch_top .stButton>button:hover{
+  border-color:rgba(0,196,255,.5)!important;color:#F1F5F9!important;transform:none!important;}
 
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"]{background:rgba(11,19,41,.6);border:1px solid rgba(0,196,255,.12);border-radius:12px;padding:5px;gap:4px;backdrop-filter:blur(10px)}

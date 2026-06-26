@@ -121,7 +121,16 @@ if _QP_TOKEN:
 #   • reconnect recovery        (tokens we saved in localStorage).
 # `parent.location.hash` (not window.*) is used because the OAuth fragment lives
 # on the top app window, not inside the component's own iframe.
-if not st.session_state.authenticated and not st.session_state.get("show_pw_reset"):
+# BOUNDED so it can NEVER infinite-loop. streamlit-js-eval re-reports its value on
+# each render, which would otherwise rerun forever for a fresh (not-signed-in)
+# visitor who has no session to restore — showing as a frozen / "not responding"
+# desktop page. We read the browser state at most a few times, then mark it done
+# and stop rendering the component entirely.
+if (not st.session_state.authenticated
+        and not st.session_state.get("show_pw_reset")
+        and not st.session_state.get("_boot_done")
+        and st.session_state.get("_boot_tries", 0) < 4):
+    st.session_state["_boot_tries"] = st.session_state.get("_boot_tries", 0) + 1
     try:
         from streamlit_js_eval import streamlit_js_eval as _sje
         _boot = _sje(
@@ -134,6 +143,7 @@ if not st.session_state.authenticated and not st.session_state.get("show_pw_rese
                 "})"),
             key="op_session_boot")
         if _boot:
+            st.session_state["_boot_done"] = True              # got the state → stop
             import json as _json2, urllib.parse as _up2
             _bd    = _json2.loads(_boot) if isinstance(_boot, str) else (_boot or {})
             _hash  = _bd.get("h") or ""
@@ -164,7 +174,7 @@ if not st.session_state.authenticated and not st.session_state.get("show_pw_rese
                 st.session_state._ls_checked   = True
                 st.rerun()
     except Exception:
-        pass
+        st.session_state["_boot_done"] = True                  # never retry on error
 
 # ── DESIGN SYSTEM CSS ─────────────────────────────────────────────────────────
 st.markdown("""<style>

@@ -1723,6 +1723,23 @@ if st.session_state.authenticated:
                 st.session_state.current_page = _pg
                 st.rerun()
 
+# ── PROMINENT LANGUAGE SWITCHER (top of every page; visible on mobile too) ────
+# The sidebar toggle is hidden behind the hamburger on phones, so we also show a
+# clear English | हिंदी switch at the top of the main area for everyone.
+_lang_now = st.session_state.get("lang", "en")
+_lsp, _len_btn, _lhi_btn = st.columns([6, 1.4, 1.4])
+with _len_btn:
+    if st.button("English", key="lang_en_top", width="stretch",
+                 type="primary" if _lang_now == "en" else "secondary"):
+        st.session_state.lang = "en"
+        st.rerun()
+with _lhi_btn:
+    if st.button("हिंदी", key="lang_hi_top", width="stretch",
+                 type="primary" if _lang_now == "hi" else "secondary"):
+        st.session_state.lang = "hi"
+        st.rerun()
+lang = st.session_state.lang
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ── DASHBOARD ─────────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1946,8 +1963,8 @@ if "Dashboard" in page:
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ── Active Tenders · Top matches list ──
-        st.markdown("""<div class="sec-hd">
-          <span class="sec-title">📋 Active Tenders</span>
+        st.markdown(f"""<div class="sec-hd">
+          <span class="sec-title">{i18n.tr("📋 Active Tenders", lang)}</span>
           <span class="sec-badge-green">🎯 Matched to your profile</span>
           <div class="sec-divider"></div>
         </div>""", unsafe_allow_html=True)
@@ -2065,8 +2082,8 @@ if "Dashboard" in page:
         # SECTION 4: Latest Government Jobs
         # ══════════════════════════════════════════════════════════════════════
         st.markdown("<br>", unsafe_allow_html=True)
-        st.markdown("""<div class="sec-hd">
-          <span class="sec-title">💼 Latest Government Jobs</span>
+        st.markdown(f"""<div class="sec-hd">
+          <span class="sec-title">{i18n.tr("💼 Latest Government Jobs", lang)}</span>
           <span class="sec-badge">CG + UP</span>
           <div class="sec-divider"></div>
         </div>""", unsafe_allow_html=True)
@@ -2257,8 +2274,8 @@ if "Dashboard" in page:
 # ── TENDERS — dedicated portal w/ multi-tier cascading filters ─────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Tenders" in page:
-    st.markdown("""<div class="sec-hd">
-      <span class="sec-title">📄 Tender Portal</span>
+    st.markdown(f"""<div class="sec-hd">
+      <span class="sec-title">{i18n.tr("📄 Tender Portal", lang)}</span>
       <span class="sec-badge">Category › State › District</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
@@ -3147,8 +3164,8 @@ elif "Workspace" in page:
 # ── JOBS ──────────────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Jobs" in page:
-    st.markdown("""<div class="sec-hd">
-      <span class="sec-title">💼 Government Job Board</span>
+    st.markdown(f"""<div class="sec-hd">
+      <span class="sec-title">{i18n.tr("💼 Government Job Board", lang)}</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
@@ -3412,8 +3429,8 @@ elif "Analytics" in page:
                     unsafe_allow_html=True)
         st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
-    st.markdown("""<div class="sec-hd">
-      <span class="sec-title">📊 Market Intelligence</span>
+    st.markdown(f"""<div class="sec-hd">
+      <span class="sec-title">{i18n.tr("📊 Market Intelligence", lang)}</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
@@ -3496,8 +3513,8 @@ elif "Profile" in page:
         st.warning("Sign in to access your profile.")
         st.stop()
 
-    st.markdown("""<div class="sec-hd">
-      <span class="sec-title">👤 My Profile</span>
+    st.markdown(f"""<div class="sec-hd">
+      <span class="sec-title">{i18n.tr("👤 My Profile", lang)}</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 

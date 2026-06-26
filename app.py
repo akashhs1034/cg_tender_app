@@ -222,11 +222,12 @@ label,.stSelectbox label,.stTextInput label,.stTextArea label,.stNumberInput lab
    gently tinted, not switched to a different bright gradient style. */
 .st-key-lang_switch_top .stButton>button{
   box-sizing:border-box!important;
+  width:100%!important;                            /* equal width for both */
   background:rgba(255,255,255,.04)!important;
   border:1px solid rgba(0,196,255,.30)!important;
   color:#94A3B8!important;font-weight:600!important;
   height:40px!important;min-height:40px!important;padding:0 12px!important;
-  border-radius:10px!important;line-height:1!important;
+  border-radius:999px!important;line-height:1!important;   /* same oval/pill shape */
   display:flex!important;align-items:center!important;justify-content:center!important;}
 .st-key-lang_switch_top .stButton>button[kind="primary"]{
   background:rgba(0,196,255,.16)!important;       /* gentle highlight for active */
@@ -2470,7 +2471,9 @@ elif "Tenders" in page:
     # advertise tenders ONLY in local newspapers, never on e-procurement portals.
     # This captures them district-wise: browse what's collected, add tenders by
     # letting Opporta Intelligence read an e-paper page, or open district papers.
-    with st.expander("📰  Offline / Newspaper Tenders — district-wise NITs printed in CG/UP papers", expanded=False):
+    _off_n = len(load_table("offline_tenders"))
+    with st.expander(f"📰  Offline / Newspaper Tenders · {_off_n} collected — district-wise NITs printed in CG/UP papers",
+                     expanded=True):
         st.caption("Government offices (PWD, Collector, Nagar Nigam, Gram Panchayat, Jal Sansadhan…) "
                    "often publish tenders only in local newspapers. Browse them district-wise, add "
                    "tenders from an e-paper page, or open your district's papers directly.")
@@ -3270,7 +3273,7 @@ elif "Jobs" in page:
         else:
             # Job filters (on top — users filter first)
             st.markdown('<div class="filter-row">', unsafe_allow_html=True)
-            jf1, jf2, jf3 = st.columns([3, 1.5, 1.5])
+            jf1, jf2, jf3, jf4 = st.columns([2.6, 1.3, 1.3, 1.5])
             with jf1:
                 jsearch = st.text_input("Search jobs", placeholder="Title, department, qualification...",
                                         label_visibility="collapsed", key="jsearch").lower()
@@ -3280,7 +3283,14 @@ elif "Jobs" in page:
             with jf3:
                 jcats = ["All"] + sorted(df_j["category"].dropna().unique().tolist()) if "category" in df_j else ["All"]
                 jcat  = st.selectbox("Category", jcats, label_visibility="collapsed", key="jcat")
+            with jf4:
+                jsrc = st.selectbox("Source", ["All sources", "📰 Newspaper jobs", "🌐 Online portals"],
+                                    label_visibility="collapsed", key="jsrc")
             st.markdown('</div>', unsafe_allow_html=True)
+
+            # A job is an "offline / newspaper" posting when its source portal says so.
+            def _is_newspaper_job(rec) -> bool:
+                return str(rec.get("source_portal", "")).lower().startswith(("newspaper", "offline"))
 
             # Job KPIs
             jk1, jk2, jk3, jk4 = st.columns(4)
@@ -3307,6 +3317,8 @@ elif "Jobs" in page:
                 if jsearch and jsearch not in hay: continue
                 if jstate != "All" and _v(rec.get("state")) != jstate: continue
                 if jcat   != "All" and jcat.lower() not in _v(rec.get("category","")).lower(): continue
+                if jsrc == "📰 Newspaper jobs" and not _is_newspaper_job(rec): continue
+                if jsrc == "🌐 Online portals" and _is_newspaper_job(rec): continue
                 jobs_filtered.append(rec)
 
             st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(jobs_filtered)} postings</div>',
@@ -3338,6 +3350,8 @@ elif "Jobs" in page:
                 vac_tag   = f'<span class="tag tag-loc">&#128101; {vac_txt}</span>' if vac_txt else ""
                 sal_tag   = f'<span class="tag tag-val">&#x20B9; {salary_v}</span>' if salary_v != "—" else ""
                 jvac_div  = f'<div class="jvac">{vac_txt}</div>' if vac_txt else ""
+                news_tag  = ('<span class="tag tag-green">&#128240; Newspaper</span>'
+                             if _is_newspaper_job(rec) else "")
 
                 # Auto eligibility badge from profile
                 match_div = ""
@@ -3357,7 +3371,7 @@ elif "Jobs" in page:
                     f'<span class="tag tag-dl">{dl_txt}</span>'
                     f'{vac_tag}'
                     f'<span class="tag tag-cat">{cat_v}</span>'
-                    f'{sal_tag}'
+                    f'{sal_tag}{news_tag}'
                     f'</div></div>{match_div}{jvac_div}</div></div>'
                 )
                 st.markdown(card_html, unsafe_allow_html=True)

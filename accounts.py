@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import os
 import json
+import time
 import uuid
+import base64
 import hashlib
 import logging
 from datetime import datetime
@@ -207,45 +209,208 @@ def verify_otp(email: str, token: str) -> tuple[bool, str, str | None]:
     return False, "Not connected to Supabase.", None
 
 
-def get_google_oauth_url(redirect_to: str = "") -> str | None:
-    """Returns the Google OAuth redirect URL from Supabase."""
-    sb = _sb()
-    if sb:
-        try:
-            opts = {"redirect_to": redirect_to} if redirect_to else {}
-            resp = sb.auth.sign_in_with_oauth({"provider": "google", "options": opts})
-            return resp.url if resp else None
-        except Exception as e:
-            logging.warning(f"Google OAuth URL failed: {e}")
-    return None
+def get_google_oauth_url(redirect_to: str = "",
+                         supabase_url: str | None = None,
+                         supabase_key: str | None = None) -> str | None:
+    """Return the Google sign-in URL via Supabase, using the IMPLICIT OAuth flow.
 
+    Why implicit (not the SDK's default PKCE): this Streamlit app is stateless
+    across the OAuth redirect — the user comes back in a brand-new server session.
+    PKCE stores a one-time `code_verifier` inside the client that built the URL and
+    requires that SAME client to exchange the returned `?code=…`; by the time the
+    user returns, that client (and the verifier) is gone, so PKCE can NEVER
+    complete here and would bounce the user straight back to the login screen.
 
-def login_user(email: str, password: str) -> tuple[bool, str, str | None]:
+    The implicit flow instead returns the access + refresh tokens directly in the
+    URL fragment (#access_token=…&refresh_token=…). The app's fragment handler
+    lifts those into the session and restore_session() locks them in (set_session),
+    so the user stays signed in across the redirect and later reconnects.
     """
-    Returns (success, message, access_token).
-    access_token is the Supabase JWT — store it in session state and pass it
-    to every user-data call so RLS is enforced.
-    Returns None token on local fallback (offline dev mode).
+    # Prefer credentials passed by the caller (app.py resolves them from env OR
+    # st.secrets); fall back to env vars for non-Streamlit callers.
+    url = supabase_url or os.getenv("SUPABASE_URL")
+    key = supabase_key or os.getenv("SUPABASE_KEY")
+    if not (url and key):
+        return None
+    try:
+        from supabase import create_client
+        # create_client expects SyncClientOptions (has the storage/httpx fields);
+        # fall back across versions that name it differently.
+        try:
+            from supabase.lib.client_options import SyncClientOptions as _Opts
+        except Exception:
+            try:
+                from supabase.lib.client_options import ClientOptions as _Opts  # type: ignore
+            except Exception:
+                from supabase import ClientOptions as _Opts  # type: ignore
+        client = create_client(url, key, options=_Opts(flow_type="implicit"))
+        opts = {"redirect_to": redirect_to} if redirect_to else {}
+        resp = client.auth.sign_in_with_oauth({"provider": "google", "options": opts})
+        return resp.url if resp else None
+    except Exception as e:
+        logging.warning(f"Google OAuth URL failed: {e}")
+        return None
+
+
+def login_user(email: str, password: str) -> tuple[bool, str, str | None, str | None]:
+    """
+    Returns (success, message, access_token, refresh_token).
+    access_token is the short-lived (≈1h) Supabase JWT — store it in session
+    state and pass it to every user-data call so RLS is enforced.
+    refresh_token is long-lived; persist it so the session can be transparently
+    renewed (see restore_session) instead of logging the user out after an hour.
+    Both tokens are None on the local fallback (offline dev mode).
     """
     email = email.strip().lower()
     sb = _sb()
     if sb:
         try:
-            resp  = sb.auth.sign_in_with_password({"email": email, "password": password})
-            token = resp.session.access_token if (resp and resp.session) else None
-            return True, "Login successful.", token
+            resp    = sb.auth.sign_in_with_password({"email": email, "password": password})
+            sess    = getattr(resp, "session", None)
+            token   = getattr(sess, "access_token", None) if sess else None
+            refresh = getattr(sess, "refresh_token", None) if sess else None
+            return True, "Login successful.", token, refresh
         except Exception as e:
             low = str(e).lower()
             # Surface the real reason instead of masking it as "invalid password".
             if "not confirmed" in low or "confirm" in low:
-                return False, "EMAIL_NOT_CONFIRMED", None
+                return False, "EMAIL_NOT_CONFIRMED", None, None
             if any(s in low for s in ("rate", "limit", "429", "too many")):
-                return False, "RATE_LIMIT", None
+                return False, "RATE_LIMIT", None, None
             if any(s in low for s in ("invalid", "credential", "password")):
-                return False, "Invalid email or password.", None
+                return False, "Invalid email or password.", None, None
             logging.warning(f"Supabase login failed ({e}), trying local fallback.")
     ok, msg = _local_login(email, password)
-    return ok, msg, None
+    return ok, msg, None, None
+
+
+def _decode_jwt_unverified(token: str | None) -> dict | None:
+    """Decode a JWT's payload WITHOUT verifying its signature. Returns dict or None.
+
+    Used only to read `email`/`exp` for fast local session restoration. This is
+    safe: the token is the user's own (kept in their own browser), and every real
+    data request still sends it to Supabase where RLS re-validates it — a tampered
+    token simply returns no rows, never another user's data.
+    """
+    try:
+        parts = str(token).split(".")
+        if len(parts) < 2:
+            return None
+        payload = parts[1] + "=" * (-len(parts[1]) % 4)        # pad to base64 multiple
+        return json.loads(base64.urlsafe_b64decode(payload).decode("utf-8"))
+    except Exception:
+        return None
+
+
+def restore_session(access_token: str | None,
+                    refresh_token: str | None = None) -> dict | None:
+    """Rehydrate a Supabase session from stored tokens. Never raises.
+
+    Streamlit sessions are in-memory, so a WebSocket drop (mobile backgrounding,
+    network blip, Cloud restart) wipes the session and would normally bounce the
+    user to the login screen. We persist the tokens in the browser and call this
+    on a fresh load to silently restore the user.
+
+    When a refresh_token is supplied we call set_session(), which transparently
+    mints a NEW access_token if the stored one has expired — so the user stays
+    signed in for as long as the long-lived refresh token is valid, not just the
+    1-hour access-token window. Falls back to validating the access_token alone.
+
+    Returns {"email", "access_token", "refresh_token"} on success, else None.
+    """
+    if not access_token:
+        return None
+
+    # ── Fast path: the access token is still valid → trust it LOCALLY, with no
+    # network call at all. This is what keeps a user signed in while navigating:
+    # a flaky connection or a slow Supabase response on reconnect can no longer
+    # bounce them to the login screen, because we don't depend on the network for
+    # a token that hasn't expired yet. (Safe: the token is the user's own and every
+    # real data call still re-validates it against Supabase RLS.)
+    claims = _decode_jwt_unverified(access_token)
+    if claims:
+        email = (claims.get("email") or "").strip().lower()
+        exp   = claims.get("exp") or 0
+        if email and exp and exp > time.time() + 60:        # 60s safety margin
+            return {"email": email, "access_token": access_token,
+                    "refresh_token": refresh_token}
+
+    sb = _sb()
+    # ── Expired / unreadable token → mint a fresh one with the refresh token.
+    if sb and refresh_token:
+        try:
+            resp  = sb.auth.set_session(access_token, refresh_token)
+            sess  = getattr(resp, "session", None)
+            user  = getattr(resp, "user", None) or (getattr(sess, "user", None) if sess else None)
+            email = getattr(user, "email", None) if user else None
+            if email and sess:
+                return {
+                    "email":         email.strip().lower(),
+                    "access_token":  getattr(sess, "access_token", access_token) or access_token,
+                    "refresh_token": getattr(sess, "refresh_token", refresh_token) or refresh_token,
+                }
+        except Exception as e:
+            logging.warning(f"Session refresh failed: {e}")
+    # ── Last resort: validate the access token over the network.
+    if sb:
+        email = _auth_email(access_token)
+        if email:
+            return {"email": email, "access_token": access_token,
+                    "refresh_token": refresh_token}
+    return None
+
+
+def send_password_reset(email: str, redirect_to: str = "") -> tuple[bool, str]:
+    """Email the user a password-reset link via Supabase. Returns (ok, message).
+
+    The message is the literal code 'RATE_LIMIT' when the mail server is
+    throttling, so the UI can show a friendly wait-and-retry note. For privacy we
+    return the same success text whether or not the email exists.
+    """
+    email = email.strip().lower()
+    sb = _sb()
+    if not sb:
+        return False, "Not connected to the server right now. Please try again later."
+    try:
+        if redirect_to:
+            sb.auth.reset_password_for_email(email, {"redirect_to": redirect_to})
+        else:
+            sb.auth.reset_password_for_email(email)
+        return True, ("If that email has an account, a password-reset link is on "
+                      "its way. Check your inbox (and spam).")
+    except Exception as e:
+        low = str(e).lower()
+        if any(s in low for s in ("rate", "limit", "429", "too many")):
+            return False, "RATE_LIMIT"
+        logging.warning(f"Password reset email failed: {e}")
+        return False, f"Could not send the reset link: {e}"
+
+
+def update_password(new_password: str, access_token: str,
+                    refresh_token: str | None = None) -> tuple[bool, str]:
+    """Set a new password using the recovery session tokens from the reset link.
+
+    Returns (ok, message). Never raises.
+    """
+    if not access_token:
+        return False, ("Your reset session is missing — open the latest reset "
+                       "link from your email again.")
+    if not new_password or len(new_password) < 6:
+        return False, "Password must be at least 6 characters."
+    sb = _sb()
+    if not sb:
+        return False, "Not connected to the server right now. Please try again later."
+    try:
+        # Establish the recovery session, then change the password on it.
+        sb.auth.set_session(access_token, refresh_token or access_token)
+        sb.auth.update_user({"password": new_password})
+        return True, "Your password has been updated. Please log in with your new password."
+    except Exception as e:
+        low = str(e).lower()
+        if "expired" in low or "invalid" in low:
+            return False, "This reset link has expired. Please request a new one."
+        logging.warning(f"Password update failed: {e}")
+        return False, f"Could not update password: {e}"
 
 
 # ===========================================================================

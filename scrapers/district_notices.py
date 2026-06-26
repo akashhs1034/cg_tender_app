@@ -74,7 +74,24 @@ _UP = {
     "Siddharthnagar": "siddharthnagar", "Sitapur": "sitapur", "Sonbhadra": "sonbhadra",
     "Sultanpur": "sultanpur", "Unnao": "unnao", "Mau": "mau", "Bhadohi": "bhadohi",
     "Muzaffarnagar": "muzaffarnagar", "Sant Kabir Nagar": "sknagar",
+    # Added to complete UP coverage — verified live S3WaaS tender pages
+    # (<slug>.nic.in/notice_category/tenders/). UP Balrampur is .nic.in, distinct
+    # from CG Balrampur (.gov.in) above.
+    "Ambedkar Nagar": "ambedkarnagar", "Auraiya": "auraiya", "Baghpat": "bagpat",
+    "Balrampur": "balrampur", "Hamirpur": "hamirpur",
 }
+
+# Districts whose tender page does NOT fit the default slug pattern
+# (<slug>.gov.in/en/notice_category/tenders/). Chhattisgarh's two newest
+# districts (created 2020 & 2022) are hosted under <slug>.cg.gov.in, and GPM
+# additionally omits the /en/ path prefix — so they are listed with their exact
+# tenders-page URL and parsed with the same district table parser. Verified live.
+_EXTRA_DISTRICT_SITES = [
+    ("Gaurela-Pendra-Marwahi", "Chhattisgarh",
+     "https://gaurela-pendra-marwahi.cg.gov.in/notice_category/tenders/"),
+    ("Manendragarh-Chirmiri-Bharatpur", "Chhattisgarh",
+     "https://manendragarh-chirmiri-bharatpur.cg.gov.in/en/notice_category/tenders/"),
+]
 
 # Issuing-office detection from the tender title (else falls back to collectorate).
 _OFFICE_HINTS = [
@@ -145,8 +162,8 @@ def _parse(html: str, district: str, state: str, page_url: str) -> list[dict]:
     return out
 
 
-def _fetch_one(district: str, state: str, slug: str) -> list[dict]:
-    url = _url(state, slug)
+def _fetch_url(district: str, state: str, url: str) -> list[dict]:
+    """Fetch + parse one district tenders page at an explicit URL. Never raises."""
     try:
         r = requests.get(url, headers=_UA, timeout=15)
         if r.status_code != 200:
@@ -159,6 +176,10 @@ def _fetch_one(district: str, state: str, slug: str) -> list[dict]:
         return recs
     except Exception:
         return []
+
+
+def _fetch_one(district: str, state: str, slug: str) -> list[dict]:
+    return _fetch_url(district, state, _url(state, slug))
 
 
 # ── State authorities / corporations with their own tender tables ─────────────
@@ -244,14 +265,16 @@ def scrape() -> list[dict]:
     seen: set[str] = set()
     with ThreadPoolExecutor(max_workers=16) as ex:
         futs = [ex.submit(_fetch_one, d, st, s) for d, st, s in jobs]
+        futs += [ex.submit(_fetch_url, d, st, u) for d, st, u in _EXTRA_DISTRICT_SITES]
         futs += [ex.submit(_fetch_authority, a) for a in _AUTHORITY_SITES]
         for fut in as_completed(futs):
             for rec in fut.result():
                 if rec["source_id"] not in seen:
                     seen.add(rec["source_id"])
                     records.append(rec)
+    n_sites = len(jobs) + len(_EXTRA_DISTRICT_SITES)
     print(f"   district_notices: {len(records)} CG/UP offline tenders from "
-          f"{len(jobs)} district sites + {len(_AUTHORITY_SITES)} authorities")
+          f"{n_sites} district sites + {len(_AUTHORITY_SITES)} authorities")
     if not records:
         print("   district_notices: WARNING — 0 records; site template may have changed")
     return records

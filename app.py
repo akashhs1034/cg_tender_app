@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-import core, accounts, evaluator
+import streamlit.components.v1 as _stc
+import core, accounts, evaluator, i18n
 import base64 as _b64
 
 # ── LOGO ─────────────────────────────────────────────────────────────────────
@@ -40,7 +41,9 @@ st.set_page_config(
 
 # ── SESSION STATE ─────────────────────────────────────────────────────────────
 for _k, _v in {
-    "authenticated": False, "email": "", "sb_token": "",
+    "authenticated": False, "email": "", "sb_token": "", "sb_refresh": "",
+    "lang": "en",               # UI language: 'en' | 'hi'
+    "show_pw_reset": False, "pw_reset_token": "", "pw_reset_refresh": "",
     "current_page": "🏠  Dashboard",
     "explore_search": "", "explore_category": "All",
     "explore_state": "All", "explore_district": "All",
@@ -48,9 +51,87 @@ for _k, _v in {
     "entered_platform": False,
     "auth_mode": "login",       # "login" | "register" | "verify"
     "otp_email": "",
+    "_ls_checked": False,       # True after the localStorage recovery probe fires once
 }.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
+
+# ── SESSION RECOVERY FROM LOCALSTORAGE ───────────────────────────────────────
+# Streamlit sessions are in-memory only. A WebSocket drop (mobile browser
+# backgrounding, network glitch, Streamlit Cloud restart) wipes all server-side
+# state and bounces the user to the login screen even with a valid JWT.
+# Fix: persist email + token in browser localStorage; on a fresh session the JS
+# below relays them back via query params which we validate here and use to
+# silently restore the session. Params are cleared immediately so the JWT
+# does not linger in the URL bar or browser history.
+_QP_EMAIL   = st.query_params.get("_rce", "")
+_QP_TOKEN   = st.query_params.get("_rct", "")
+_QP_REFRESH = st.query_params.get("_rcr", "")
+_QP_PWRESET = st.query_params.get("_pwreset", "")
+if _QP_TOKEN:
+    # Strip the recovery params out of the URL immediately so the JWT never
+    # lingers in the address bar / browser history.
+    for _p in ("_rce", "_rct", "_rcr", "_pwreset"):
+        try:
+            st.query_params.pop(_p, None)
+        except Exception:
+            pass
+    if _QP_PWRESET:
+        # Arrived from a password-reset email link (type=recovery): collect a new
+        # password instead of logging straight in.
+        st.session_state.show_pw_reset    = True
+        st.session_state.pw_reset_token   = _QP_TOKEN
+        st.session_state.pw_reset_refresh = _QP_REFRESH or ""
+        st.session_state._ls_checked      = True
+        st.rerun()
+    elif not st.session_state.authenticated:
+        _rec = None
+        try:
+            # Uses the refresh token to mint a fresh access token when the stored
+            # one has expired, so the user survives >1h sessions and reconnects.
+            # Also covers the Google-OAuth return (token present, email derived).
+            _rec = accounts.restore_session(_QP_TOKEN, _QP_REFRESH or None)
+        except Exception:
+            _rec = None
+        # localStorage recovery carries an explicit email (must match); the OAuth
+        # return carries only the token, so we accept the token's verified email.
+        if _rec and (not _QP_EMAIL or _rec.get("email") == _QP_EMAIL.strip().lower()):
+            st.session_state.authenticated = True
+            st.session_state.email         = _rec["email"]
+            st.session_state.sb_token      = _rec.get("access_token") or _QP_TOKEN
+            st.session_state.sb_refresh    = _rec.get("refresh_token") or ""
+            st.session_state._ls_checked   = True
+            st.session_state.current_page  = "📄  Tenders"
+            st.rerun()
+        else:
+            # Recovery did not succeed THIS time. Do NOT wipe the saved
+            # credentials — a transient network blip during refresh must never
+            # permanently log the user out. We only mark the probe as done for
+            # this session (which prevents a redirect loop); the next page load /
+            # reconnect retries recovery, and the long-lived refresh token keeps
+            # working. Credentials are cleared only on an explicit Log Out.
+            st.session_state._ls_checked = True
+
+# ── GOOGLE OAUTH RETURN HANDLER ──────────────────────────────────────────────
+# After a Google sign-in, Supabase redirects back to the app with the tokens in
+# the URL *fragment* (#access_token=…&refresh_token=…). Streamlit cannot read a
+# fragment server-side, so this JS lifts them into query params (_rct/_rcr) and
+# reloads; the recovery block above then restores the session via
+# accounts.restore_session (which derives the verified email from the token).
+if not st.session_state.authenticated and not _QP_TOKEN:
+    _stc.html(
+        "<script>(function(){try{"
+        "var h=window.location.hash||'';"
+        "if(h.indexOf('access_token=')>=0){"
+        "var p=new URLSearchParams(h.replace(/^#/,''));"
+        "var at=p.get('access_token'),rt=p.get('refresh_token')||'',ty=p.get('type')||'';"
+        "if(at){var w=(window.parent!==window)?window.parent:window;"
+        "var u=new URL(w.location.href);u.hash='';"
+        "u.searchParams.set('_rct',at);if(rt){u.searchParams.set('_rcr',rt);}"
+        "if(ty==='recovery'){u.searchParams.set('_pwreset','1');}"
+        "w.location.replace(u.toString());}}"
+        "}catch(x){}})();</script>",
+        height=0)
 
 # ── DESIGN SYSTEM CSS ─────────────────────────────────────────────────────────
 st.markdown("""<style>
@@ -566,6 +647,81 @@ def _secret(k):
     try: return st.secrets[k]
     except: return None
 
+
+def _app_redirect_url() -> str:
+    """Where Supabase sends the user back after Google sign-in / password reset.
+
+    Resolution order:
+      1. APP_URL (env var or Streamlit secret) — an explicit override always wins.
+      2. The REAL origin the browser is on (st.context.url) — so it is
+         http://localhost:8501 when run locally and https://opporta.streamlit.app
+         on the deployed app, automatically, with no hard-coding.
+      3. The deployed URL as a safe last resort.
+
+    Whatever value is produced MUST also be listed in Supabase →
+    Authentication → URL Configuration → Redirect URLs.
+    """
+    explicit = os.getenv("APP_URL") or _secret("APP_URL")
+    if explicit:
+        return explicit.rstrip("/")
+    try:
+        from urllib.parse import urlparse
+        _u = urlparse(st.context.url)          # actual browser URL (Streamlit ≥1.40)
+        if _u.scheme and _u.netloc:
+            return f"{_u.scheme}://{_u.netloc}"
+    except Exception:
+        pass
+    return "https://opporta.streamlit.app"
+
+
+def _google_signin_button(lang: str, key: str) -> None:
+    """Render a 'Continue with Google' button that starts Supabase Google OAuth.
+
+    Supabase returns the provider URL only when the Google provider is enabled in
+    the project (Authentication → Providers → Google, with a Google Cloud OAuth
+    Client ID + Secret). If it isn't configured we guide the admin instead of
+    failing silently. On success the browser is sent to Google; the return is
+    handled by the OAuth fragment handler at the top of this file."""
+    if st.button("◉  " + i18n.t("continue_google", lang), key=key, width="stretch"):
+        try:
+            _url = accounts.get_google_oauth_url(
+                _app_redirect_url(),
+                supabase_url=_secret("SUPABASE_URL") or _secret("supabase_url"),
+                supabase_key=_secret("SUPABASE_KEY") or _secret("supabase_key"))
+        except Exception:
+            _url = None
+        if _url:
+            _stc.html(
+                "<script>var w=(window.parent!==window)?window.parent:window;"
+                f"w.location.href={json.dumps(_url)};</script>", height=0)
+            st.info("Redirecting to Google…")
+            st.stop()
+        else:
+            st.warning(
+                "Google sign-in isn't enabled yet. Admin: in Supabase → "
+                "Authentication → Providers → Google, add a Google Cloud OAuth "
+                "Client ID & Secret, then add this app's URL to the allowed "
+                "redirect list. Email/password sign-in works in the meantime.")
+
+
+def _forgot_password_ui(lang: str, key_prefix: str) -> None:
+    """A compact 'Forgot password?' expander: emails a Supabase reset link."""
+    with st.expander("🔑  " + i18n.t("forgot_password", lang)):
+        _fpe = st.text_input(i18n.t("reset_email_label", lang),
+                             key=f"{key_prefix}_fp_email", placeholder="you@gmail.com")
+        if st.button(i18n.t("send_reset_link", lang), key=f"{key_prefix}_fp_send",
+                     width="stretch"):
+            if not _fpe.strip():
+                st.warning(i18n.t("reset_email_label", lang))
+            else:
+                _ok, _msg = accounts.send_password_reset(_fpe, _app_redirect_url())
+                if _ok:
+                    st.success(_msg)
+                elif _msg == "RATE_LIMIT":
+                    st.warning("⏳ Too many requests right now — please wait a few minutes and retry.")
+                else:
+                    st.error(_msg)
+
 @st.cache_data(ttl=300)
 def load_table(name: str) -> pd.DataFrame:
     url = _secret("SUPABASE_URL") or _secret("supabase_url")
@@ -924,6 +1080,13 @@ def _render_bid_workshop() -> None:
                                     accept_multiple_files=True, key="ws_firm_docs",
                                     label_visibility="collapsed")
 
+        _wlang = st.session_state.get("lang", "en")
+        st.markdown(f"**Step 3 — {i18n.t('bid_language', _wlang)}**")
+        _ws_lang_lbl = st.radio(i18n.t("bid_language", _wlang), ["English", "हिंदी"],
+                                index=(1 if _wlang == "hi" else 0), horizontal=True,
+                                key="ws_bid_lang", label_visibility="collapsed")
+        _ws_lang = "hi" if _ws_lang_lbl == "हिंदी" else "en"
+
         if st.button("⚡  Generate Ready-to-Bid File", width="stretch", key="ws_generate"):
             if not _ws_tender:
                 st.warning("Upload the tender document first.")
@@ -945,8 +1108,10 @@ def _render_bid_workshop() -> None:
                     _ws_t   = bid_engine.extract_tender(_ws_tender.read(),
                                                         _ws_tender.type or "application/pdf")
                     _ws_chk = bid_engine.readiness_check(_ws_t, profile, _ws_firm_texts)
-                    _ws_bid = bid_engine.generate_bid_content(_ws_t, profile, _ws_firm_texts)
-                    _ws_docx = bid_engine.build_docx(_ws_bid, _ws_t, profile) if _ws_bid else None
+                    _ws_bid = bid_engine.generate_bid_content(_ws_t, profile, _ws_firm_texts,
+                                                              language=_ws_lang)
+                    _ws_docx = bid_engine.build_docx(_ws_bid, _ws_t, profile,
+                                                     language=_ws_lang) if _ws_bid else None
 
                 if _ws_t.get("_extraction_failed"):
                     st.session_state.pop("ws_result", None)
@@ -1170,6 +1335,85 @@ def _portal_region(title: str, subtitle: str, items: list, cols: int = 2) -> Non
     for _i, (_label, _url) in enumerate(items):
         _cols[_i % cols].link_button(_label, _url, width="stretch")
 
+# ── LOCALSTORAGE SESSION LOCK ─────────────────────────────────────────────────
+# When authenticated: write credentials to localStorage so they survive a
+# server-side session drop. When NOT authenticated (and we haven't probed yet
+# this session): inject a JS snippet that reads localStorage and does a one-time
+# redirect with the credentials as query params for the recovery block above.
+# Uses window.parent so the navigation targets the main Streamlit page, not
+# the component iframe. _ls_checked prevents the probe from firing more than
+# once per session, avoiding any redirect loops.
+def _sync_session_storage() -> None:
+    if st.session_state.authenticated:
+        _stc.html(
+            "<script>try{"
+            f"localStorage.setItem('_op_e',{json.dumps(st.session_state.email)});"
+            f"localStorage.setItem('_op_t',{json.dumps(st.session_state.get('sb_token',''))});"
+            f"localStorage.setItem('_op_r',{json.dumps(st.session_state.get('sb_refresh',''))});"
+            "}catch(x){}</script>",
+            height=0)
+    elif not st.session_state._ls_checked:
+        st.session_state._ls_checked = True
+        _stc.html(
+            "<script>(function(){"
+            "try{"
+            "var e=localStorage.getItem('_op_e');"
+            "var t=localStorage.getItem('_op_t');"
+            "var r=localStorage.getItem('_op_r')||'';"
+            "if(e&&t){"
+            "var w=(window.parent!==window)?window.parent:window;"
+            "var u=new URL(w.location.href);"
+            "if(!u.searchParams.get('_rce')){"
+            "u.searchParams.set('_rce',e);"
+            "u.searchParams.set('_rct',t);"
+            "if(r){u.searchParams.set('_rcr',r);}"
+            "w.location.replace(u.toString());}}"
+            "}catch(x){}})();</script>",
+            height=0)
+
+# ── PASSWORD-RESET SCREEN ────────────────────────────────────────────────────
+# Shown when the user arrives from a Supabase password-reset email link
+# (type=recovery, captured by the OAuth fragment handler above → _pwreset flag).
+# We collect a new password, set it via the recovery token, then send the user
+# back to a normal login. Gated with st.stop() so nothing else renders meanwhile.
+if st.session_state.get("show_pw_reset"):
+    _rlang = st.session_state.get("lang", "en")
+    _rlogo = (f'<img src="{_LOGO_URI}" style="width:64px;height:64px;display:block;'
+              f'margin:0 auto 14px;border-radius:14px">' if _LOGO_URI else '')
+    st.markdown(
+        f'<div style="max-width:460px;margin:6vh auto 0;text-align:center">{_rlogo}'
+        f'<h2 style="color:#F1F5F9;margin-bottom:18px">{i18n.t("set_new_password", _rlang)}</h2>'
+        f'</div>', unsafe_allow_html=True)
+    _rc = st.columns([1, 2, 1])[1]
+    with _rc:
+        _np1 = st.text_input(i18n.t("new_password", _rlang), type="password", key="pwr_np1")
+        _np2 = st.text_input(i18n.t("confirm_password", _rlang), type="password", key="pwr_np2")
+        if st.button(i18n.t("update_password", _rlang), width="stretch", key="pwr_btn"):
+            if not _np1 or len(_np1) < 6:
+                st.error(i18n.t("pw_min_len", _rlang))
+            elif _np1 != _np2:
+                st.error(i18n.t("passwords_no_match", _rlang))
+            else:
+                _ok, _msg = accounts.update_password(
+                    _np1, st.session_state.get("pw_reset_token", ""),
+                    st.session_state.get("pw_reset_refresh", ""))
+                if _ok:
+                    st.session_state.show_pw_reset    = False
+                    st.session_state.pw_reset_token   = ""
+                    st.session_state.pw_reset_refresh = ""
+                    st.success(_msg)
+                    st.balloons()
+                else:
+                    st.error(_msg)
+        if st.button(i18n.t("back_to_login", _rlang), key="pwr_cancel"):
+            st.session_state.show_pw_reset    = False
+            st.session_state.pw_reset_token   = ""
+            st.session_state.pw_reset_refresh = ""
+            st.rerun()
+    st.stop()
+
+_sync_session_storage()
+
 # ── SIDEBAR ───────────────────────────────────────────────────────────────────
 with st.sidebar:
     _limg = f'<img src="{_LOGO_URI}" style="width:72px;height:72px;display:block;margin:0 auto 8px;border-radius:14px;box-shadow:0 0 24px rgba(0,196,255,.35)">' if _LOGO_URI else ''
@@ -1180,9 +1424,22 @@ with st.sidebar:
       <div class="sb-tagline">Every Opportunity · One Platform</div>
     </div>""", unsafe_allow_html=True)
 
+    # ── Language toggle (English / हिंदी) — for first-time & village users ──
+    _cur_lang = st.session_state.get("lang", "en")
+    _picked_lang = st.radio(
+        i18n.t("language", _cur_lang), ["English", "हिंदी"],
+        index=(1 if _cur_lang == "hi" else 0),
+        horizontal=True, key="lang_radio", label_visibility="collapsed")
+    st.session_state.lang = "hi" if _picked_lang == "हिंदी" else "en"
+    lang = st.session_state.lang
+
     if not st.session_state.authenticated:
         st.markdown('<div class="auth-panel">', unsafe_allow_html=True)
         st.markdown('<div class="auth-label">Secure Sign In</div>', unsafe_allow_html=True)
+        _google_signin_button(lang, key="g_signin_sidebar")
+        st.markdown(
+            f"<div style='text-align:center;color:#64748B;font-size:.7rem;margin:8px 0'>— {i18n.t('or', lang)} —</div>",
+            unsafe_allow_html=True)
         auth_email = st.text_input("Email", key="auth_e",
                                    label_visibility="collapsed",
                                    placeholder="contractor@firm.com")
@@ -1191,25 +1448,28 @@ with st.sidebar:
                                 placeholder="Password")
         c1, c2 = st.columns(2)
         if c1.button("Login", width="stretch"):
-            ok, msg, token = accounts.login_user(auth_email, auth_pw)
+            ok, msg, token, refresh = accounts.login_user(auth_email, auth_pw)
             if ok:
                 st.session_state.authenticated = True
                 st.session_state.email    = auth_email.strip().lower()
                 st.session_state.sb_token = token or ""
+                st.session_state.sb_refresh = refresh or ""
                 st.session_state.current_page = "📄  Tenders"
                 st.rerun()
             elif msg in ("EMAIL_NOT_CONFIRMED", "RATE_LIMIT"):
                 st.warning("📧 Please confirm your email (check inbox/spam), then log in — or wait a moment and retry.")
             else:
                 st.error(msg)
+        _forgot_password_ui(lang, "sb")
         if c2.button("Register", width="stretch"):
             ok, msg = accounts.register_user(auth_email, auth_pw)
             if ok:
-                lok, _lm, token = accounts.login_user(auth_email, auth_pw)
+                lok, _lm, token, refresh = accounts.login_user(auth_email, auth_pw)
                 if lok:
                     st.session_state.authenticated = True
                     st.session_state.email    = auth_email.strip().lower()
                     st.session_state.sb_token = token or ""
+                    st.session_state.sb_refresh = refresh or ""
                     st.session_state.current_page = "📄  Tenders"
                     st.rerun()
                 else:
@@ -1227,11 +1487,11 @@ with st.sidebar:
         # Exactly 5 primary modules. Analytics + Alerts fold into Dashboard,
         # the AI Workspace opens from a tender's detail, the Vault lives under Profile.
         pages = [
-            "👤  Profile", "📄  Tenders", "💼  Jobs", "📊  Analytics",
+            "🏠  Dashboard", "👤  Profile", "📄  Tenders", "💼  Jobs", "📊  Analytics",
         ]
         for p in pages:
             is_active = st.session_state.current_page == p
-            if st.button(p, width="stretch",
+            if st.button(i18n.nav_label(p, lang), key=f"nav_{p}", width="stretch",
                          type="primary" if is_active else "secondary"):
                 st.session_state.current_page = p
                 st.rerun()
@@ -1242,12 +1502,21 @@ with st.sidebar:
           <div class="session-email">{st.session_state.email}</div>
         </div>""", unsafe_allow_html=True)
 
-        if st.button("⏏  Log Out", width="stretch"):
-            st.session_state.authenticated  = False
-            st.session_state.email          = ""
-            st.session_state.sb_token       = ""
+        if st.button("⏏  " + i18n.t("logout", lang), width="stretch"):
+            st.session_state.authenticated    = False
+            st.session_state.email            = ""
+            st.session_state.sb_token         = ""
+            st.session_state.sb_refresh       = ""
             st.session_state.entered_platform = False
-            st.session_state.auth_mode      = "login"
+            st.session_state.auth_mode        = "login"
+            st.session_state._ls_checked      = False
+            _stc.html(
+                "<script>try{"
+                "localStorage.removeItem('_op_e');"
+                "localStorage.removeItem('_op_t');"
+                "localStorage.removeItem('_op_r');"
+                "}catch(x){}</script>",
+                height=0)
             st.rerun()
 
 # ── GLOBAL CONTEXT ────────────────────────────────────────────────────────────
@@ -1369,9 +1638,8 @@ total_value     = df_t["value_lakhs"].fillna(0).sum() if not df_t.empty and "val
 
 page = st.session_state.current_page
 
-# Once authenticated, Dashboard/Explore fold into Tenders (cleaner 4-tab nav:
-# Tenders · Jobs · Analytics · Profile). Redirect any stale page to Tenders.
-if st.session_state.authenticated and (("Dashboard" in page) or ("Explore" in page)):
+# Redirect stale "Explore" page references to Tenders.
+if st.session_state.authenticated and ("Explore" in page):
     st.session_state.current_page = "📄  Tenders"
     page = "📄  Tenders"
 
@@ -1379,25 +1647,34 @@ if st.session_state.authenticated and (("Dashboard" in page) or ("Explore" in pa
 # A single hamburger menu that works everywhere (popover on desktop & mobile),
 # in addition to the sidebar (desktop) and bottom bar (phone).
 if st.session_state.authenticated:
+    _menu_lbl = "☰  " + i18n.t("nav_menu", lang)
     try:
-        _hmenu = st.popover("☰  Menu", use_container_width=False)
+        _hmenu = st.popover(_menu_lbl, use_container_width=False)
     except Exception:
-        _hmenu = st.expander("☰  Menu")
+        _hmenu = st.expander(_menu_lbl)
     with _hmenu:
-        st.markdown("**Go to**")
-        for _ml, _mp in [("👤  Profile", "👤  Profile"), ("📄  Tenders", "📄  Tenders"),
-                         ("💼  Jobs", "💼  Jobs"), ("📊  Analytics", "📊  Analytics")]:
-            if st.button(_ml, key=f"hm_{_mp}", width="stretch",
+        st.markdown(f"**{i18n.t('go_to', lang)}**")
+        for _mp in ["🏠  Dashboard", "👤  Profile", "📄  Tenders", "💼  Jobs", "📊  Analytics"]:
+            if st.button(i18n.nav_label(_mp, lang), key=f"hm_{_mp}", width="stretch",
                          type="primary" if st.session_state.current_page == _mp else "secondary"):
                 st.session_state.current_page = _mp
                 st.rerun()
         st.divider()
-        if st.button("⏏  Log out", key="hm_logout", width="stretch"):
-            st.session_state.authenticated = False
-            st.session_state.email = ""
-            st.session_state.sb_token = ""
+        if st.button("⏏  " + i18n.t("logout", lang), key="hm_logout", width="stretch"):
+            st.session_state.authenticated    = False
+            st.session_state.email            = ""
+            st.session_state.sb_token         = ""
+            st.session_state.sb_refresh       = ""
             st.session_state.entered_platform = False
-            st.session_state.auth_mode = "login"
+            st.session_state.auth_mode        = "login"
+            st.session_state._ls_checked      = False
+            _stc.html(
+                "<script>try{"
+                "localStorage.removeItem('_op_e');"
+                "localStorage.removeItem('_op_t');"
+                "localStorage.removeItem('_op_r');"
+                "}catch(x){}</script>",
+                height=0)
             st.rerun()
 
 # ── MOBILE BOTTOM TAB BAR (fixed, thumb-friendly — visible only on phones) ─────
@@ -1405,18 +1682,22 @@ if st.session_state.authenticated:
 # pin to the bottom of the viewport in CSS. Hidden on desktop (sidebar takes over).
 if st.session_state.authenticated:
     _bottom_items = [
+        ("🏠", "Home",      "🏠  Dashboard"),
         ("👤", "Profile",   "👤  Profile"),
         ("📄", "Tenders",   "📄  Tenders"),
         ("💼", "Jobs",      "💼  Jobs"),
         ("📊", "Analytics", "📊  Analytics"),
     ]
+    _bnav_keys = {"Home": "nav_home", "Profile": "nav_profile", "Tenders": "nav_tenders",
+                  "Jobs": "nav_jobs", "Analytics": "nav_analytics"}
     _mnav = st.container(key="mobilenav")
     with _mnav:
         _mcols = st.columns(len(_bottom_items))
         for _col, (_icon, _lbl, _pg) in zip(_mcols, _bottom_items):
             _is_active = st.session_state.current_page == _pg
+            _lbl_t = i18n.t(_bnav_keys.get(_lbl, _lbl), lang)
             # two trailing spaces + newline → markdown hard break → icon over label
-            if _col.button(f"{_icon}  \n{_lbl}", key=f"bnav_{_pg}",
+            if _col.button(f"{_icon}  \n{_lbl_t}", key=f"bnav_{_pg}",
                            width="stretch",
                            type="primary" if _is_active else "secondary"):
                 st.session_state.current_page = _pg
@@ -1502,6 +1783,13 @@ if "Dashboard" in page:
 
                 st.markdown("<div style='height:12px'></div>", unsafe_allow_html=True)
 
+                # ── Continue with Google (works for both login & register) ──
+                _google_signin_button(lang, key="g_signin_hero")
+                st.markdown(
+                    f"<div style='text-align:center;color:#64748B;font-size:.72rem;"
+                    f"letter-spacing:.08em;margin:10px 0 6px'>— {i18n.t('or', lang)} —</div>",
+                    unsafe_allow_html=True)
+
                 # ── LOGIN ──
                 if st.session_state.auth_mode == "login":
                     _le = st.text_input("Email", key="li_email",
@@ -1512,11 +1800,12 @@ if "Dashboard" in page:
                                         label_visibility="collapsed")
                     if st.button("Login  →", width="stretch", key="do_login"):
                         if _le and _lp:
-                            ok, msg, token = accounts.login_user(_le, _lp)
+                            ok, msg, token, refresh = accounts.login_user(_le, _lp)
                             if ok:
                                 st.session_state.authenticated = True
                                 st.session_state.email = _le.strip().lower()
                                 st.session_state.sb_token = token or ""
+                                st.session_state.sb_refresh = refresh or ""
                                 st.session_state.entered_platform = False
                                 st.rerun()
                             elif msg == "EMAIL_NOT_CONFIRMED":
@@ -1527,6 +1816,7 @@ if "Dashboard" in page:
                                 st.error(msg)
                         else:
                             st.warning("Enter email and password.")
+                    _forgot_password_ui(lang, "hero")
 
                 # ── REGISTER: direct signup (no OTP email — instant) ──
                 elif st.session_state.auth_mode == "register":
@@ -1546,11 +1836,12 @@ if "Dashboard" in page:
                             ok, msg = accounts.register_user(_re, _rp)
                             if ok:
                                 # Immediately log in — no email round-trip.
-                                lok, lmsg, token = accounts.login_user(_re, _rp)
+                                lok, lmsg, token, refresh = accounts.login_user(_re, _rp)
                                 if lok:
                                     st.session_state.authenticated = True
                                     st.session_state.email = _re.strip().lower()
                                     st.session_state.sb_token = token or ""
+                                    st.session_state.sb_refresh = refresh or ""
                                     st.session_state.entered_platform = False
                                     st.rerun()
                                 elif lmsg == "EMAIL_NOT_CONFIRMED":
@@ -1810,6 +2101,13 @@ if "Dashboard" in page:
                                         accept_multiple_files=True, key="ws_firm_docs",
                                         label_visibility="collapsed")
 
+            _wlang = st.session_state.get("lang", "en")
+            st.markdown(f"**Step 3 — {i18n.t('bid_language', _wlang)}**")
+            _ws_lang_lbl = st.radio(i18n.t("bid_language", _wlang), ["English", "हिंदी"],
+                                    index=(1 if _wlang == "hi" else 0), horizontal=True,
+                                    key="ws_bid_lang_dash", label_visibility="collapsed")
+            _ws_lang = "hi" if _ws_lang_lbl == "हिंदी" else "en"
+
             if st.button("⚡  Generate Ready-to-Bid File", width="stretch", key="ws_generate"):
                 if not _ws_tender:
                     st.warning("Upload the tender document first.")
@@ -1832,8 +2130,10 @@ if "Dashboard" in page:
                         _ws_t   = bid_engine.extract_tender(_ws_tender.read(),
                                                             _ws_tender.type or "application/pdf")
                         _ws_chk = bid_engine.readiness_check(_ws_t, profile, _ws_firm_texts)
-                        _ws_bid = bid_engine.generate_bid_content(_ws_t, profile, _ws_firm_texts)
-                        _ws_docx = bid_engine.build_docx(_ws_bid, _ws_t, profile) if _ws_bid else None
+                        _ws_bid = bid_engine.generate_bid_content(_ws_t, profile, _ws_firm_texts,
+                                                                  language=_ws_lang)
+                        _ws_docx = bid_engine.build_docx(_ws_bid, _ws_t, profile,
+                                                         language=_ws_lang) if _ws_bid else None
 
                     if _ws_t.get("_extraction_failed"):
                         st.session_state.pop("ws_result", None)
@@ -2243,21 +2543,41 @@ elif "Tenders" in page:
         </div>""", unsafe_allow_html=True)
 
         with st.expander(f"➕ Save · ⚡ Analyze · more details"):
-            dc1, dc2 = st.columns(2)
-            dc1.write(f"**Organization:** {_v(rec.get('organization'))}")
-            dc1.write(f"**Category:** {_v(rec.get('category'))}")
-            dc1.write(f"**District:** {district}")
-            dc1.write(f"**State:** {_v(rec.get('state'))}")
-            dc2.write(f"**Estimated Value:** {val}")
-            dc2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
-            dc2.write(f"**Contractor Class:** {_v(rec.get('contractor_class'))}")
+            _lang = st.session_state.get("lang", "en")
+            _exp  = i18n.tender_explainer(rec, _lang)
+
+            # ── Plain-language: what this tender is about ──
+            st.markdown(f"**📋 {i18n.t('about_this_tender', _lang)}**")
+            st.write(_exp["about"])
+
+            # ── Key facts (two compact columns) ──
+            if _exp["facts"]:
+                _fc1, _fc2 = st.columns(2)
+                for _i, (_flabel, _fval) in enumerate(_exp["facts"]):
+                    (_fc1 if _i % 2 == 0 else _fc2).markdown(f"**{_flabel}:** {_fval}")
+
+            # ── How to take part (simple numbered steps) ──
+            st.markdown(f"**🪜 {i18n.t('how_to_take_part', _lang)}**")
+            for _i, _step in enumerate(_exp["steps"], 1):
+                st.markdown(f"{_i}. {_step}")
+
+            # ── Money & deposits you will need (EMD/TDR · solvency · form fee) ──
+            st.markdown(f"**💰 {i18n.t('money_requirements', _lang)}**")
+            for _m in i18n.tender_money_reqs(rec, _lang):
+                st.markdown(
+                    f"- **{_m['label']}** — {_m['value']}  \n"
+                    f"  <span style='color:#7C8AA0;font-size:.85em'>{_m['meaning']}</span>",
+                    unsafe_allow_html=True)
+            st.caption("ℹ️ " + i18n.t("official_doc_note", _lang))
+
             if rec.get("description"):
                 st.write(_v(rec.get("description")))
             doc_url = rec.get("document_url")
             if doc_url and str(doc_url) not in ("nan","None","—",""):
                 _pdf_widget(doc_url, rec.get("source_id",""), ctx="exp")
             if st.session_state.authenticated:
-                if st.button("➕ Save to Pipeline", key=_rec_key("e_save", rec), width="stretch"):
+                if st.button("➕ " + i18n.t("save_pipeline", _lang),
+                             key=_rec_key("e_save", rec), width="stretch"):
                     accounts.save_tender(email, rec.get("source_id"), token=_token)
                     st.toast("✓ Saved to your pipeline")
 
@@ -2776,15 +3096,20 @@ elif "Workspace" in page:
                 st.info("Add GEMINI_API_KEY to .env to enable Opporta Intelligence bid drafting.")
             else:
                 st.caption("⚠️ This drafts a bid document template based on your inputs. Review, verify, and sign before official submission. Opporta does not guarantee tender award.")
+                _wk_lang0 = st.session_state.get("lang", "en")
+                _wk_lang_lbl = st.radio(i18n.t("bid_language", _wk_lang0), ["English", "हिंदी"],
+                                        index=(1 if _wk_lang0 == "hi" else 0), horizontal=True,
+                                        key="wk_bid_lang")
+                _wk_lang = "hi" if _wk_lang_lbl == "हिंदी" else "en"
                 if st.button("📝 Draft Bid Document (.docx)", width="stretch", key="bid_gen"):
                     core.clear_ai_error()
                     with st.spinner("Drafting bid document — this takes ~30 seconds..."):
                         bid_content = bid_engine.generate_bid_content(
-                            st.session_state.bid_tender, profile, vault_texts)
+                            st.session_state.bid_tender, profile, vault_texts, language=_wk_lang)
                     if bid_content:
                         with st.spinner("Compiling Word document..."):
                             docx_bytes = bid_engine.build_docx(
-                                bid_content, st.session_state.bid_tender, profile)
+                                bid_content, st.session_state.bid_tender, profile, language=_wk_lang)
                         title_raw = st.session_state.bid_tender.get("title") or "bid"
                         safe_name = "".join(c if c.isalnum() or c in " _-" else "_"
                                             for c in title_raw[:40]).strip()
@@ -3065,7 +3390,7 @@ elif "Analytics" in page:
     def _chart_card(title, fig):
         st.markdown(f'<div class="chart-card"><div class="chart-title">{title}</div></div>',
                     unsafe_allow_html=True)
-        st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     st.markdown("""<div class="sec-hd">
       <span class="sec-title">📊 Market Intelligence</span>
@@ -3142,7 +3467,6 @@ elif "Analytics" in page:
                 org_counts = df_t["organization"].dropna().value_counts().head(10)
                 _chart_card("Top Organizations by Tender Count",
                             _bar(org_counts, color="#1B6CF7", horizontal=True))
-            st.markdown('</div>', unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── PROFILE ───────────────────────────────────────────────────────────────────

@@ -110,6 +110,54 @@ def t(key: str, lang: str = DEFAULT_LANG) -> str:
     return entry.get(lang) or entry.get("en") or key
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Phrase translator — map a whole English UI phrase straight to Hindi. Lets us
+# translate headings / buttons / labels in place without inventing a key for each.
+# Unknown phrases fall back to the original English, so nothing ever breaks.
+# ──────────────────────────────────────────────────────────────────────────────
+TR_HI: dict[str, str] = {
+    # ── Section headers ──
+    "🛠 Bid Workshop":            "🛠 बिड वर्कशॉप",
+    "📋 Active Tenders":          "📋 सक्रिय टेंडर",
+    "🔔 Smart Pipeline Alerts":   "🔔 स्मार्ट पाइपलाइन अलर्ट",
+    "💼 Latest Government Jobs":   "💼 नवीनतम सरकारी नौकरियाँ",
+    "📄 Tender Portal":           "📄 टेंडर पोर्टल",
+    "Tender Document Evaluator":  "टेंडर दस्तावेज़ मूल्यांकन",
+    "Resume Analyzer":            "रिज़्यूमे विश्लेषक",
+    "Bid Document Drafter":       "बिड दस्तावेज़ ड्राफ्टर",
+    "💼 Government Job Board":     "💼 सरकारी नौकरी बोर्ड",
+    "📊 Market Intelligence":     "📊 बाज़ार जानकारी",
+    "👤 My Profile":              "👤 मेरी प्रोफ़ाइल",
+    "📋 My Saved Tender Pipeline":"📋 मेरी सहेजी टेंडर सूची",
+    # ── Common filters / labels ──
+    "Search":                     "खोजें",
+    "State":                      "राज्य",
+    "District":                   "ज़िला",
+    "Category":                   "श्रेणी",
+    "All":                        "सभी",
+    "Status":                     "स्थिति",
+    "Deadline":                   "अंतिम तिथि",
+    "Value":                      "मूल्य",
+    "Organization":               "विभाग",
+    # ── Common buttons / actions ──
+    "Login":                      "लॉगिन",
+    "Register":                   "रजिस्टर",
+    "Log Out":                    "लॉग आउट",
+    "Save":                       "सहेजें",
+    "Search jobs":                "नौकरियाँ खोजें",
+    # ── Common messages ──
+    "No results found":           "कोई परिणाम नहीं मिला",
+    "results found":              "परिणाम मिले",
+}
+
+
+def tr(text: str, lang: str = DEFAULT_LANG) -> str:
+    """Translate a full English UI phrase to `lang`. Unknown text returns as-is."""
+    if lang == "en" or not text:
+        return text
+    return TR_HI.get(text.strip(), text)
+
+
 def nav_label(page_key: str, lang: str = DEFAULT_LANG) -> str:
     """Translate a nav page key like '📄  Tenders' → keeps the emoji, swaps the word.
 

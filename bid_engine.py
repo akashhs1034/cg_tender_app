@@ -320,8 +320,14 @@ def readiness_check(tender: dict, profile: dict, vault_texts: list[str]) -> dict
 # ---------------------------------------------------------------------------
 
 def generate_bid_content(tender: dict, profile: dict,
-                          vault_texts: list[str]) -> dict | None:
-    """Call Claude to generate the complete bid document content as JSON."""
+                          vault_texts: list[str],
+                          language: str = "en") -> dict | None:
+    """Call Claude to generate the complete bid document content as JSON.
+
+    language: 'en' (English) or 'hi' (Hindi / Devanagari). The JSON KEYS stay
+    English (build_docx relies on them); only the human-readable VALUES are
+    written in the chosen language.
+    """
     cname    = profile.get("company_name") or "Our Firm"
     cls      = profile.get("contractor_class") or "Class C"
     exp      = profile.get("experience_years") or 0
@@ -330,8 +336,17 @@ def generate_bid_content(tender: dict, profile: dict,
     states   = ", ".join(profile.get("states") or ["Chhattisgarh"])
     vault_summary = (" ".join(vault_texts)[:1500]) if vault_texts else "No additional documents uploaded."
 
+    lang_directive = ""
+    if str(language).lower().startswith("hi"):
+        lang_directive = (
+            "\nIMPORTANT LANGUAGE RULE: Write every human-readable text VALUE in "
+            "formal Hindi (Devanagari script) suitable for an Indian government "
+            "tender. Keep all JSON keys, the structure, proper nouns, numbers, "
+            "currency and the word 'EMD/GST/PAN' in English/as-is. Do NOT translate "
+            "the JSON field names.\n")
+
     PROMPT = f"""You are an expert Indian government tender bid writing consultant.
-Create a complete, professional, and highly personalized bid package.
+Create a complete, professional, and highly personalized bid package.{lang_directive}
 
 TENDER DETAILS:
 Title: {tender.get('title','—')}
@@ -445,14 +460,69 @@ def _coerce_to_dict(result) -> dict | None:
 # Step 4 -- Compile DOCX
 # ---------------------------------------------------------------------------
 
-def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
-    """Compile bid JSON into a professional Word document. Returns raw bytes."""
+# Static DOCX labels (the AI-written body text is already in the chosen language;
+# these are the fixed headings/labels the template prints around it).
+_DOCX_LABELS = {
+    "en": {
+        "bid_document": "BID DOCUMENT", "tender_no": "Tender No", "issued_by": "Issued by",
+        "submitted_by": "Submitted by", "date": "Date", "cover_letter": "COVER LETTER",
+        "to_authority": "To The Tendering Authority,", "salutation": "Respected Sir/Madam,",
+        "yours_faithfully": "Yours faithfully,", "authorized_signatory": "Authorized Signatory",
+        "sec_company": "SECTION 1 — COMPANY PROFILE", "firm_details": "Firm Details",
+        "company_name": "Company Name", "contractor_class": "Contractor Class",
+        "annual_turnover": "Annual Turnover", "experience": "Experience",
+        "sectors": "Sectors", "states": "States", "key_strengths": "Key Strengths",
+        "sec_technical": "SECTION 2 — TECHNICAL PROPOSAL",
+        "t_scope": "2.1  Scope Understanding", "t_method": "2.2  Execution Methodology",
+        "t_team": "2.3  Team Structure", "t_qa": "2.4  Quality Assurance",
+        "t_timeline": "2.5  Timeline", "sec_compliance": "SECTION 3 — COMPLIANCE MATRIX",
+        "compliance_intro": "Confirmation of compliance with each tender requirement:",
+        "h_requirement": "Requirement", "h_response": "Our Response", "h_status": "Status",
+        "sec_checklist": "SECTION 4 — DOCUMENT CHECKLIST",
+        "checklist_intro": "Documents enclosed with this bid submission:",
+        "h_sr": "Sr.", "h_document": "Document", "declaration": "DECLARATION",
+        "years": "years", "signatory_seal": "Authorized Signatory  |  Seal",
+    },
+    "hi": {
+        "bid_document": "बिड दस्तावेज़", "tender_no": "टेंडर क्रमांक", "issued_by": "जारीकर्ता",
+        "submitted_by": "प्रस्तुतकर्ता", "date": "दिनांक", "cover_letter": "कवर लेटर",
+        "to_authority": "सेवा में, निविदा प्राधिकारी,", "salutation": "महोदय/महोदया,",
+        "yours_faithfully": "भवदीय,", "authorized_signatory": "अधिकृत हस्ताक्षरकर्ता",
+        "sec_company": "खंड 1 — कंपनी प्रोफ़ाइल", "firm_details": "फर्म विवरण",
+        "company_name": "कंपनी का नाम", "contractor_class": "ठेकेदार श्रेणी",
+        "annual_turnover": "वार्षिक टर्नओवर", "experience": "अनुभव",
+        "sectors": "क्षेत्र", "states": "राज्य", "key_strengths": "मुख्य ताकतें",
+        "sec_technical": "खंड 2 — तकनीकी प्रस्ताव",
+        "t_scope": "2.1  कार्य की समझ", "t_method": "2.2  कार्य-निष्पादन पद्धति",
+        "t_team": "2.3  टीम संरचना", "t_qa": "2.4  गुणवत्ता आश्वासन",
+        "t_timeline": "2.5  समय-सीमा", "sec_compliance": "खंड 3 — अनुपालन मैट्रिक्स",
+        "compliance_intro": "प्रत्येक निविदा आवश्यकता के अनुपालन की पुष्टि:",
+        "h_requirement": "आवश्यकता", "h_response": "हमारा उत्तर", "h_status": "स्थिति",
+        "sec_checklist": "खंड 4 — दस्तावेज़ सूची",
+        "checklist_intro": "इस बोली के साथ संलग्न दस्तावेज़:",
+        "h_sr": "क्र.", "h_document": "दस्तावेज़", "declaration": "घोषणा",
+        "years": "वर्ष", "signatory_seal": "अधिकृत हस्ताक्षरकर्ता  |  मुहर",
+    },
+}
+
+
+def build_docx(bid: dict, tender: dict, profile: dict, language: str = "en") -> bytes:
+    """Compile bid JSON into a professional Word document. Returns raw bytes.
+
+    language: 'en' or 'hi' — selects the fixed heading/label language. The AI body
+    text inside `bid` is already in the language chosen at generation time.
+    """
     try:
         from docx import Document
         from docx.shared import Pt, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
     except ImportError:
         raise ImportError("python-docx required: pip install python-docx")
+
+    _lang = "hi" if str(language).lower().startswith("hi") else "en"
+    _LBL  = _DOCX_LABELS[_lang]
+    def lx(key: str) -> str:
+        return _LBL.get(key, _DOCX_LABELS["en"].get(key, key))
 
     doc   = Document()
     today = date.today().strftime("%d %B %Y")
@@ -472,7 +542,7 @@ def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
     # ---- Cover Page ----
     cp = doc.add_paragraph()
     cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r = cp.add_run("BID DOCUMENT")
+    r = cp.add_run(lx("bid_document"))
     r.bold, r.font.size, r.font.color.rgb = True, Pt(28), NAVY
 
     doc.add_paragraph()
@@ -483,27 +553,27 @@ def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
     info = doc.add_paragraph()
     info.alignment = WD_ALIGN_PARAGRAPH.CENTER
     info.add_run(
-        f"\nTender No: {tender.get('tender_no','—')}\n"
-        f"Issued by: {tender.get('organization','—')}\n"
-        f"Submitted by: {cname}\n"
-        f"Date: {today}"
+        f"\n{lx('tender_no')}: {tender.get('tender_no','—')}\n"
+        f"{lx('issued_by')}: {tender.get('organization','—')}\n"
+        f"{lx('submitted_by')}: {cname}\n"
+        f"{lx('date')}: {today}"
     )
     doc.add_page_break()
 
     # ---- Cover Letter ----
     cl = bid.get("cover_letter", {})
-    h("COVER LETTER", 1)
+    h(lx("cover_letter"), 1)
     doc.add_paragraph()
-    doc.add_paragraph(f"Date: {today}")
+    doc.add_paragraph(f"{lx('date')}: {today}")
     doc.add_paragraph()
-    doc.add_paragraph(cl.get("to", "To The Tendering Authority,"))
+    doc.add_paragraph(cl.get("to") or lx("to_authority"))
     doc.add_paragraph()
     p = doc.add_paragraph()
     p.add_run(cl.get("subject", "")).bold = True
     p = doc.add_paragraph()
     p.add_run(cl.get("ref", "")).italic = True
     doc.add_paragraph()
-    doc.add_paragraph(cl.get("salutation", "Respected Sir/Madam,"))
+    doc.add_paragraph(cl.get("salutation") or lx("salutation"))
     doc.add_paragraph()
     for para in (cl.get("body_paragraphs") or []):
         doc.add_paragraph(para)
@@ -511,19 +581,19 @@ def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
     if cl.get("closing"):
         doc.add_paragraph(cl["closing"])
     doc.add_paragraph()
-    doc.add_paragraph("Yours faithfully,")
+    doc.add_paragraph(lx("yours_faithfully"))
     sig = doc.add_paragraph()
-    sig.add_run(f"\n\n{'_' * 30}\n{cname}\nAuthorized Signatory\nDate: {today}")
+    sig.add_run(f"\n\n{'_' * 30}\n{cname}\n{lx('authorized_signatory')}\n{lx('date')}: {today}")
     doc.add_page_break()
 
     # ---- Company Profile ----
-    h("SECTION 1 — COMPANY PROFILE", 1)
+    h(lx("sec_company"), 1)
     cp_data = bid.get("company_profile", {})
     if cp_data.get("overview"):
         doc.add_paragraph(cp_data["overview"])
     doc.add_paragraph()
 
-    h("Firm Details", 2)
+    h(lx("firm_details"), 2)
     # Defensive: these may arrive as text strings (DB / profile) — a format spec on
     # a string raises ValueError and would crash the whole bid build mid-way.
     try:
@@ -539,12 +609,12 @@ def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
     tbl = doc.add_table(rows=0, cols=2)
     tbl.style = "Table Grid"
     for label, val in [
-        ("Company Name",     cname),
-        ("Contractor Class", profile.get("contractor_class","—")),
-        ("Annual Turnover",  f"Rs {_to_val:.0f} Lakhs"),
-        ("Experience",       f"{_exp_val} years"),
-        ("Sectors",          ", ".join(profile.get("sectors") or [])),
-        ("States",           ", ".join(profile.get("states") or [])),
+        (lx("company_name"),     cname),
+        (lx("contractor_class"), profile.get("contractor_class","—")),
+        (lx("annual_turnover"),  f"Rs {_to_val:.0f} Lakhs"),
+        (lx("experience"),       f"{_exp_val} {lx('years')}"),
+        (lx("sectors"),          ", ".join(profile.get("sectors") or [])),
+        (lx("states"),           ", ".join(profile.get("states") or [])),
     ]:
         row = tbl.add_row().cells
         row[0].text, row[1].text = label, str(val)
@@ -553,53 +623,53 @@ def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
 
     if cp_data.get("key_strengths"):
         doc.add_paragraph()
-        h("Key Strengths", 2)
+        h(lx("key_strengths"), 2)
         for s in cp_data["key_strengths"]:
             doc.add_paragraph(s, style="List Bullet")
     doc.add_page_break()
 
     # ---- Technical Proposal ----
-    h("SECTION 2 — TECHNICAL PROPOSAL", 1)
+    h(lx("sec_technical"), 1)
     tp = bid.get("technical_proposal", {})
 
     if tp.get("scope_understanding"):
         doc.add_paragraph()
-        h("2.1  Scope Understanding", 2)
+        h(lx("t_scope"), 2)
         doc.add_paragraph(tp["scope_understanding"])
 
     if tp.get("methodology"):
         doc.add_paragraph()
-        h("2.2  Execution Methodology", 2)
+        h(lx("t_method"), 2)
         for step in tp["methodology"]:
             doc.add_paragraph(step, style="List Bullet")
 
     if tp.get("team_structure"):
         doc.add_paragraph()
-        h("2.3  Team Structure", 2)
+        h(lx("t_team"), 2)
         doc.add_paragraph(tp["team_structure"])
 
     if tp.get("quality_assurance"):
         doc.add_paragraph()
-        h("2.4  Quality Assurance", 2)
+        h(lx("t_qa"), 2)
         doc.add_paragraph(tp["quality_assurance"])
 
     if tp.get("timeline_overview"):
         doc.add_paragraph()
-        h("2.5  Timeline", 2)
+        h(lx("t_timeline"), 2)
         doc.add_paragraph(tp["timeline_overview"])
 
     doc.add_page_break()
 
     # ---- Compliance Matrix ----
-    h("SECTION 3 — COMPLIANCE MATRIX", 1)
-    doc.add_paragraph("Confirmation of compliance with each tender requirement:")
+    h(lx("sec_compliance"), 1)
+    doc.add_paragraph(lx("compliance_intro"))
     doc.add_paragraph()
     matrix = bid.get("compliance_matrix") or []
     if matrix:
         mtbl = doc.add_table(rows=1, cols=3)
         mtbl.style = "Table Grid"
         hdr = mtbl.rows[0].cells
-        for i, txt in enumerate(["Requirement", "Our Response", "Status"]):
+        for i, txt in enumerate([lx("h_requirement"), lx("h_response"), lx("h_status")]):
             hdr[i].text = txt
             if hdr[i].paragraphs[0].runs:
                 hdr[i].paragraphs[0].runs[0].bold = True
@@ -611,15 +681,15 @@ def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
     doc.add_page_break()
 
     # ---- Document Checklist ----
-    h("SECTION 4 — DOCUMENT CHECKLIST", 1)
-    doc.add_paragraph("Documents enclosed with this bid submission:")
+    h(lx("sec_checklist"), 1)
+    doc.add_paragraph(lx("checklist_intro"))
     doc.add_paragraph()
     checklist = bid.get("document_checklist") or []
     if checklist:
         dtbl = doc.add_table(rows=1, cols=3)
         dtbl.style = "Table Grid"
         hdr  = dtbl.rows[0].cells
-        for i, txt in enumerate(["Sr.", "Document", "Status"]):
+        for i, txt in enumerate([lx("h_sr"), lx("h_document"), lx("h_status")]):
             hdr[i].text = txt
             if hdr[i].paragraphs[0].runs:
                 hdr[i].paragraphs[0].runs[0].bold = True
@@ -631,15 +701,15 @@ def build_docx(bid: dict, tender: dict, profile: dict) -> bytes:
     doc.add_page_break()
 
     # ---- Declaration ----
-    h("DECLARATION", 1)
+    h(lx("declaration"), 1)
     doc.add_paragraph()
     doc.add_paragraph(bid.get("declaration","We declare that all information provided is true and correct."))
     doc.add_paragraph()
-    doc.add_paragraph(f"Date: {today}")
+    doc.add_paragraph(f"{lx('date')}: {today}")
     doc.add_paragraph()
     doc.add_paragraph("_" * 30)
     doc.add_paragraph(cname)
-    doc.add_paragraph("Authorized Signatory  |  Seal")
+    doc.add_paragraph(lx("signatory_seal"))
 
     buf = io.BytesIO()
     doc.save(buf)

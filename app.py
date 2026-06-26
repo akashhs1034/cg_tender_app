@@ -217,6 +217,17 @@ label,.stSelectbox label,.stTextInput label,.stTextArea label,.stNumberInput lab
 .stButton>button[kind="secondary"]{background:rgba(255,255,255,.04)!important;border:1px solid rgba(255,255,255,.08)!important;color:#94A3B8!important}
 .stButton>button[kind="secondary"]:hover{background:rgba(0,196,255,.08)!important;border-color:rgba(0,196,255,.3)!important;color:#F1F5F9!important}
 
+/* Language switcher (English | हिंदी): force BOTH buttons to identical size,
+   independent of which one is active. Same box-sizing, border width, height &
+   padding for primary+secondary — only the colour differs to mark the active one. */
+.st-key-lang_switch_top .stButton>button{
+  box-sizing:border-box!important;border:1px solid rgba(0,196,255,.30)!important;
+  height:40px!important;min-height:40px!important;padding:0 12px!important;
+  border-radius:10px!important;line-height:1!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;}
+.st-key-lang_switch_top .stButton>button[kind="primary"]{
+  border-color:rgba(0,196,255,.55)!important;}
+
 /* ── Tabs ── */
 .stTabs [data-baseweb="tab-list"]{background:rgba(11,19,41,.6);border:1px solid rgba(0,196,255,.12);border-radius:12px;padding:5px;gap:4px;backdrop-filter:blur(10px)}
 .stTabs [data-baseweb="tab"]{border-radius:8px;color:#64748B!important;font-size:.82rem!important;font-weight:500!important;padding:8px 18px!important;border:none!important}
@@ -1739,17 +1750,18 @@ if st.session_state.authenticated:
 # The sidebar toggle is hidden behind the hamburger on phones, so we also show a
 # clear English | हिंदी switch at the top of the main area for everyone.
 _lang_now = st.session_state.get("lang", "en")
-_lsp, _len_btn, _lhi_btn = st.columns([6, 1.4, 1.4])
-with _len_btn:
-    if st.button("English", key="lang_en_top", width="stretch",
-                 type="primary" if _lang_now == "en" else "secondary"):
-        st.session_state.lang = "en"
-        st.rerun()
-with _lhi_btn:
-    if st.button("हिंदी", key="lang_hi_top", width="stretch",
-                 type="primary" if _lang_now == "hi" else "secondary"):
-        st.session_state.lang = "hi"
-        st.rerun()
+with st.container(key="lang_switch_top"):
+    _lsp, _len_btn, _lhi_btn = st.columns([6, 1.4, 1.4])
+    with _len_btn:
+        if st.button("English", key="lang_en_top", width="stretch",
+                     type="primary" if _lang_now == "en" else "secondary"):
+            st.session_state.lang = "en"
+            st.rerun()
+    with _lhi_btn:
+        if st.button("हिंदी", key="lang_hi_top", width="stretch",
+                     type="primary" if _lang_now == "hi" else "secondary"):
+            st.session_state.lang = "hi"
+            st.rerun()
 lang = st.session_state.lang
 
 # ══════════════════════════════════════════════════════════════════════════════

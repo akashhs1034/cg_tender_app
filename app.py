@@ -101,7 +101,7 @@ if _QP_TOKEN:
             st.session_state.sb_token      = _rec.get("access_token") or _QP_TOKEN
             st.session_state.sb_refresh    = _rec.get("refresh_token") or ""
             st.session_state._ls_checked   = True
-            st.session_state.current_page  = "📄  Tenders"
+            st.session_state.current_page  = "🏠  Dashboard"
             st.rerun()
         else:
             # Recovery did not succeed THIS time. Do NOT wipe the saved
@@ -151,7 +151,7 @@ if not st.session_state.authenticated and not st.session_state.get("show_pw_rese
                 elif _o_at:
                     _rec2 = accounts.restore_session(_o_at, _o_rt or None)
                     if _rec2:
-                        st.session_state.current_page = "📄  Tenders"
+                        st.session_state.current_page = "🏠  Dashboard"
             elif _bd.get("e") and _bd.get("t"):                # ── reconnect recovery
                 _rec2 = accounts.restore_session(_bd.get("t"), _bd.get("r") or None)
                 if _rec2 and _rec2.get("email") != (_bd.get("e") or "").strip().lower():
@@ -1474,7 +1474,7 @@ with st.sidebar:
                 st.session_state.email    = auth_email.strip().lower()
                 st.session_state.sb_token = token or ""
                 st.session_state.sb_refresh = refresh or ""
-                st.session_state.current_page = "📄  Tenders"
+                st.session_state.current_page = "🏠  Dashboard"
                 st.rerun()
             elif msg in ("EMAIL_NOT_CONFIRMED", "RATE_LIMIT"):
                 st.warning("📧 Please confirm your email (check inbox/spam), then log in — or wait a moment and retry.")
@@ -1490,7 +1490,7 @@ with st.sidebar:
                     st.session_state.email    = auth_email.strip().lower()
                     st.session_state.sb_token = token or ""
                     st.session_state.sb_refresh = refresh or ""
-                    st.session_state.current_page = "📄  Tenders"
+                    st.session_state.current_page = "🏠  Dashboard"
                     st.rerun()
                 else:
                     st.success("✅ Account created — click Login.")
@@ -1895,70 +1895,129 @@ if "Dashboard" in page:
     else:
         today_str = date.today().strftime("%A, %d %B %Y")
 
-        # ── Briefing Banner ──
+        # ── Greeting ──
         st.markdown(f"""
-        <div class="brief">
+        <div class="brief" style="padding:18px 26px;margin-bottom:20px">
           <div class="brief-row">
             <div>
-              <div class="brief-greeting">Good day, {cname} 👋</div>
-              <div class="brief-sub">Intelligence briefing · {today_str}</div>
-              <div class="brief-stats">
-                <div class="bstat"><span class="live-dot"></span> Live Feed</div>
-                <div class="bstat">🎯 <b>{len(scored)}</b> matched to you</div>
-                <div class="bstat">✅ <b>{eligible_count}</b> you qualify for</div>
-                <div class="bstat">🔥 <b>{high_conf_count}</b> high confidence</div>
-                <div class="bstat">⏰ <b>{closing_soon}</b> closing in 7 days</div>
-                <div class="bstat">💰 Total ₹<b>{total_value/100:.1f}Cr</b></div>
-              </div>
+              <div class="brief-greeting">{("नमस्ते" if lang=="hi" else "Good day")}, {cname} 👋</div>
+              <div class="brief-sub"><span class="live-dot"></span> {i18n.tr("Your intelligence dashboard", lang)} · {today_str}</div>
             </div>
           </div>
         </div>""", unsafe_allow_html=True)
 
-        # ── Gentle disclaimer until a profile is set (no alarmist styling) ──
+        # ── HERO: big counts (center) + mini analytics (beside) ───────────────
+        def _big_stat(icon, num, label, color):
+            return (
+                f'<div style="background:linear-gradient(145deg,#0B1329,#0D1A35);'
+                f'border:1px solid rgba(0,196,255,.18);border-radius:20px;padding:22px 14px;'
+                f'text-align:center;box-shadow:0 12px 40px rgba(0,196,255,.07);position:relative;overflow:hidden">'
+                f'<div style="position:absolute;top:0;left:0;right:0;height:3px;'
+                f'background:linear-gradient(90deg,{color},transparent)"></div>'
+                f'<div style="font-size:1.6rem;margin-bottom:2px">{icon}</div>'
+                f'<div style="font-size:2.9rem;font-weight:900;color:{color};line-height:1.05;letter-spacing:-.03em">{num}</div>'
+                f'<div style="font-size:.7rem;font-weight:700;color:#94A3B8;text-transform:uppercase;'
+                f'letter-spacing:.1em;margin-top:6px">{label}</div></div>')
+
+        _h1, _h2, _h3, _h4 = st.columns([1.15, 1.15, 1.45, 1.45])
+        with _h1:
+            st.markdown(_big_stat("📋", len(df_t), i18n.tr("Active Tenders", lang), "#00C4FF"),
+                        unsafe_allow_html=True)
+            if st.button("📄  " + i18n.tr("Browse Tenders", lang) + "  →",
+                         width="stretch", key="hero_go_tenders"):
+                st.session_state.current_page = "📄  Tenders"; st.rerun()
+        with _h2:
+            st.markdown(_big_stat("💼", len(df_j), i18n.tr("Open Jobs", lang), "#10B981"),
+                        unsafe_allow_html=True)
+            if st.button("💼  " + i18n.tr("Browse Jobs", lang) + "  →",
+                         width="stretch", key="hero_go_jobs"):
+                st.session_state.current_page = "💼  Jobs"; st.rerun()
+        with _h3:
+            try:
+                import plotly.graph_objects as _go
+                _sc = (df_t["state"].dropna().value_counts().head(4)
+                       if "state" in df_t and not df_t.empty else None)
+                if _sc is not None and not _sc.empty:
+                    _fig = _go.Figure(_go.Pie(
+                        labels=_sc.index.tolist(), values=_sc.values.tolist(), hole=.62,
+                        marker=dict(colors=["#00C4FF", "#1B6CF7", "#10B981", "#F59E0B"]),
+                        textinfo="none", hovertemplate="%{label}: %{value}<extra></extra>"))
+                    _fig.update_layout(
+                        height=200, margin=dict(l=0, r=0, t=28, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)",
+                        title=dict(text=i18n.tr("Tenders by State", lang),
+                                   font=dict(color="#94A3B8", size=12), x=0.5, y=0.97),
+                        showlegend=True, legend=dict(orientation="h", y=-0.04,
+                                   font=dict(color="#94A3B8", size=10)))
+                    st.plotly_chart(_fig, use_container_width=True, config={"displayModeBar": False})
+            except Exception:
+                pass
+        with _h4:
+            try:
+                import plotly.graph_objects as _go
+                _cc = (df_t["category_bucket"].dropna().value_counts().head(5)
+                       if "category_bucket" in df_t and not df_t.empty else None)
+                if _cc is not None and not _cc.empty:
+                    _fig2 = _go.Figure(_go.Bar(
+                        x=_cc.values[::-1].tolist(), y=_cc.index[::-1].tolist(),
+                        orientation="h", marker=dict(color="#1B6CF7"),
+                        hovertemplate="%{y}: %{x}<extra></extra>"))
+                    _fig2.update_layout(
+                        height=200, margin=dict(l=0, r=0, t=28, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        title=dict(text=i18n.tr("Top Sectors", lang),
+                                   font=dict(color="#94A3B8", size=12), x=0.5, y=0.97),
+                        xaxis=dict(visible=False),
+                        yaxis=dict(tickfont=dict(color="#94A3B8", size=9)))
+                    st.plotly_chart(_fig2, use_container_width=True, config={"displayModeBar": False})
+            except Exception:
+                pass
+
+        # ── Secondary KPI strip ──
+        _k1, _k2, _k3, _k4 = st.columns(4)
+        _kpi_strip = [
+            (_k1, str(eligible_count),       i18n.tr("You Qualify", lang),       "✅", False),
+            (_k2, str(high_conf_count),      i18n.tr("High Confidence", lang),   "🎯", False),
+            (_k3, str(closing_soon),         i18n.tr("Closing in 7 days", lang), "⏰", True),
+            (_k4, f"₹{total_value/100:.1f}Cr", i18n.tr("Market Value", lang),    "💰", False),
+        ]
+        for _col, _n, _l, _ic, _warn in _kpi_strip:
+            _scls = "warn" if _warn and int(closing_soon) > 0 else ""
+            _col.markdown(
+                f'<div class="kpi" style="padding:16px 14px">'
+                f'<div class="kpi-icon">{_ic}</div>'
+                f'<div class="kpi-num" style="font-size:1.55rem">{_n}</div>'
+                f'<div class="kpi-lbl">{_l}</div>'
+                f'<div class="kpi-sub {_scls}"></div></div>', unsafe_allow_html=True)
+
+        # ── Quick links to the rest of the app ──
+        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        _q1, _q2, _q3 = st.columns(3)
+        if _q1.button("📊  " + i18n.t("nav_analytics", lang), width="stretch", key="hero_go_analytics"):
+            st.session_state.current_page = "📊  Analytics"; st.rerun()
+        if _q2.button("👤  " + i18n.t("nav_profile", lang), width="stretch", key="hero_go_profile"):
+            st.session_state.current_page = "👤  Profile"; st.rerun()
+        if _q3.button("⚡  " + i18n.tr("Opporta Workspace", lang), width="stretch", key="hero_go_ws"):
+            st.session_state.current_page = "⚡  Opporta Workspace"; st.rerun()
+
+        # ── Gentle prompt until a profile is set ──
         if not PROFILE_READY:
             st.markdown(f"""
-            <div class="brief" style="border-color:rgba(0,196,255,.2)">
-              <div class="brief-greeting" style="font-size:1.05rem">👋 Complete your profile to see suggested matches</div>
+            <div class="brief" style="border-color:rgba(0,196,255,.2);margin-top:16px">
+              <div class="brief-greeting" style="font-size:1.05rem">👋 {i18n.tr("Complete your profile to unlock personalised matches", lang)}</div>
               <div class="brief-sub" style="margin-top:6px;max-width:640px">
                 Add your contractor class, sectors &amp; districts (or upload a document to your Vault)
                 and Opporta Intelligence will show personalized fit scores and suggested tenders for you.
               </div>
             </div>""", unsafe_allow_html=True)
-            _gt1, _gt2, _gt3 = st.columns([1, 1, 1])
-            if _gt1.button("👤  Complete Profile", width="stretch", key="gate_profile"):
+            _gt1, _gt2 = st.columns(2)
+            if _gt1.button("👤  " + i18n.t("nav_profile", lang), width="stretch", key="gate_profile"):
                 st.session_state.current_page = "👤  Profile"
                 st.rerun()
-            if _gt2.button("📄  Upload to Vault", width="stretch", key="gate_vault"):
+            if _gt2.button("📄  Vault", width="stretch", key="gate_vault"):
                 st.session_state.current_page = "👤  Profile"
                 st.session_state["profile_tab"] = "vault"
                 st.rerun()
-            if _gt3.button("🔍  Browse Tenders", width="stretch", key="gate_browse"):
-                st.session_state.current_page = "📄  Tenders"
-                st.rerun()
-
-        # ══════════════════════════════════════════════════════════════════════
-        # SECTION 1 (already above): Greeting / Briefing banner
-        # SECTION 2: Active-tender general information + live list
-        # ══════════════════════════════════════════════════════════════════════
-
-        # ── KPI Grid (general information) ──
-        kpi_data = [
-            (str(len(df_t)),           "Active Tenders",     "Live listings",       "📋", False),
-            (str(len(df_j)),           "Open Jobs",          "Across CG + UP",      "💼", False),
-            (str(eligible_count),      "You Qualify",        "Hard criteria pass",  "✅", False),
-            (str(high_conf_count),     "High Confidence",    "Score ≥ 80",          "🎯", False),
-            (str(closing_soon),        "Closing Soon",       "Within 7 days",       "⏰", True),
-            (f"₹{total_value/100:.1f}Cr","Market Value",    "All active tenders",  "💰", False),
-        ]
-        cols = st.columns(6)
-        for col, (num, lbl, sub, icon, warn) in zip(cols, kpi_data):
-            sub_cls = "warn" if warn and int(closing_soon) > 0 else ""
-            col.markdown(f"""<div class="kpi">
-              <div class="kpi-icon">{icon}</div>
-              <div class="kpi-num">{num}</div>
-              <div class="kpi-lbl">{lbl}</div>
-              <div class="kpi-sub {sub_cls}">{sub}</div>
-            </div>""", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 

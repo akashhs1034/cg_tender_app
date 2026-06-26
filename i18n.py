@@ -148,6 +148,21 @@ TR_HI: dict[str, str] = {
     # ── Common messages ──
     "No results found":           "कोई परिणाम नहीं मिला",
     "results found":              "परिणाम मिले",
+    # ── Dashboard ──
+    "Your intelligence dashboard":"आपका इंटेलिजेंस डैशबोर्ड",
+    "Active Tenders":             "सक्रिय टेंडर",
+    "Open Jobs":                  "खुली नौकरियाँ",
+    "You Qualify":                "आप पात्र हैं",
+    "High Confidence":            "उच्च विश्वास",
+    "Closing in 7 days":          "7 दिनों में बंद",
+    "Market Value":               "बाज़ार मूल्य",
+    "Tenders by State":           "राज्यवार टेंडर",
+    "Top Sectors":                "मुख्य क्षेत्र",
+    "Browse Tenders":             "टेंडर देखें",
+    "Browse Jobs":                "नौकरियाँ देखें",
+    "Opporta Workspace":          "ओपोर्टा वर्कस्पेस",
+    "Complete your profile to unlock personalised matches":
+                                  "व्यक्तिगत मिलान के लिए अपनी प्रोफ़ाइल पूरी करें",
 }
 
 

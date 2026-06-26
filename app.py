@@ -133,14 +133,19 @@ if (not st.session_state.authenticated
     st.session_state["_boot_tries"] = st.session_state.get("_boot_tries", 0) + 1
     try:
         from streamlit_js_eval import streamlit_js_eval as _sje
+        # Each browser access is wrapped in its own try/catch so the read NEVER
+        # throws — strict-privacy browsers / ad-blockers / corporate policies block
+        # localStorage in an iframe, and an unhandled throw there made the component
+        # churn (reruns) and the page feel frozen for those users. Now it always
+        # returns a clean value immediately and stabilises in one cycle.
         _boot = _sje(
             js_expressions=(
-                "JSON.stringify({"
-                "h:(parent.location.hash||''),"
-                "e:(localStorage.getItem('_op_e')||''),"
-                "t:(localStorage.getItem('_op_t')||''),"
-                "r:(localStorage.getItem('_op_r')||'')"
-                "})"),
+                "(function(){var h='',e='',t='',r='';"
+                "try{h=parent.location.hash||''}catch(x){}"
+                "try{e=localStorage.getItem('_op_e')||''}catch(x){}"
+                "try{t=localStorage.getItem('_op_t')||''}catch(x){}"
+                "try{r=localStorage.getItem('_op_r')||''}catch(x){}"
+                "return JSON.stringify({h:h,e:e,t:t,r:r});})()"),
             key="op_session_boot")
         if _boot:
             st.session_state["_boot_done"] = True              # got the state → stop

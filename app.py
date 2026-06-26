@@ -112,63 +112,59 @@ if _QP_TOKEN:
             # working. Credentials are cleared only on an explicit Log Out.
             st.session_state._ls_checked = True
 
-# ── GOOGLE OAUTH RETURN — PYTHON-SIDE (preferred) ────────────────────────────
-# After Google sign-in, Supabase redirects back with the tokens in the URL
-# *fragment* (#access_token=…&refresh_token=…). Streamlit's frontend reports the
-# full browser URL (fragment included) via st.context.url, so we can read the
-# tokens directly in Python — no JS navigation needed (which the component iframe
-# sandbox blocks anyway). This is what makes Google sign-in actually complete.
-if not st.session_state.authenticated and not _QP_TOKEN and not _QP_PWRESET:
+# ── SESSION BOOTSTRAP — read browser state via bidirectional component ────────
+# The component iframe sandbox blocks ALL navigation, so we cannot move tokens
+# into the URL (every redirect just hangs). Instead we read the browser state
+# directly with streamlit-js-eval — Streamlit's component VALUE channel, which is
+# sandbox-safe — and restore the session in Python. One read covers BOTH:
+#   • the Google-OAuth return  (tokens in the parent page's #fragment), and
+#   • reconnect recovery        (tokens we saved in localStorage).
+# `parent.location.hash` (not window.*) is used because the OAuth fragment lives
+# on the top app window, not inside the component's own iframe.
+if not st.session_state.authenticated and not st.session_state.get("show_pw_reset"):
     try:
-        import urllib.parse as _urlparse
-        _ctx_url  = st.context.url or ""
-        _ctx_frag = _urlparse.urlparse(_ctx_url).fragment
-        if "access_token=" in _ctx_frag:
-            _fp = _urlparse.parse_qs(_ctx_frag)
-            _f_at = (_fp.get("access_token") or [""])[0]
-            _f_rt = (_fp.get("refresh_token") or [""])[0]
-            _f_ty = (_fp.get("type") or [""])[0]
-            if _f_at and _f_ty != "recovery":
-                _f_rec = accounts.restore_session(_f_at, _f_rt or None)
-                if _f_rec:
-                    st.session_state.authenticated = True
-                    st.session_state.email         = _f_rec["email"]
-                    st.session_state.sb_token      = _f_rec.get("access_token") or _f_at
-                    st.session_state.sb_refresh    = _f_rec.get("refresh_token") or ""
-                    st.session_state._ls_checked   = True
-                    st.session_state.current_page  = "📄  Tenders"
+        from streamlit_js_eval import streamlit_js_eval as _sje
+        _boot = _sje(
+            js_expressions=(
+                "JSON.stringify({"
+                "h:(parent.location.hash||''),"
+                "e:(localStorage.getItem('_op_e')||''),"
+                "t:(localStorage.getItem('_op_t')||''),"
+                "r:(localStorage.getItem('_op_r')||'')"
+                "})"),
+            key="op_session_boot")
+        if _boot:
+            import json as _json2, urllib.parse as _up2
+            _bd    = _json2.loads(_boot) if isinstance(_boot, str) else (_boot or {})
+            _hash  = _bd.get("h") or ""
+            _rec2  = None
+            if "access_token=" in _hash:                       # ── Google OAuth return
+                _fp   = _up2.parse_qs(_hash.lstrip("#"))
+                _o_at = (_fp.get("access_token") or [""])[0]
+                _o_rt = (_fp.get("refresh_token") or [""])[0]
+                _o_ty = (_fp.get("type") or [""])[0]
+                if _o_at and _o_ty == "recovery":              # password-reset link
+                    st.session_state.show_pw_reset    = True
+                    st.session_state.pw_reset_token   = _o_at
+                    st.session_state.pw_reset_refresh = _o_rt or ""
                     st.rerun()
-            elif _f_at and _f_ty == "recovery":
-                st.session_state.show_pw_reset    = True
-                st.session_state.pw_reset_token   = _f_at
-                st.session_state.pw_reset_refresh = _f_rt or ""
-                st.session_state._ls_checked      = True
+                elif _o_at:
+                    _rec2 = accounts.restore_session(_o_at, _o_rt or None)
+                    if _rec2:
+                        st.session_state.current_page = "📄  Tenders"
+            elif _bd.get("e") and _bd.get("t"):                # ── reconnect recovery
+                _rec2 = accounts.restore_session(_bd.get("t"), _bd.get("r") or None)
+                if _rec2 and _rec2.get("email") != (_bd.get("e") or "").strip().lower():
+                    _rec2 = None                               # email/token mismatch
+            if _rec2:
+                st.session_state.authenticated = True
+                st.session_state.email         = _rec2["email"]
+                st.session_state.sb_token      = _rec2.get("access_token") or ""
+                st.session_state.sb_refresh    = _rec2.get("refresh_token") or ""
+                st.session_state._ls_checked   = True
                 st.rerun()
     except Exception:
         pass
-
-# ── GOOGLE OAUTH RETURN — JS (History API, sandbox-safe) ─────────────────────
-# The component iframe sandbox blocks ALL top-navigation (even same-origin), so a
-# location redirect just hangs. Instead we rewrite the URL with the History API
-# (replaceState — NOT navigation, so it's allowed) to lift the fragment tokens
-# into query params (_rct/_rcr), then fire a popstate event. Streamlit listens for
-# popstate, so it re-reads the URL and reruns — and the recovery block above then
-# restores the session from those query params.
-if not st.session_state.authenticated and not _QP_TOKEN:
-    _stc.html(
-        "<script>(function(){try{"
-        "var h=window.location.hash||'';"
-        "if(h.indexOf('access_token=')>=0){"
-        "var p=new URLSearchParams(h.replace(/^#/,''));"
-        "var at=p.get('access_token'),rt=p.get('refresh_token')||'',ty=p.get('type')||'';"
-        "if(at){var w=(window.parent!==window)?window.parent:window;"
-        "var u=new URL(w.location.href);u.hash='';"
-        "u.searchParams.set('_rct',at);if(rt){u.searchParams.set('_rcr',rt);}"
-        "if(ty==='recovery'){u.searchParams.set('_pwreset','1');}"
-        "w.history.replaceState({},'',u.pathname+u.search);"
-        "w.dispatchEvent(new PopStateEvent('popstate'));}}"
-        "}catch(x){}})();</script>",
-        height=0)
 
 # ── DESIGN SYSTEM CSS ─────────────────────────────────────────────────────────
 st.markdown("""<style>
@@ -1377,18 +1373,13 @@ def _portal_region(title: str, subtitle: str, items: list, cols: int = 2) -> Non
         _cols[_i % cols].link_button(_label, _url, width="stretch")
 
 # ── LOCALSTORAGE SESSION LOCK ─────────────────────────────────────────────────
-# When authenticated: write credentials to localStorage so they survive a
-# server-side session drop. When NOT authenticated (and we haven't probed yet
-# this session): inject a JS snippet that reads localStorage and does a one-time
-# redirect with the credentials as query params for the recovery block above.
-# Uses window.parent so the navigation targets the main Streamlit page, not
-# the component iframe. _ls_checked prevents the probe from firing more than
-# once per session, avoiding any redirect loops.
+# When authenticated, mirror the session credentials into browser localStorage so
+# they survive a server-side session drop (the SESSION BOOTSTRAP block near the
+# top reads them back via streamlit-js-eval on the next fresh load). Also strip
+# any leftover OAuth #access_token from the URL — history.replaceState is allowed
+# in the iframe sandbox (it's not navigation), so the token never lingers.
 def _sync_session_storage() -> None:
     if st.session_state.authenticated:
-        # Persist creds for reconnect recovery, and strip any leftover OAuth
-        # #access_token from the URL (history.replaceState is allowed in the
-        # iframe sandbox — unlike navigation — so the token never lingers).
         _stc.html(
             "<script>try{"
             f"localStorage.setItem('_op_e',{json.dumps(st.session_state.email)});"
@@ -1398,25 +1389,6 @@ def _sync_session_storage() -> None:
             "if(w.location.hash.indexOf('access_token=')>=0){"
             "w.history.replaceState({},'',w.location.pathname+w.location.search);}"
             "}catch(x){}</script>",
-            height=0)
-    elif not st.session_state._ls_checked:
-        st.session_state._ls_checked = True
-        _stc.html(
-            "<script>(function(){"
-            "try{"
-            "var e=localStorage.getItem('_op_e');"
-            "var t=localStorage.getItem('_op_t');"
-            "var r=localStorage.getItem('_op_r')||'';"
-            "if(e&&t){"
-            "var w=(window.parent!==window)?window.parent:window;"
-            "var u=new URL(w.location.href);"
-            "if(!u.searchParams.get('_rce')){"
-            "u.searchParams.set('_rce',e);"
-            "u.searchParams.set('_rct',t);"
-            "if(r){u.searchParams.set('_rcr',r);}"
-            "w.history.replaceState({},'',u.pathname+u.search);"
-            "w.dispatchEvent(new PopStateEvent('popstate'));}}"
-            "}catch(x){}})();</script>",
             height=0)
 
 # ── PASSWORD-RESET SCREEN ────────────────────────────────────────────────────

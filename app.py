@@ -222,11 +222,12 @@ label,.stSelectbox label,.stTextInput label,.stTextArea label,.stNumberInput lab
    gently tinted, not switched to a different bright gradient style. */
 .st-key-lang_switch_top .stButton>button{
   box-sizing:border-box!important;
+  width:100%!important;                            /* equal width for both */
   background:rgba(255,255,255,.04)!important;
   border:1px solid rgba(0,196,255,.30)!important;
   color:#94A3B8!important;font-weight:600!important;
   height:40px!important;min-height:40px!important;padding:0 12px!important;
-  border-radius:10px!important;line-height:1!important;
+  border-radius:999px!important;line-height:1!important;   /* same oval/pill shape */
   display:flex!important;align-items:center!important;justify-content:center!important;}
 .st-key-lang_switch_top .stButton>button[kind="primary"]{
   background:rgba(0,196,255,.16)!important;       /* gentle highlight for active */

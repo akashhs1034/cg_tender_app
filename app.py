@@ -112,12 +112,46 @@ if _QP_TOKEN:
             # working. Credentials are cleared only on an explicit Log Out.
             st.session_state._ls_checked = True
 
-# ── GOOGLE OAUTH RETURN HANDLER ──────────────────────────────────────────────
-# After a Google sign-in, Supabase redirects back to the app with the tokens in
-# the URL *fragment* (#access_token=…&refresh_token=…). Streamlit cannot read a
-# fragment server-side, so this JS lifts them into query params (_rct/_rcr) and
-# reloads; the recovery block above then restores the session via
-# accounts.restore_session (which derives the verified email from the token).
+# ── GOOGLE OAUTH RETURN — PYTHON-SIDE (preferred) ────────────────────────────
+# After Google sign-in, Supabase redirects back with the tokens in the URL
+# *fragment* (#access_token=…&refresh_token=…). Streamlit's frontend reports the
+# full browser URL (fragment included) via st.context.url, so we can read the
+# tokens directly in Python — no JS navigation needed (which the component iframe
+# sandbox blocks anyway). This is what makes Google sign-in actually complete.
+if not st.session_state.authenticated and not _QP_TOKEN and not _QP_PWRESET:
+    try:
+        import urllib.parse as _urlparse
+        _ctx_url  = st.context.url or ""
+        _ctx_frag = _urlparse.urlparse(_ctx_url).fragment
+        if "access_token=" in _ctx_frag:
+            _fp = _urlparse.parse_qs(_ctx_frag)
+            _f_at = (_fp.get("access_token") or [""])[0]
+            _f_rt = (_fp.get("refresh_token") or [""])[0]
+            _f_ty = (_fp.get("type") or [""])[0]
+            if _f_at and _f_ty != "recovery":
+                _f_rec = accounts.restore_session(_f_at, _f_rt or None)
+                if _f_rec:
+                    st.session_state.authenticated = True
+                    st.session_state.email         = _f_rec["email"]
+                    st.session_state.sb_token      = _f_rec.get("access_token") or _f_at
+                    st.session_state.sb_refresh    = _f_rec.get("refresh_token") or ""
+                    st.session_state._ls_checked   = True
+                    st.session_state.current_page  = "📄  Tenders"
+                    st.rerun()
+            elif _f_at and _f_ty == "recovery":
+                st.session_state.show_pw_reset    = True
+                st.session_state.pw_reset_token   = _f_at
+                st.session_state.pw_reset_refresh = _f_rt or ""
+                st.session_state._ls_checked      = True
+                st.rerun()
+    except Exception:
+        pass
+
+# ── GOOGLE OAUTH RETURN — JS FALLBACK ────────────────────────────────────────
+# Fallback for browsers where st.context.url omits the fragment: a same-origin
+# JS redirect that lifts the fragment tokens into query params (_rct/_rcr), which
+# the recovery block above then restores. (Same-origin nav, unlike the blocked
+# cross-origin hop to Google.)
 if not st.session_state.authenticated and not _QP_TOKEN:
     _stc.html(
         "<script>(function(){try{"
@@ -675,28 +709,32 @@ def _app_redirect_url() -> str:
 
 
 def _google_signin_button(lang: str, key: str) -> None:
-    """Render a 'Continue with Google' button that starts Supabase Google OAuth.
+    """Render 'Continue with Google' as a NATIVE link (st.link_button).
 
-    Supabase returns the provider URL only when the Google provider is enabled in
-    the project (Authentication → Providers → Google, with a Google Cloud OAuth
-    Client ID + Secret). If it isn't configured we guide the admin instead of
-    failing silently. On success the browser is sent to Google; the return is
-    handled by the OAuth fragment handler at the top of this file."""
-    if st.button("◉  " + i18n.t("continue_google", lang), key=key, width="stretch"):
+    Critical: a JS redirect from inside a Streamlit component iframe is blocked by
+    the iframe sandbox (it lacks `allow-top-navigation`), so the old approach just
+    hung on 'Redirecting…' and never reached Google. st.link_button renders a real
+    <a> in the MAIN page DOM, which navigates the top window normally. The Supabase
+    OAuth URL (implicit flow) is built once per session and cached.
+
+    Supabase returns a URL only when the Google provider is enabled in the project.
+    If it isn't, we guide the admin instead of failing silently."""
+    _url = st.session_state.get("_g_oauth_url")
+    if not _url:
         try:
             _url = accounts.get_google_oauth_url(
                 _app_redirect_url(),
                 supabase_url=_secret("SUPABASE_URL") or _secret("supabase_url"),
-                supabase_key=_secret("SUPABASE_KEY") or _secret("supabase_key"))
+                supabase_key=_secret("SUPABASE_KEY") or _secret("supabase_key")) or ""
         except Exception:
-            _url = None
-        if _url:
-            _stc.html(
-                "<script>var w=(window.parent!==window)?window.parent:window;"
-                f"w.location.href={json.dumps(_url)};</script>", height=0)
-            st.info("Redirecting to Google…")
-            st.stop()
-        else:
+            _url = ""
+        st.session_state["_g_oauth_url"] = _url
+    if _url:
+        st.link_button("◉  " + i18n.t("continue_google", lang), _url,
+                       key=key, use_container_width=True)
+    else:
+        if st.button("◉  " + i18n.t("continue_google", lang), key=key + "_warn",
+                     width="stretch"):
             st.warning(
                 "Google sign-in isn't enabled yet. Admin: in Supabase → "
                 "Authentication → Providers → Google, add a Google Cloud OAuth "
@@ -1345,11 +1383,17 @@ def _portal_region(title: str, subtitle: str, items: list, cols: int = 2) -> Non
 # once per session, avoiding any redirect loops.
 def _sync_session_storage() -> None:
     if st.session_state.authenticated:
+        # Persist creds for reconnect recovery, and strip any leftover OAuth
+        # #access_token from the URL (history.replaceState is allowed in the
+        # iframe sandbox — unlike navigation — so the token never lingers).
         _stc.html(
             "<script>try{"
             f"localStorage.setItem('_op_e',{json.dumps(st.session_state.email)});"
             f"localStorage.setItem('_op_t',{json.dumps(st.session_state.get('sb_token',''))});"
             f"localStorage.setItem('_op_r',{json.dumps(st.session_state.get('sb_refresh',''))});"
+            "var w=(window.parent!==window)?window.parent:window;"
+            "if(w.location.hash.indexOf('access_token=')>=0){"
+            "w.history.replaceState({},'',w.location.pathname+w.location.search);}"
             "}catch(x){}</script>",
             height=0)
     elif not st.session_state._ls_checked:

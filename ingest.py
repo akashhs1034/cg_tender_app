@@ -381,7 +381,27 @@ def main():
         offline += _samvad.scrape_published_ads()
     except Exception as e:
         print(f"   samvad newspaper-ad scrape failed: {e}")
+
+    # Regional-newspaper government notices (Vision over reachable e-paper / notice
+    # PDFs). Adds offline tenders AND recruitment jobs; honest 0 without GEMINI key
+    # or where a source is unreachable / JS-gated.
+    try:
+        from scrapers import newspapers as _newspapers
+        _np = _newspapers.collect()
+        _np_t = [_newspapers._table_safe(r, _newspapers._TENDER_COLS,
+                                         ["eligibility", "contact"]) for r in _np["tenders"]]
+        _np_j = [_newspapers._table_safe(r, _newspapers._JOB_COLS,
+                                         ["age_limit", "newspaper"]) for r in _np["jobs"]]
+        offline += _np_t
+        jobs    += _np_j
+        if _np.get("failures"):
+            print(f"   newspapers: {len(_np_t)} tenders, {len(_np_j)} jobs, "
+                  f"{len(_np['failures'])} source(s) logged as unreachable/JS-gated")
+    except Exception as e:
+        print(f"   newspaper collector failed: {e}")
+
     offline = dedup(offline)
+    jobs    = dedup(jobs)
     scraper_counts["district_off (CG/UP collectorate sites)  "] = len(offline)
 
     _print_scraper_summary(scraper_counts, len(tenders), len(jobs))

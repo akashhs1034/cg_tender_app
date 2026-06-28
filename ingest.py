@@ -18,7 +18,8 @@ import argparse
 import os
 import re
 import csv
-from datetime import date
+import json
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -200,6 +201,35 @@ def write_local(tenders, jobs):
             w.writeheader()
             w.writerows(rows)
         print(f"   wrote data/{name}.csv ({len(rows)} rows)")
+
+
+def write_source_health(counts: dict) -> None:
+    """Persist the latest per-source counts for the read-only UI dashboard.
+
+    A zero count is reported as ``no_records`` rather than ``failed`` because the
+    legacy scraper API returns counts, not structured exceptions. This keeps the
+    dashboard factual; a future pipeline can add an ``error`` value per source
+    without changing the UI contract.
+    """
+    sources = []
+    for label, count in counts.items():
+        source_id = label.split("(")[0].strip()
+        sources.append({
+            "source": source_id,
+            "display_name": " ".join(label.split()),
+            "kind": "Job" if source_id in {"cg_jobs", "cg_vyapam", "up_jobs", "up_upsssc"} else "Tender",
+            "record_count": int(count),
+            "status": "healthy" if int(count) > 0 else "no_records",
+            "error": None,
+        })
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "ingest_report",
+        "sources": sources,
+    }
+    path = DATA / "source_health.json"
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"   wrote data/source_health.json ({len(sources)} sources)")
 
 
 def push_supabase(tenders, jobs):
@@ -412,6 +442,7 @@ def main():
     else:
         print("3. Writing local fallback...")
         write_local(tenders, jobs)
+        write_source_health(scraper_counts)
         print("4. Pushing to cloud...")
         push_supabase(tenders, jobs)
         push_corrigendums(corrigs)

@@ -4,8 +4,9 @@ Elite Intelligence OS for CG & UP Government Tenders & Jobs.
 """
 from __future__ import annotations
 import json, os
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 import pandas as pd
 import streamlit as st
@@ -47,6 +48,7 @@ for _k, _v in {
     "current_page": "🏠  Dashboard",
     "explore_search": "", "explore_category": "All",
     "explore_state": "All", "explore_district": "All",
+    "explore_value": "All values", "explore_deadline": "Any deadline",
     "bid_tender": None,
     "entered_platform": False,
     "auth_mode": "login",       # "login" | "register" | "verify"
@@ -222,11 +224,12 @@ label,.stSelectbox label,.stTextInput label,.stTextArea label,.stNumberInput lab
    gently tinted, not switched to a different bright gradient style. */
 .st-key-lang_switch_top .stButton>button{
   box-sizing:border-box!important;
+  width:100%!important;                            /* equal width for both */
   background:rgba(255,255,255,.04)!important;
   border:1px solid rgba(0,196,255,.30)!important;
   color:#94A3B8!important;font-weight:600!important;
   height:40px!important;min-height:40px!important;padding:0 12px!important;
-  border-radius:10px!important;line-height:1!important;
+  border-radius:999px!important;line-height:1!important;   /* same oval/pill shape */
   display:flex!important;align-items:center!important;justify-content:center!important;}
 .st-key-lang_switch_top .stButton>button[kind="primary"]{
   background:rgba(0,196,255,.16)!important;       /* gentle highlight for active */
@@ -342,7 +345,7 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 .jcard-dept{font-size:.72rem;color:#7C8AA0;margin-bottom:11px}
 .jvac{background:rgba(6,182,212,.08);color:#06B6D4;border:1px solid rgba(6,182,212,.2);border-radius:8px;padding:4px 10px;font-size:.72rem;font-weight:700;flex-shrink:0}
 
-/* AI Workspace */
+/* Opporta Intelligence Workspace */
 .terminal-hd{background:linear-gradient(135deg,#080F22,#0B1329);border:1px solid rgba(0,196,255,.15);border-radius:16px;padding:20px 24px;margin-bottom:16px;position:relative;overflow:hidden}
 .terminal-hd::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,#00C4FF,#1B6CF7,transparent)}
 .terminal-label{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:#00C4FF;font-weight:500;letter-spacing:.1em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px}
@@ -466,6 +469,33 @@ div[data-testid="stExpander"] summary{color:#94A3B8!important;font-size:.8rem!im
 /* Metric Grid */
 .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
 
+/* Enterprise page shells */
+.page-kicker{font-family:'JetBrains Mono',monospace;font-size:.66rem;font-weight:700;
+  color:#38BDF8;letter-spacing:.12em;text-transform:uppercase;margin-bottom:7px}
+.page-title{font-size:1.55rem;font-weight:850;color:#F8FAFC;letter-spacing:-.035em;line-height:1.15}
+.page-sub{font-size:.8rem;color:#7C8AA0;line-height:1.6;margin-top:6px}
+.intelligence-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:11px;margin:0 0 24px}
+.action-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px;margin:0 0 24px}
+.action-card{background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(255,255,255,.07);
+  border-radius:15px;padding:16px 17px;min-height:108px;position:relative;overflow:hidden}
+.action-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent,#00C4FF)}
+.action-icon{font-size:1.15rem;margin-bottom:10px}.action-value{font-size:1.35rem;font-weight:850;color:#F8FAFC}
+.action-label{font-size:.69rem;color:#94A3B8;font-weight:650;margin-top:4px}.action-note{font-size:.64rem;color:#566179;margin-top:4px}
+.health-strip{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:rgba(8,15,34,.78);
+  border:1px solid rgba(0,196,255,.13);border-radius:14px;padding:12px 16px;margin-bottom:24px}
+.health-stat{font-size:.72rem;color:#94A3B8}.health-stat b{color:#E2E8F0}.health-link{margin-left:auto;color:#38BDF8;font-size:.72rem;font-weight:700}
+.source-card{background:linear-gradient(145deg,#080F22,#0B1329);border:1px solid rgba(255,255,255,.07);
+  border-radius:14px;padding:15px 17px;margin-bottom:9px}
+.source-row{display:grid;grid-template-columns:minmax(160px,1.5fr) minmax(120px,.9fr) 90px 95px;gap:14px;align-items:center}
+.source-name{font-size:.83rem;font-weight:700;color:#E2E8F0}.source-meta{font-size:.67rem;color:#64748B;margin-top:3px}
+.source-count{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:#CBD5E1}
+.status-pill{display:inline-flex;align-items:center;justify-content:center;border-radius:999px;padding:4px 9px;
+  font-size:.62rem;font-weight:800;letter-spacing:.05em;text-transform:uppercase}
+.status-ok{color:#34D399;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.25)}
+.status-warn{color:#FBBF24;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.25)}
+.status-fail{color:#F87171;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25)}
+.st-key-hidden_job_intelligence{display:none!important}
+
 /* Stray Streamlit cleanup */
 div[data-testid="metric-container"]{background:#080F22;border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:16px 20px}
 div[data-testid="metric-container"] [data-testid="stMetricValue"]{color:#F1F5F9!important;font-weight:900!important;font-size:1.7rem!important}
@@ -474,6 +504,7 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#7C8AA0!
 /* ── Responsive Breakpoints ── */
 @media (max-width:1200px){
   .kpi-grid{grid-template-columns:repeat(3,1fr)!important}
+  .intelligence-grid{grid-template-columns:repeat(4,1fr)!important}
   .metric-row{grid-template-columns:repeat(2,1fr)!important}
 }
 
@@ -481,6 +512,10 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#7C8AA0!
 @media (max-width:768px){
   .block-container{padding:0 .75rem 5rem!important}
   .kpi-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px!important}
+  .intelligence-grid{grid-template-columns:repeat(2,1fr)!important;gap:9px!important}
+  .action-grid{grid-template-columns:repeat(2,1fr)!important;gap:9px!important}
+  .source-row{grid-template-columns:1fr auto!important;gap:7px 12px!important}
+  .source-row .source-last{grid-column:1/-1!important}
   .metric-row{grid-template-columns:repeat(2,1fr)!important}
   .hero{padding:36px 12px 28px!important}
   .hero-h1{font-size:2rem!important;letter-spacing:-.03em!important}
@@ -507,6 +542,9 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#7C8AA0!
 @media (max-width:480px){
   .block-container{padding:0 .5rem 5rem!important}
   .kpi-grid{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .intelligence-grid{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .action-grid{grid-template-columns:1fr 1fr!important;gap:8px!important}
+  .action-card{padding:14px 13px!important;min-height:102px!important}
   .score-grid{grid-template-columns:repeat(2,1fr)!important}
   .metric-row{grid-template-columns:1fr 1fr!important;gap:8px!important}
   .hero{padding:28px 8px 20px!important}
@@ -673,6 +711,19 @@ div[data-testid="metric-container"] [data-testid="stMetricLabel"]{color:#7C8AA0!
 }
 </style>""", unsafe_allow_html=True)
 
+# The public landing page has one deliberate, centered sign-in experience.
+# Hide the sidebar copy until authentication so users never face duplicate forms.
+if not st.session_state.authenticated:
+    st.markdown(
+        """<style>
+        section[data-testid="stSidebar"],[data-testid="collapsedControl"]{display:none!important}
+        @media(max-width:768px){
+          .hero{padding-top:18px!important}
+          [data-testid="stHorizontalBlock"]{gap:.45rem!important}
+        }
+        </style>""",
+        unsafe_allow_html=True)
+
 # ── CONSTANTS ─────────────────────────────────────────────────────────────────
 # Tender sectors now come from core.CATEGORY_BUCKETS (the normalized buckets),
 # so the old hardcoded SECTORS list was removed.
@@ -705,6 +756,26 @@ STATE_DISTRICTS = {
     "Chhattisgarh":  CG_DISTRICTS,
     "Uttar Pradesh": UP_DISTRICTS,
 }
+
+# Display labels are separate from the stable internal route names. This keeps
+# all existing page branches and session-state deep links working while exposing
+# the full enterprise navigation requested by the product.
+NAV_ITEMS = [
+    ("START HERE", "Profile", "प्रोफ़ाइल", "👤  Profile"),
+    ("OPPORTUNITIES", "Tender Portal", "निविदा पोर्टल", "📄  Tenders"),
+    ("OPPORTUNITIES", "Government Jobs", "सरकारी नौकरियाँ", "💼  Jobs"),
+    ("OVERVIEW", "Dashboard", "डैशबोर्ड", "🏠  Dashboard"),
+    ("TENDER TOOLS", "Tender Intelligence", "निविदा इंटेलिजेंस", "⚡  Opporta Tender Intelligence"),
+    ("TENDER TOOLS", "Bid Workspace", "बिड कार्यक्षेत्र", "🧠  Opporta Bid Workspace"),
+    ("INSIGHTS", "Analytics", "विश्लेषण", "📊  Analytics"),
+    ("ACCOUNT", "Document Vault", "दस्तावेज़ वॉल्ट", "🗂️  Document Vault"),
+    ("ACCOUNT", "Alerts", "अलर्ट", "🔔  Alerts"),
+    ("ACCOUNT", "Settings", "सेटिंग्स", "⚙️  Settings"),
+]
+
+
+def _nav_text(item: tuple, ui_lang: str) -> str:
+    return item[2] if ui_lang == "hi" else item[1]
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
 def _secret(k):
@@ -817,10 +888,10 @@ def load_table(name: str) -> pd.DataFrame:
             if all_rows:
                 return _drop_expired(pd.DataFrame(all_rows))
             return pd.DataFrame()
-        except Exception as e:
-            st.error(f"Supabase error on {name}: {e}")
+        except Exception:
+            st.warning("Live data is temporarily unavailable. Showing the latest saved results.")
     else:
-        st.error(f"Supabase secrets not found. URL={'set' if url else 'MISSING'} KEY={'set' if key else 'MISSING'}")
+        st.caption("Showing the latest saved opportunity data.")
     local = Path(__file__).parent / "data" / f"{name}.csv"
     if local.exists():
         return _drop_expired(pd.read_csv(local))
@@ -887,7 +958,7 @@ def save_offline_tenders(records: list[dict]) -> int:
     url = _secret("SUPABASE_URL") or _secret("supabase_url")
     key = _secret("SUPABASE_KEY") or _secret("supabase_key")
     if not (url and key):
-        st.error("Supabase not configured — cannot save offline tenders.")
+        st.error("Saving is temporarily unavailable. Please try again later.")
         return 0
     try:
         from supabase import create_client
@@ -964,13 +1035,8 @@ def _has_job_profile(p: dict) -> bool:
     )
 
 def _render_ai_error(fallback: str = "Opporta Intelligence is unavailable right now — please try again.") -> None:
-    """Show WHY the last AI call failed (quota vs. key vs. network) — not a generic error."""
-    info = core.ai_error_message()
-    if info:
-        sev, txt = info
-        (st.warning if sev == "warning" else st.error)(txt)
-    else:
-        st.error(fallback)
+    """Show a public-safe message without exposing provider configuration."""
+    st.error(fallback)
 
 def _render_study_plan(plan: dict) -> None:
     """Render a suggested study plan dict with phases, topics, resources + disclaimer."""
@@ -1087,7 +1153,7 @@ _MANUAL_BID_TASKS = [
 
 
 def _compose_cover_letter(cl: dict, tender: dict, profile: dict) -> str:
-    """Flatten the AI cover-letter JSON into an editable plain-text letter."""
+    """Flatten the generated cover-letter JSON into editable plain text."""
     cl = cl or {}
     cname = _v(profile.get("company_name") or profile.get("full_name"), "Our Firm")
     out = [_v(cl.get("to"), f"To,\nThe Tender Committee,\n{_v(tender.get('organization'))}"), ""]
@@ -1107,7 +1173,7 @@ def _compose_cover_letter(cl: dict, tender: dict, profile: dict) -> str:
 
 
 def _compliance_csv(bid, elig) -> bytes:
-    """Compliance / deviation spreadsheet (CSV bytes) from the gate + AI matrix."""
+    """Compliance / deviation spreadsheet from the gate + intelligence matrix."""
     import csv as _csv, io as _io2
     buf = _io2.StringIO()
     w = _csv.writer(buf)
@@ -1123,34 +1189,50 @@ def _compliance_csv(bid, elig) -> bytes:
     return buf.getvalue().encode("utf-8-sig")   # BOM so Excel opens it cleanly
 
 
-def _render_bid_workshop() -> None:
+def _render_bid_workshop(*, standalone: bool = False) -> None:
     """Ready-to-Bid generator: upload tender + firm docs -> eligibility verdict,
     editable cover letter, compliance sheet, .docx and a manual-actions checklist.
-    Uses module globals (profile, email, _token). Lives under the Tenders page."""
+    Uses module globals (profile, email, _token)."""
     st.markdown("""<div class="sec-hd">
-      <span class="sec-title">🛠 Bid Workshop</span>
+      <span class="sec-title">🧠 Opporta Bid Workspace</span>
       <span class="sec-badge-green">Ready-to-Bid File Generator</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
-    with st.expander("⚡  Generate a Ready-to-Bid file  —  upload your firm documents + the tender document", expanded=False):
+    with st.expander("⚡  Build a Ready-to-Bid package — tender + firm documents",
+                     expanded=standalone):
         _ws_ai = bool(
             os.getenv("GEMINI_API_KEY") or _secret("GEMINI_API_KEY") or
             os.getenv("ANTHROPIC_API_KEY") or _secret("ANTHROPIC_API_KEY"))
         if not _ws_ai:
-            st.warning("⚡ Opporta Intelligence needs GEMINI_API_KEY (or ANTHROPIC_API_KEY) to read the tender and draft the bid. Add it to your secrets to enable generation.")
+            st.warning("Opporta Intelligence document generation is temporarily unavailable. You can still review tender details and your saved documents.")
 
-        st.markdown("**Step 1 — Tender document** (the NIT / tender notice PDF)")
-        _ws_tender = st.file_uploader("Tender document", type=["pdf", "jpg", "jpeg", "png"],
-                                      key="ws_tender_doc", label_visibility="collapsed")
-
-        st.markdown("**Step 2 — Your firm documents** (GST, registration, experience, turnover — optional but recommended)")
-        _ws_firm = st.file_uploader("Firm documents", type=["pdf", "txt", "jpg", "jpeg", "png"],
-                                    accept_multiple_files=True, key="ws_firm_docs",
-                                    label_visibility="collapsed")
+        _upload_panel, _readiness_panel = st.columns([1.1, .9], gap="large")
+        with _upload_panel:
+            st.markdown('<div class="profile-section-title">01 · Source documents</div>',
+                        unsafe_allow_html=True)
+            st.markdown("**Tender document** · NIT / tender notice")
+            _ws_tender = st.file_uploader(
+                "Tender document", type=["pdf", "jpg", "jpeg", "png"],
+                key="ws_tender_doc", label_visibility="collapsed")
+            st.markdown("**Firm documents** · GST, registration, experience, turnover")
+            _ws_firm = st.file_uploader(
+                "Firm documents", type=["pdf", "txt", "jpg", "jpeg", "png"],
+                accept_multiple_files=True, key="ws_firm_docs",
+                label_visibility="collapsed")
+        with _readiness_panel:
+            st.markdown('<div class="profile-section-title">02 · Readiness output</div>',
+                        unsafe_allow_html=True)
+            st.markdown(
+                '<div class="res-panel" style="margin-top:0">'
+                '<div class="terminal-label">Deterministic eligibility gate</div>'
+                '<div class="res-verdict">Your profile and Vault documents are checked against '
+                'the tender. The workspace then returns blockers, missing-document checks, an '
+                'editable cover letter, compliance sheet and bid draft.</div></div>',
+                unsafe_allow_html=True)
 
         _wlang = st.session_state.get("lang", "en")
-        st.markdown(f"**Step 3 — {i18n.t('bid_language', _wlang)}**")
+        st.markdown(f"**03 · {i18n.t('bid_language', _wlang)}**")
         _ws_lang_lbl = st.radio(i18n.t("bid_language", _wlang), ["English", "हिंदी"],
                                 index=(1 if _wlang == "hi" else 0), horizontal=True,
                                 key="ws_bid_lang", label_visibility="collapsed")
@@ -1160,7 +1242,7 @@ def _render_bid_workshop() -> None:
             if not _ws_tender:
                 st.warning("Upload the tender document first.")
             elif not _ws_ai:
-                st.error("Opporta Intelligence not configured — cannot read the tender. Add GEMINI_API_KEY to secrets.")
+                st.error("Opporta Intelligence could not start document generation. Please try again later.")
             else:
                 import bid_engine, vault_evaluator as _ve
                 _ws_firm_texts: list[str] = []
@@ -1404,6 +1486,205 @@ def _portal_region(title: str, subtitle: str, items: list, cols: int = 2) -> Non
     for _i, (_label, _url) in enumerate(items):
         _cols[_i % cols].link_button(_label, _url, width="stretch")
 
+
+def _source_health_snapshot(tenders: pd.DataFrame, jobs: pd.DataFrame) -> dict:
+    """Load the last persisted ingest report; derive an honest CSV snapshot when
+    an older pipeline has not written one yet. No source status is invented."""
+    report_path = Path(__file__).parent / "data" / "source_health.json"
+    if report_path.exists():
+        try:
+            payload = json.loads(report_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict) and isinstance(payload.get("sources"), list):
+                return payload
+        except (OSError, ValueError, TypeError):
+            pass
+
+    frames = []
+    for frame, kind in ((tenders, "Tender"), (jobs, "Job")):
+        if not frame.empty and "source_portal" in frame:
+            counts = frame["source_portal"].fillna("Unspecified source").astype(str).value_counts()
+            frames.extend({
+                "source": str(source),
+                "display_name": str(source),
+                "kind": kind,
+                "record_count": int(count),
+                "status": "snapshot",
+                "error": None,
+            } for source, count in counts.items())
+
+    mtimes = []
+    for filename in ("tenders.csv", "jobs.csv"):
+        path = Path(__file__).parent / "data" / filename
+        if path.exists():
+            mtimes.append(path.stat().st_mtime)
+    generated = (datetime.fromtimestamp(max(mtimes)).astimezone().isoformat()
+                 if mtimes else None)
+    return {
+        "generated_at": generated,
+        "mode": "csv_snapshot",
+        "sources": frames,
+        "note": ("Pipeline health telemetry has not been written yet. Counts below "
+                 "are derived from the current persisted dataset."),
+    }
+
+
+def render_source_health(tenders: pd.DataFrame, jobs: pd.DataFrame,
+                         *, compact: bool = False) -> None:
+    """Render actual ingest telemetry without probing scrapers from the UI."""
+    snapshot = _source_health_snapshot(tenders, jobs)
+    sources = snapshot.get("sources") or []
+    ok_n = sum(1 for item in sources
+               if str(item.get("status", "")).lower() in ("healthy", "ok", "snapshot"))
+    warn_n = sum(1 for item in sources
+                 if str(item.get("status", "")).lower() in ("warning", "no_records"))
+    fail_n = sum(1 for item in sources
+                 if str(item.get("status", "")).lower() in ("failed", "error"))
+    total_n = sum(int(item.get("record_count") or item.get("count") or 0)
+                  for item in sources)
+    generated = str(snapshot.get("generated_at") or "Not reported")
+    generated_short = generated.replace("T", " ")[:19]
+
+    if compact:
+        st.markdown(
+            f'<div class="health-strip"><span class="live-dot"></span>'
+            f'<span class="health-stat"><b>{ok_n}</b> reporting sources</span>'
+            f'<span class="health-stat"><b>{total_n:,}</b> source records</span>'
+            f'<span class="health-stat"><b>{fail_n}</b> failures</span>'
+            f'<span class="health-stat">Last ingest · {generated_short}</span>'
+            f'<span class="health-link">Source health →</span></div>',
+            unsafe_allow_html=True)
+        return
+
+    st.markdown(
+        '<div class="page-kicker">Operations · Ingestion observability</div>'
+        '<div class="page-title">Source Health Dashboard</div>'
+        '<div class="page-sub">The last pipeline report for every tender and job source. '
+        'This page reads persisted telemetry and never launches scrapers from a user session.</div>',
+        unsafe_allow_html=True)
+    h1, h2, h3, h4 = st.columns(4)
+    h1.metric("Reporting sources", len(sources))
+    h2.metric("Healthy / available", ok_n)
+    h3.metric("Needs attention", warn_n + fail_n)
+    h4.metric("Records reported", f"{total_n:,}")
+    st.caption(f"Last pipeline report: {generated_short}")
+    if snapshot.get("note"):
+        st.info(snapshot["note"])
+    if not sources:
+        st.warning("No administrator telemetry is available.")
+        return
+
+    for item in sources:
+        status = str(item.get("status") or "unknown").lower()
+        status_class = ("status-ok" if status in ("healthy", "ok", "snapshot")
+                        else "status-fail" if status in ("failed", "error")
+                        else "status-warn")
+        label = str(item.get("display_name") or item.get("source") or "Unnamed source")
+        kind = str(item.get("kind") or "Tender / Job")
+        count = int(item.get("record_count") or item.get("count") or 0)
+        error = str(item.get("error") or "")
+        error_html = (f'<div class="source-meta" style="color:#F87171">{_html.escape(error)}</div>'
+                      if error else "")
+        st.markdown(
+            f'<div class="source-card"><div class="source-row">'
+            f'<div><div class="source-name">{_html.escape(label)}</div>'
+            f'<div class="source-meta">{_html.escape(kind)} source</div>{error_html}</div>'
+            f'<div class="source-last"><div class="source-meta">Last run</div>'
+            f'<div class="source-count">{_html.escape(generated_short)}</div></div>'
+            f'<div><div class="source-meta">Records</div><div class="source-count">{count:,}</div></div>'
+            f'<div><span class="status-pill {status_class}">{_html.escape(status.replace("_", " "))}</span></div>'
+            f'</div></div>',
+            unsafe_allow_html=True)
+
+
+def render_job_intelligence(jobs: pd.DataFrame) -> None:
+    """Job-only resume matching. Tender and bid controls never appear here."""
+    st.markdown(
+        '<div class="terminal-hd"><div class="terminal-label">OPPORTA JOB INTELLIGENCE</div>'
+        '<div class="terminal-title">Resume Match & Eligibility Review</div>'
+        '<div class="terminal-sub">Compare your experience, education and skills with one '
+        'government job notification. Results are guidance, not a selection guarantee.</div></div>',
+        unsafe_allow_html=True)
+    if jobs.empty:
+        st.info("No active job notifications are available right now.")
+        return
+
+    _jq = st.text_input(
+        "Find a job notification",
+        placeholder="Search title, department, qualification or state…",
+        key="job_intel_search")
+    _search = _jq.strip().lower()
+    _filtered = jobs
+    if _search:
+        _mask = jobs.apply(
+            lambda row: _search in (
+                f"{row.get('title','')} {row.get('department','')} "
+                f"{row.get('qualification','')} {row.get('state','')}"
+            ).lower(),
+            axis=1)
+        _filtered = jobs[_mask]
+    if _filtered.empty:
+        st.warning("No job notification matches that search.")
+        return
+
+    _records = _filtered.reset_index(drop=True)
+    _pick = st.selectbox(
+        "Select job notification", range(len(_records)),
+        format_func=lambda idx: safe_str(_records.iloc[idx].get("title"), 100),
+        key="job_intel_pick")
+    _job = _records.iloc[_pick].to_dict()
+    st.markdown(
+        f'<div class="jcard"><div class="jcard-title">{_esc(_job.get("title"))}</div>'
+        f'<div class="jcard-dept">{_esc(_job.get("department"))} · '
+        f'{_esc(_job.get("state"))}</div><div class="ocard-tags">'
+        f'<span class="tag tag-cat">{_esc(_job.get("category"), "General")}</span>'
+        f'<span class="tag tag-dl">Deadline · {_esc(_job.get("deadline"))}</span>'
+        f'</div></div>',
+        unsafe_allow_html=True)
+
+    _profile_resume = _profile_to_resume_text(profile)
+    _resume_file = st.file_uploader(
+        "Upload resume for a deeper match (PDF or TXT)",
+        type=["pdf", "txt"], key="job_intel_resume")
+    _resume_text = _profile_resume
+    if _resume_file:
+        _resume_text = (_read_pdf_text(_resume_file)
+                        if _resume_file.name.lower().endswith(".pdf")
+                        else _resume_file.read().decode("utf-8", errors="ignore"))
+        st.caption(f"Resume ready · {len(_resume_text):,} characters read")
+    elif _has_job_profile(profile):
+        st.caption("Using your saved Job Seeker Profile. Upload a resume for a deeper review.")
+    else:
+        st.info("Complete your Job Seeker Profile or upload a resume to begin.")
+
+    if st.button("⚡ Check My Job Match", width="stretch", key="job_intel_analyze"):
+        if not _resume_text.strip():
+            st.warning("Add your Job Seeker Profile or upload a resume first.")
+        else:
+            with st.spinner("Opporta Intelligence is comparing your profile with the notification…"):
+                _result = evaluator.evaluate_resume_for_job(_job, _resume_text)
+            _pct = int(_result.get("readiness_pct") or 0)
+            _color = score_color(_pct)
+            st.markdown(
+                f'<div class="res-panel"><div style="display:flex;align-items:center;gap:24px">'
+                f'<div><div class="res-score" style="color:{_color}">{_pct}%</div>'
+                f'<div class="res-label">Job Match</div></div>'
+                f'<div class="res-verdict">{_esc(_result.get("verdict"))}</div>'
+                f'</div></div>',
+                unsafe_allow_html=True)
+            _r1, _r2, _r3 = st.columns(3)
+            with _r1:
+                st.success("Matched")
+                for _item in (_result.get("met") or []):
+                    st.caption(f"• {_item}")
+            with _r2:
+                st.error("Missing")
+                for _item in (_result.get("missing") or []):
+                    st.caption(f"• {_item}")
+            with _r3:
+                st.warning("Verify")
+                for _item in (_result.get("unknown") or []):
+                    st.caption(f"• {_item}")
+
 # ── LOCALSTORAGE SESSION LOCK ─────────────────────────────────────────────────
 # When authenticated, mirror the session credentials into browser localStorage so
 # they survive a server-side session drop (the SESSION BOOTSTRAP block near the
@@ -1532,17 +1813,16 @@ with st.sidebar:
         st.caption("Tip: signup is instant — no verification code needed.")
         st.markdown('</div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="sb-nav-label">Operational Modules</div>', unsafe_allow_html=True)
-        # Exactly 5 primary modules. Analytics + Alerts fold into Dashboard,
-        # the AI Workspace opens from a tender's detail, the Vault lives under Profile.
-        pages = [
-            "🏠  Dashboard", "👤  Profile", "📄  Tenders", "💼  Jobs", "📊  Analytics",
-        ]
-        for p in pages:
-            is_active = st.session_state.current_page == p
-            if st.button(i18n.nav_label(p, lang), key=f"nav_{p}", width="stretch",
-                         type="primary" if is_active else "secondary"):
-                st.session_state.current_page = p
+        _nav_group = None
+        for _group, _en, _hi, _route in NAV_ITEMS:
+            if _group != _nav_group:
+                st.markdown(f'<div class="sb-nav-label">{_group}</div>', unsafe_allow_html=True)
+                _nav_group = _group
+            _active = st.session_state.current_page == _route
+            if st.button(_nav_text((_group, _en, _hi, _route), lang),
+                         key=f"nav_{_route}", width="stretch",
+                         type="primary" if _active else "secondary"):
+                st.session_state.current_page = _route
                 st.rerun()
 
         st.markdown(f"""
@@ -1692,6 +1972,12 @@ if st.session_state.authenticated and ("Explore" in page):
     st.session_state.current_page = "📄  Tenders"
     page = "📄  Tenders"
 
+# Source diagnostics are an administrator concern, not a public product page.
+# Redirect any stale session left over from older navigation versions.
+if st.session_state.authenticated and ("Source Health" in page):
+    st.session_state.current_page = "🏠  Dashboard"
+    page = "🏠  Dashboard"
+
 # ── UNIVERSAL ☰ MENU — jump to any section from phone OR web ──────────────────
 # A single hamburger menu that works everywhere (popover on desktop & mobile),
 # in addition to the sidebar (desktop) and bottom bar (phone).
@@ -1703,10 +1989,11 @@ if st.session_state.authenticated:
         _hmenu = st.expander(_menu_lbl)
     with _hmenu:
         st.markdown(f"**{i18n.t('go_to', lang)}**")
-        for _mp in ["🏠  Dashboard", "👤  Profile", "📄  Tenders", "💼  Jobs", "📊  Analytics"]:
-            if st.button(i18n.nav_label(_mp, lang), key=f"hm_{_mp}", width="stretch",
-                         type="primary" if st.session_state.current_page == _mp else "secondary"):
-                st.session_state.current_page = _mp
+        for _group, _en, _hi, _route in NAV_ITEMS:
+            if st.button(_nav_text((_group, _en, _hi, _route), lang),
+                         key=f"hm_{_route}", width="stretch",
+                         type="primary" if st.session_state.current_page == _route else "secondary"):
+                st.session_state.current_page = _route
                 st.rerun()
         st.divider()
         if st.button("⏏  " + i18n.t("logout", lang), key="hm_logout", width="stretch"):
@@ -1731,14 +2018,14 @@ if st.session_state.authenticated:
 # pin to the bottom of the viewport in CSS. Hidden on desktop (sidebar takes over).
 if st.session_state.authenticated:
     _bottom_items = [
-        ("🏠", "Home",      "🏠  Dashboard"),
         ("👤", "Profile",   "👤  Profile"),
         ("📄", "Tenders",   "📄  Tenders"),
         ("💼", "Jobs",      "💼  Jobs"),
-        ("📊", "Analytics", "📊  Analytics"),
+        ("🏠", "Home",      "🏠  Dashboard"),
+        ("🔔", "Alerts",    "🔔  Alerts"),
     ]
     _bnav_keys = {"Home": "nav_home", "Profile": "nav_profile", "Tenders": "nav_tenders",
-                  "Jobs": "nav_jobs", "Analytics": "nav_analytics"}
+                  "Jobs": "nav_jobs", "Alerts": "Alerts"}
     _mnav = st.container(key="mobilenav")
     with _mnav:
         _mcols = st.columns(len(_bottom_items))
@@ -1775,6 +2062,9 @@ lang = st.session_state.lang
 # ══════════════════════════════════════════════════════════════════════════════
 if "Dashboard" in page:
     if not st.session_state.authenticated:
+        # Keep the legacy state key for session compatibility, but show the
+        # landing and secure sign-in together without an unnecessary first click.
+        st.session_state.entered_platform = True
 
         # ── STEP 1: Hero landing — show intro + Enter button ──────────────────
         if not st.session_state.entered_platform:
@@ -1824,16 +2114,25 @@ if "Dashboard" in page:
             st.markdown(f"""
             <div class="hero" style="padding:32px 20px 20px">
               {_auth_logo}
-              <div class="hero-eyebrow"><span class="hero-pulse"></span>OPPORTA INTELLIGENCE</div>
+              <div class="hero-eyebrow"><span class="hero-pulse"></span>LIVE · CG + UP GOVERNMENT INTELLIGENCE</div>
               <h1 class="hero-h1" style="font-size:clamp(1.8rem,4vw,3rem)">
-                Welcome to Opporta
+                Every Tender. Every Job.<br><em>One Intelligence Platform.</em>
               </h1>
-              <p class="hero-sub" style="margin-bottom:0">
-                {len(df_t)} live tenders · {len(df_j)} open jobs today
+              <p class="hero-sub" style="margin-bottom:18px">
+                Discover, qualify and act on verified government opportunities across
+                Chhattisgarh and Uttar Pradesh.
               </p>
+              <div class="hero-cta-row" style="margin-bottom:8px">
+                <div class="hero-pill">📋 {len(df_t):,} active tenders</div>
+                <div class="hero-pill">💼 {len(df_j):,} open jobs</div>
+                <div class="hero-pill">🌏 CG + UP coverage</div>
+                <div class="hero-pill">⚡ Daily auto-update</div>
+              </div>
             </div>""", unsafe_allow_html=True)
 
-            _ac, _sp = st.columns([1.4, 1])
+            # Symmetric gutters keep the login card centered on desktop; Streamlit
+            # stacks the center column cleanly on narrow mobile screens.
+            _left_auth, _ac, _right_auth = st.columns([1, 1.45, 1])
             with _ac:
                 # ── Auth mode tabs ──
                 _t1, _t2 = st.columns(2)
@@ -1924,14 +2223,20 @@ if "Dashboard" in page:
 
     else:
         today_str = date.today().strftime("%A, %d %B %Y")
+        _hour = datetime.now().hour
+        _greeting = ("Good morning" if _hour < 12
+                     else "Good afternoon" if _hour < 17 else "Good evening")
+        if lang == "hi":
+            _greeting = "नमस्ते"
 
         # ── Greeting ──
         st.markdown(f"""
         <div class="brief" style="padding:18px 26px;margin-bottom:20px">
           <div class="brief-row">
             <div>
-              <div class="brief-greeting">{("नमस्ते" if lang=="hi" else "Good day")}, {cname} 👋</div>
-              <div class="brief-sub"><span class="live-dot"></span> {i18n.tr("Your intelligence dashboard", lang)} · {today_str}</div>
+              <div class="page-kicker">Today's Intelligence Briefing</div>
+              <div class="brief-greeting">{_greeting}, {_html.escape(cname)} 👋</div>
+              <div class="brief-sub"><span class="live-dot"></span> Live opportunity command center · {today_str}</div>
             </div>
           </div>
         </div>""", unsafe_allow_html=True)
@@ -2004,12 +2309,16 @@ if "Dashboard" in page:
                 pass
 
         # ── Secondary KPI strip ──
-        _k1, _k2, _k3, _k4 = st.columns(4)
+        _cg_tenders = int((df_t["state"] == "Chhattisgarh").sum()) if "state" in df_t else 0
+        _up_tenders = int((df_t["state"] == "Uttar Pradesh").sum()) if "state" in df_t else 0
+        _kcols = st.columns(6)
         _kpi_strip = [
-            (_k1, str(eligible_count),       i18n.tr("You Qualify", lang),       "✅", False),
-            (_k2, str(high_conf_count),      i18n.tr("High Confidence", lang),   "🎯", False),
-            (_k3, str(closing_soon),         i18n.tr("Closing in 7 days", lang), "⏰", True),
-            (_k4, f"₹{total_value/100:.1f}Cr", i18n.tr("Market Value", lang),    "💰", False),
+            (_kcols[0], str(_cg_tenders), "CG Tenders", "📍", False),
+            (_kcols[1], str(_up_tenders), "UP Tenders", "📍", False),
+            (_kcols[2], str(eligible_count), i18n.tr("You Qualify", lang), "✅", False),
+            (_kcols[3], str(high_conf_count), i18n.tr("High Confidence", lang), "🎯", False),
+            (_kcols[4], str(closing_soon), i18n.tr("Closing in 7 days", lang), "⏰", True),
+            (_kcols[5], f"₹{total_value/100:.1f}Cr", i18n.tr("Market Value", lang), "💰", False),
         ]
         for _col, _n, _l, _ic, _warn in _kpi_strip:
             _scls = "warn" if _warn and int(closing_soon) > 0 else ""
@@ -2020,6 +2329,31 @@ if "Dashboard" in page:
                 f'<div class="kpi-lbl">{_l}</div>'
                 f'<div class="kpi-sub {_scls}"></div></div>', unsafe_allow_html=True)
 
+        _vault_docs_dash = _cached_vault_docs(email, _token) if email else []
+        _document_alert_n = len(_doc_expiry_alerts(_vault_docs_dash))
+        _high_value_n = (int((pd.to_numeric(df_t["value_lakhs"], errors="coerce") >= 100).sum())
+                         if "value_lakhs" in df_t else 0)
+        st.markdown("""<div class="sec-hd">
+          <span class="sec-title">Urgent Actions</span>
+          <span class="sec-badge">Prioritized today</span>
+          <div class="sec-divider"></div>
+        </div>""", unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="action-grid">'
+            f'<div class="action-card" style="--accent:#F59E0B"><div class="action-icon">⏰</div>'
+            f'<div class="action-value">{closing_soon}</div><div class="action-label">Closing soon</div>'
+            f'<div class="action-note">Deadlines within 7 days</div></div>'
+            f'<div class="action-card" style="--accent:#10B981"><div class="action-icon">🎯</div>'
+            f'<div class="action-value">{high_conf_count}</div><div class="action-label">New matches</div>'
+            f'<div class="action-note">High-confidence opportunities</div></div>'
+            f'<div class="action-card" style="--accent:#8B5CF6"><div class="action-icon">💎</div>'
+            f'<div class="action-value">{_high_value_n}</div><div class="action-label">High-value tenders</div>'
+            f'<div class="action-note">Estimated value ₹1 crore+</div></div>'
+            f'<div class="action-card" style="--accent:#F87171"><div class="action-icon">📄</div>'
+            f'<div class="action-value">{_document_alert_n}</div><div class="action-label">Document alerts</div>'
+            f'<div class="action-note">Expired or expiring soon</div></div></div>',
+            unsafe_allow_html=True)
+
         # ── Quick links to the rest of the app ──
         st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
         _q1, _q2, _q3 = st.columns(3)
@@ -2027,8 +2361,8 @@ if "Dashboard" in page:
             st.session_state.current_page = "📊  Analytics"; st.rerun()
         if _q2.button("👤  " + i18n.t("nav_profile", lang), width="stretch", key="hero_go_profile"):
             st.session_state.current_page = "👤  Profile"; st.rerun()
-        if _q3.button("⚡  " + i18n.tr("Opporta Workspace", lang), width="stretch", key="hero_go_ws"):
-            st.session_state.current_page = "⚡  Opporta Workspace"; st.rerun()
+        if _q3.button("⚡  " + i18n.tr("Tender Intelligence", lang), width="stretch", key="hero_go_ws"):
+            st.session_state.current_page = "⚡  Opporta Tender Intelligence"; st.rerun()
 
         # ── Gentle prompt until a profile is set ──
         if not PROFILE_READY:
@@ -2059,7 +2393,7 @@ if "Dashboard" in page:
         </div>""", unsafe_allow_html=True)
 
         if scored:
-            for s, eligible, reasons, rec in scored[:8]:
+            for s, eligible, reasons, rec in scored[:4]:
                 rc     = ring_cls(s)
                 dl     = days_left(rec.get("deadline"))
                 dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
@@ -2139,7 +2473,7 @@ if "Dashboard" in page:
 
         _alerts = compute_smart_alerts(email, _token, scored, df_t)
         if _alerts:
-            for _al in _alerts[:6]:
+            for _al in _alerts[:4]:
                 st.markdown(
                     f'<div class="alert-item" style="border-left-color:{_al["color"]}">'
                     f'<div class="alert-title">{_al["icon"]} {_html.escape(_al["title"])}</div>'
@@ -2159,8 +2493,8 @@ if "Dashboard" in page:
         if _tl1.button("📊  Market Analytics", width="stretch", key="dash_open_analytics"):
             st.session_state.current_page = "📊  Analytics"
             st.rerun()
-        if _tl2.button("⚡  Opporta Intelligence Analyzer", width="stretch", key="dash_open_ws"):
-            st.session_state.current_page = "⚡  Opporta Workspace"
+        if _tl2.button("⚡  Tender Intelligence", width="stretch", key="dash_open_ws"):
+            st.session_state.current_page = "⚡  Opporta Tender Intelligence"
             st.rerun()
         if _tl3.button("📄  My Document Vault", width="stretch", key="dash_open_vault"):
             st.session_state.current_page = "👤  Profile"
@@ -2178,7 +2512,7 @@ if "Dashboard" in page:
         </div>""", unsafe_allow_html=True)
 
         if not df_j.empty:
-            for _jr in df_j.head(6).to_dict("records"):
+            for _jr in df_j.head(4).to_dict("records"):
                 _jtitle = _html.escape(safe_str(_jr.get("title"), 95))
                 _jdept  = _esc(_jr.get("department"))
                 _jstate = _esc(_jr.get("state"))
@@ -2202,21 +2536,27 @@ if "Dashboard" in page:
             </div>""", unsafe_allow_html=True)
 
         # ══════════════════════════════════════════════════════════════════════
-        # SECTION 5: BID WORKSHOP — upload firm docs + tender doc → ready-to-bid file
+        # SECTION 5: compact route to the dedicated bid workspace
         # ══════════════════════════════════════════════════════════════════════
         st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""<div class="sec-hd">
-          <span class="sec-title">🛠 Bid Workshop</span>
-          <span class="sec-badge-green">Ready-to-Bid File Generator</span>
+          <span class="sec-title">🛠 Opporta Bid Workspace</span>
+          <span class="sec-badge-green">Dedicated tender tool</span>
           <div class="sec-divider"></div>
         </div>""", unsafe_allow_html=True)
 
-        with st.expander("⚡  Generate a Ready-to-Bid file  —  upload your firm documents + the tender document", expanded=False):
+        if st.button("Open Bid Workspace →", width="stretch", key="dash_bid_workspace"):
+            st.session_state.current_page = "🧠  Opporta Bid Workspace"
+            st.rerun()
+
+        # Retain the previous inline implementation as unreachable compatibility
+        # code while the dedicated page becomes the single public experience.
+        if False:
             _ws_ai = bool(
                 os.getenv("GEMINI_API_KEY") or _secret("GEMINI_API_KEY") or
                 os.getenv("ANTHROPIC_API_KEY") or _secret("ANTHROPIC_API_KEY"))
             if not _ws_ai:
-                st.warning("⚡ Opporta Intelligence needs GEMINI_API_KEY (or ANTHROPIC_API_KEY) to read the tender and draft the bid. Add it to your secrets to enable generation.")
+                st.warning("Opporta Intelligence document generation is temporarily unavailable.")
 
             st.markdown("**Step 1 — Tender document** (the NIT / tender notice PDF)")
             _ws_tender = st.file_uploader("Tender document", type=["pdf", "jpg", "jpeg", "png"],
@@ -2238,7 +2578,7 @@ if "Dashboard" in page:
                 if not _ws_tender:
                     st.warning("Upload the tender document first.")
                 elif not _ws_ai:
-                    st.error("Opporta Intelligence not configured — cannot read the tender. Add GEMINI_API_KEY to secrets.")
+                    st.error("Opporta Intelligence could not read this document. Please try again later.")
                 else:
                     import bid_engine, vault_evaluator as _ve
                     # Parse firm documents into text for the readiness + bid context.
@@ -2363,11 +2703,22 @@ if "Dashboard" in page:
 # ── TENDERS — dedicated portal w/ multi-tier cascading filters ─────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Tenders" in page:
-    st.markdown(f"""<div class="sec-hd">
-      <span class="sec-title">{i18n.tr("📄 Tender Portal", lang)}</span>
-      <span class="sec-badge">Category › State › District</span>
-      <div class="sec-divider"></div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="page-kicker">Procurement · CG + UP</div>'
+        f'<div class="page-title">{i18n.tr("Tender Portal", lang)}</div>'
+        f'<div class="page-sub">Discover opportunities, check tender eligibility with '
+        f'Opporta Intelligence, and prepare bid documents in one tender-only workflow.</div>',
+        unsafe_allow_html=True)
+    _tf1, _tf2, _tf3 = st.columns(3)
+    _tf1.button("📄 Browse Tenders", width="stretch", disabled=True,
+                key="tender_feature_browse")
+    if _tf2.button("⚡ Tender Intelligence", width="stretch",
+                   key="tender_feature_intelligence"):
+        st.session_state.current_page = "⚡  Opporta Tender Intelligence"
+        st.rerun()
+    if _tf3.button("🧠 Bid Workspace", width="stretch", key="tender_feature_bid"):
+        st.session_state.current_page = "🧠  Opporta Bid Workspace"
+        st.rerun()
 
     # ── Bid Workshop at the TOP — easy to find (ready-to-bid + eligibility) ──
     _render_bid_workshop()
@@ -2436,6 +2787,25 @@ elif "Tenders" in page:
             "District", dist_opts,
             index=dist_opts.index(st.session_state.explore_district),
             label_visibility="collapsed", key="ex_dist")
+    f5, f6, _filter_space = st.columns([1.5, 1.5, 4.5])
+    with f5:
+        _value_options = ["All values", "Under ₹10L", "₹10L–₹50L",
+                          "₹50L–₹1Cr", "₹1Cr–₹5Cr", "₹5Cr+"]
+        if st.session_state.explore_value not in _value_options:
+            st.session_state.explore_value = "All values"
+        st.session_state.explore_value = st.selectbox(
+            "Estimated value", _value_options,
+            index=_value_options.index(st.session_state.explore_value),
+            label_visibility="collapsed", key="ex_value")
+    with f6:
+        _deadline_options = ["Any deadline", "Closing in 7 days", "Closing in 15 days",
+                             "Closing in 30 days", "No deadline listed"]
+        if st.session_state.explore_deadline not in _deadline_options:
+            st.session_state.explore_deadline = "Any deadline"
+        st.session_state.explore_deadline = st.selectbox(
+            "Deadline", _deadline_options,
+            index=_deadline_options.index(st.session_state.explore_deadline),
+            label_visibility="collapsed", key="ex_deadline")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Tender Amendments (Corrigendums) — closes the "missed amendment" gap ──
@@ -2470,7 +2840,9 @@ elif "Tenders" in page:
     # advertise tenders ONLY in local newspapers, never on e-procurement portals.
     # This captures them district-wise: browse what's collected, add tenders by
     # letting Opporta Intelligence read an e-paper page, or open district papers.
-    with st.expander("📰  Offline / Newspaper Tenders — district-wise NITs printed in CG/UP papers", expanded=False):
+    _off_n = len(load_table("offline_tenders"))
+    with st.expander(f"📰  Offline / Newspaper Tenders · {_off_n} collected — district-wise NITs printed in CG/UP papers",
+                     expanded=True):
         st.caption("Government offices (PWD, Collector, Nagar Nigam, Gram Panchayat, Jal Sansadhan…) "
                    "often publish tenders only in local newspapers. Browse them district-wise, add "
                    "tenders from an e-paper page, or open your district's papers directly.")
@@ -2520,8 +2892,7 @@ elif "Tenders" in page:
         with _ot2:
             _ep_ai = bool(os.getenv("GEMINI_API_KEY") or _secret("GEMINI_API_KEY"))
             if not _ep_ai:
-                st.warning("Opporta Intelligence (GEMINI_API_KEY) is needed to read e-paper pages. "
-                           "Add it to your secrets to enable extraction.")
+                st.warning("Opporta Intelligence e-paper reading is temporarily unavailable.")
             st.caption("Upload one or more newspaper / e-paper PAGES (photo, screenshot or PDF). "
                        "Opporta Intelligence reads each page and pulls out every government tender "
                        "notice printed on it — tagged district-wise.")
@@ -2600,6 +2971,8 @@ elif "Tenders" in page:
     fcat = st.session_state.explore_category
     fst  = st.session_state.explore_state
     fdst = st.session_state.explore_district
+    fval = st.session_state.explore_value
+    fddl = st.session_state.explore_deadline
 
     rows = []
     for _, r in df_t.iterrows():
@@ -2609,6 +2982,20 @@ elif "Tenders" in page:
         if fst  != "All" and _v(rec.get("state")) != fst: continue
         if fcat != "All" and rec.get("category_bucket") != fcat: continue
         if fdst != "All" and _v(rec.get("district","")).lower() != fdst.lower(): continue
+        _raw_value = rec.get("value_lakhs")
+        if _raw_value is None or (isinstance(_raw_value, float) and pd.isna(_raw_value)):
+            _raw_value = rec.get("value_text")
+        _value_lakhs = core.parse_value_to_lakhs(_raw_value)
+        if fval == "Under ₹10L" and (_value_lakhs is None or _value_lakhs >= 10): continue
+        if fval == "₹10L–₹50L" and (_value_lakhs is None or not 10 <= _value_lakhs < 50): continue
+        if fval == "₹50L–₹1Cr" and (_value_lakhs is None or not 50 <= _value_lakhs < 100): continue
+        if fval == "₹1Cr–₹5Cr" and (_value_lakhs is None or not 100 <= _value_lakhs < 500): continue
+        if fval == "₹5Cr+" and (_value_lakhs is None or _value_lakhs < 500): continue
+        _days = days_left(rec.get("deadline"))
+        if fddl == "No deadline listed" and _days is not None: continue
+        if fddl == "Closing in 7 days" and (_days is None or not 0 <= _days <= 7): continue
+        if fddl == "Closing in 15 days" and (_days is None or not 0 <= _days <= 15): continue
+        if fddl == "Closing in 30 days" and (_days is None or not 0 <= _days <= 30): continue
         if PROFILE_READY:
             s, _, eligible = core.score_tender_for_user(rec, profile)
             rows.append((s, eligible, rec))
@@ -2651,6 +3038,9 @@ elif "Tenders" in page:
         else:
             elig_html = ('<span class="tag" style="background:rgba(239,68,68,.1);color:#F87171;'
                          'border:1px solid rgba(239,68,68,.25)">❌ Not Eligible</span>')
+        score_html = (f'<div class="ring {ring_cls(s)}" title="Opporta Intelligence match score">{s}%</div>'
+                      if PROFILE_READY else
+                      '<div class="ring ring-md" title="Complete profile for a match score">—</div>')
 
         st.markdown(f"""<div class="ocard">
           <div class="ocard-row">
@@ -2665,10 +3055,11 @@ elif "Tenders" in page:
                 {elig_html}
               </div>
             </div>
+            {score_html}
           </div>
         </div>""", unsafe_allow_html=True)
 
-        with st.expander(f"➕ Save · ⚡ Analyze · more details"):
+        with st.expander(f"View details · Analyze · Save · Share"):
             _lang = st.session_state.get("lang", "en")
             _exp  = i18n.tender_explainer(rec, _lang)
 
@@ -2701,11 +3092,29 @@ elif "Tenders" in page:
             doc_url = rec.get("document_url")
             if doc_url and str(doc_url) not in ("nan","None","—",""):
                 _pdf_widget(doc_url, rec.get("source_id",""), ctx="exp")
+            _act1, _act2, _act3, _act4 = st.columns(4)
+            _doc_url = str(rec.get("document_url") or "").strip()
+            if _doc_url.startswith("http"):
+                _act1.link_button("View official", _doc_url,
+                                  key=_rec_key("official", rec), width="stretch")
+            else:
+                _act1.button("Details shown", key=_rec_key("details", rec),
+                             width="stretch", disabled=True)
+            if _act2.button("Analyze", key=_rec_key("analyze", rec), width="stretch"):
+                st.session_state["ws_prefill"] = str(rec.get("title") or "")
+                st.session_state.current_page = "⚡  Opporta Tender Intelligence"
+                st.rerun()
             if st.session_state.authenticated:
-                if st.button("➕ " + i18n.t("save_pipeline", _lang),
-                             key=_rec_key("e_save", rec), width="stretch"):
+                if _act3.button("Save", key=_rec_key("e_save", rec), width="stretch"):
                     accounts.save_tender(email, rec.get("source_id"), token=_token)
                     st.toast("✓ Saved to your pipeline")
+            else:
+                _act3.button("Sign in to save", key=_rec_key("save_locked", rec),
+                             width="stretch", disabled=True)
+            _share_text = quote(
+                f"{safe_str(rec.get('title'), 120)}\n{_doc_url or 'Shared from OPPORTA'}")
+            _act4.link_button("Share", f"https://wa.me/?text={_share_text}",
+                              key=_rec_key("share", rec), width="stretch")
 
     # ── Direct Portals: Official State Procurement Pipelines (bottom of page) ──
     st.markdown("<br>", unsafe_allow_html=True)
@@ -2721,17 +3130,32 @@ elif "Tenders" in page:
             _portal_region(_region, _sub, _items, cols=2)
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ── AI WORKSPACE ──────────────────────────────────────────────────────────────
+# ── OPPORTA BID WORKSPACE ────────────────────────────────────────────────────
+# Dedicated route for the ready-to-bid workflow. The same generator remains
+# available as a compact expander in Tender Portal for backwards compatibility.
+elif "Bid Workspace" in page:
+    if not st.session_state.authenticated:
+        st.warning("Sign in to access the Opporta Bid Workspace.")
+        st.stop()
+    st.markdown(
+        '<div class="page-kicker">Bid intelligence · English / हिन्दी</div>'
+        '<div class="page-title">Opporta Bid Workspace</div>'
+        '<div class="page-sub">Upload the tender and your firm evidence, check deterministic '
+        'eligibility, resolve missing documents and generate a ready-to-edit bid package.</div>',
+        unsafe_allow_html=True)
+    _render_bid_workshop(standalone=True)
+
+# ── OPPORTA TENDER INTELLIGENCE ───────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
-elif "Workspace" in page:
+elif "Workspace" in page or "Tender Intelligence" in page:
     if not st.session_state.authenticated:
         st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
           <div style="font-size:2rem;margin-bottom:12px">🔐</div>
-          <div style="font-size:.9rem;font-weight:600;color:#64748B">Sign in to access Opporta Workspace</div>
+          <div style="font-size:.9rem;font-weight:600;color:#64748B">Sign in to access Tender Intelligence</div>
         </div>""", unsafe_allow_html=True)
         st.stop()
 
-    # Prefill the evaluator search when arriving from a tender's "Analyze with AI".
+    # Prefill the evaluator search when arriving from Tender Portal.
     if "ws_prefill" in st.session_state:
         st.session_state["eval_search_q"] = st.session_state.pop("ws_prefill")
 
@@ -2741,15 +3165,15 @@ elif "Workspace" in page:
     )
 
     st.markdown("""<div class="terminal-hd">
-      <div class="terminal-label">⚡ OPPORTA WORKSPACE · Opporta Intelligence</div>
-      <div class="terminal-title">Tender Evaluator · Resume Analyzer · Bid Drafter</div>
-      <div class="terminal-sub">We evaluate your documents, score eligibility, and draft bid paperwork — accurate analysis, no outcome guarantees.</div>
+      <div class="terminal-label">⚡ OPPORTA TENDER INTELLIGENCE</div>
+      <div class="terminal-title">Tender Eligibility · Evidence Readiness · Bid Drafting</div>
+      <div class="terminal-sub">Evaluate tender requirements against your profile and documents, then prepare bid paperwork — with no outcome guarantees.</div>
     </div>""", unsafe_allow_html=True)
 
     st.markdown(
         '<div style="background:rgba(0,196,255,.05);border:1px solid rgba(0,196,255,.15);border-radius:10px;'
         'padding:10px 16px;font-size:.75rem;color:#64748B;margin-bottom:18px;line-height:1.6">'
-        '&#9432;&nbsp; <b style="color:#38BDF8">What Opporta Workspace does:</b> evaluates tender documents against '
+        '&#9432;&nbsp; <b style="color:#38BDF8">What Tender Intelligence does:</b> evaluates tender documents against '
         'your profile, scores 6 key dimensions, checks document readiness, drafts bid paperwork. &nbsp;'
         '<b style="color:#F59E0B">What it does not do:</b> predict award outcomes or guarantee you will win the tender. '
         'Final award decisions are made solely by the government authority.'
@@ -2757,11 +3181,14 @@ elif "Workspace" in page:
         unsafe_allow_html=True)
 
     if not has_ai:
-        st.info("⚡ Add GEMINI_API_KEY to .env to enable Opporta Intelligence document reading. Rule-based scoring is active.")
+        st.info("Opporta Intelligence document reading is temporarily unavailable. Profile-based eligibility scoring remains active.")
 
-    tab1, tab2, tab3 = st.tabs(["🔍  Tender Evaluator", "📄  Resume Analyzer", "📝  Bid Drafter"])
+    tab1, tab3 = st.tabs(["🔍  Tender Eligibility", "📝  Bid Drafter"])
+    # Resume matching belongs exclusively to Government Jobs. Keep the existing
+    # implementation mounted but hidden here to avoid changing evaluator logic.
+    tab2 = st.container(key="hidden_job_intelligence")
 
-    # ── Tab 1: AI Tender Evaluator ─────────────────────────────────────────────
+    # ── Tab 1: Opporta Tender Evaluator ────────────────────────────────────────
     with tab1:
         st.markdown("""<div class="sec-hd">
           <span class="sec-title">Tender Document Evaluator</span>
@@ -2770,7 +3197,7 @@ elif "Workspace" in page:
         </div>""", unsafe_allow_html=True)
 
         if df_t.empty:
-            st.warning("No tender data available. Run ingest.py first.")
+            st.warning("Tender data is being refreshed. Please check again shortly.")
         else:
             # ── Searchable tender picker ──────────────────────────────────────
             eval_q = st.text_input(
@@ -3003,7 +3430,7 @@ elif "Workspace" in page:
         </div>""", unsafe_allow_html=True)
 
         if df_j.empty:
-            st.warning("No job data available. Run ingest.py first.")
+            st.warning("Job data is being refreshed. Please check again shortly.")
         else:
             job_list = df_j["title"].fillna("Untitled").tolist()
             job_idx  = st.selectbox("Select job posting",
@@ -3078,7 +3505,7 @@ elif "Workspace" in page:
         </div>""", unsafe_allow_html=True)
 
         if not has_ai:
-            st.warning("⚡ Add GEMINI_API_KEY to .env to enable Opporta Intelligence extraction and bid generation.")
+            st.warning("Opporta Intelligence document generation is temporarily unavailable.")
 
         b1, b2 = st.columns(2)
         with b1:
@@ -3219,7 +3646,7 @@ elif "Workspace" in page:
             st.markdown("---")
             st.markdown("**Step 5 — Draft Bid Document**")
             if not has_ai:
-                st.info("Add GEMINI_API_KEY to .env to enable Opporta Intelligence bid drafting.")
+                st.info("Opporta Intelligence bid drafting is temporarily unavailable.")
             else:
                 st.caption("⚠️ This drafts a bid document template based on your inputs. Review, verify, and sign before official submission. Opporta does not guarantee tender award.")
                 _wk_lang0 = st.session_state.get("lang", "en")
@@ -3253,12 +3680,18 @@ elif "Workspace" in page:
 # ── JOBS ──────────────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Jobs" in page:
-    st.markdown(f"""<div class="sec-hd">
-      <span class="sec-title">{i18n.tr("💼 Government Job Board", lang)}</span>
-      <div class="sec-divider"></div>
-    </div>""", unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="page-kicker">Government careers · CG + UP</div>'
+        f'<div class="page-title">{i18n.tr("Government Jobs", lang)}</div>'
+        f'<div class="page-sub">Find active notifications, check your profile match with '
+        f'Opporta Intelligence, and prepare for upcoming exams.</div>',
+        unsafe_allow_html=True)
 
-    jtab1, jtab2 = st.tabs(["💼  Active Job Board", "🏛  Upcoming Exams & Study Matrix"])
+    jtab1, jtab2, jtab3 = st.tabs([
+        "💼  Job Opportunities",
+        "⚡  Opporta Job Intelligence",
+        "🏛  Exam Planner",
+    ])
 
     # ── TAB 1: Active Job Board (live grid + filters) ──
     with jtab1:
@@ -3270,7 +3703,7 @@ elif "Jobs" in page:
         else:
             # Job filters (on top — users filter first)
             st.markdown('<div class="filter-row">', unsafe_allow_html=True)
-            jf1, jf2, jf3 = st.columns([3, 1.5, 1.5])
+            jf1, jf2, jf3, jf4 = st.columns([2.6, 1.3, 1.3, 1.5])
             with jf1:
                 jsearch = st.text_input("Search jobs", placeholder="Title, department, qualification...",
                                         label_visibility="collapsed", key="jsearch").lower()
@@ -3280,7 +3713,14 @@ elif "Jobs" in page:
             with jf3:
                 jcats = ["All"] + sorted(df_j["category"].dropna().unique().tolist()) if "category" in df_j else ["All"]
                 jcat  = st.selectbox("Category", jcats, label_visibility="collapsed", key="jcat")
+            with jf4:
+                jsrc = st.selectbox("Source", ["All sources", "📰 Newspaper jobs", "🌐 Online portals"],
+                                    label_visibility="collapsed", key="jsrc")
             st.markdown('</div>', unsafe_allow_html=True)
+
+            # A job is an "offline / newspaper" posting when its source portal says so.
+            def _is_newspaper_job(rec) -> bool:
+                return str(rec.get("source_portal", "")).lower().startswith(("newspaper", "offline"))
 
             # Job KPIs
             jk1, jk2, jk3, jk4 = st.columns(4)
@@ -3307,6 +3747,8 @@ elif "Jobs" in page:
                 if jsearch and jsearch not in hay: continue
                 if jstate != "All" and _v(rec.get("state")) != jstate: continue
                 if jcat   != "All" and jcat.lower() not in _v(rec.get("category","")).lower(): continue
+                if jsrc == "📰 Newspaper jobs" and not _is_newspaper_job(rec): continue
+                if jsrc == "🌐 Online portals" and _is_newspaper_job(rec): continue
                 jobs_filtered.append(rec)
 
             st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(jobs_filtered)} postings</div>',
@@ -3338,6 +3780,8 @@ elif "Jobs" in page:
                 vac_tag   = f'<span class="tag tag-loc">&#128101; {vac_txt}</span>' if vac_txt else ""
                 sal_tag   = f'<span class="tag tag-val">&#x20B9; {salary_v}</span>' if salary_v != "—" else ""
                 jvac_div  = f'<div class="jvac">{vac_txt}</div>' if vac_txt else ""
+                news_tag  = ('<span class="tag tag-green">&#128240; Newspaper</span>'
+                             if _is_newspaper_job(rec) else "")
 
                 # Auto eligibility badge from profile
                 match_div = ""
@@ -3357,7 +3801,7 @@ elif "Jobs" in page:
                     f'<span class="tag tag-dl">{dl_txt}</span>'
                     f'{vac_tag}'
                     f'<span class="tag tag-cat">{cat_v}</span>'
-                    f'{sal_tag}'
+                    f'{sal_tag}{news_tag}'
                     f'</div></div>{match_div}{jvac_div}</div></div>'
                 )
                 st.markdown(card_html, unsafe_allow_html=True)
@@ -3400,7 +3844,7 @@ elif "Jobs" in page:
                         else:
                             st.caption("Complete your **Job Seeker Profile** (Profile → Job Seeker Profile tab) for auto-scoring.")
 
-                        # Optional resume upload for deeper AI analysis
+                        # Optional resume upload for deeper Opporta Intelligence analysis
                         resume_up = st.file_uploader("Upload resume for Opporta Intelligence analysis (optional)",
                                                      type=["pdf","txt"],
                                                      key=_rec_key("jr", rec))
@@ -3420,8 +3864,12 @@ elif "Jobs" in page:
                                 if res["met"]:    st.success("Met: " + " · ".join(res["met"]))
                                 if res["missing"]:st.error("Missing: " + " · ".join(res["missing"]))
 
-    # ── TAB 2: Upcoming Exams & Study Matrix (verified authorities + resources) ──
+    # ── TAB 2: job-only Opporta Intelligence ──────────────────────────────────
     with jtab2:
+        render_job_intelligence(df_j)
+
+    # ── TAB 3: Upcoming Exams & Study Matrix (verified authorities + resources) ──
+    with jtab3:
         st.markdown(
             '<div class="portal-intro"><b>Recruitment authorities + free study resources.</b> '
             '<span>The commissions below publish exam notifications, schedules, admit cards, '
@@ -3429,7 +3877,7 @@ elif "Jobs" in page:
             'free government learning platforms to actually prepare from. Every link opens in a '
             'new browser tab.</span></div>', unsafe_allow_html=True)
 
-        # ── AI Study Plan Generator ──
+        # ── Opporta Intelligence Study Plan Generator ──
         st.markdown('<div class="profile-section-title" style="margin-top:6px">🧭 Opporta Intelligence Study Plan</div>',
                     unsafe_allow_html=True)
         st.caption("Pick your exam and its date — get a suggested, time-aware preparation plan with priority topics and resources.")
@@ -3479,6 +3927,60 @@ elif "Jobs" in page:
             _portal_region(_region, "Free · official · open-access", _items, cols=2)
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ── ALERTS ────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Alerts" in page:
+    st.markdown(
+        '<div class="page-kicker">Action center · Personalized monitoring</div>'
+        '<div class="page-title">Alerts</div>'
+        '<div class="page-sub">Deadline risk, new high-confidence matches and document '
+        'renewals that can affect your next submission.</div>',
+        unsafe_allow_html=True)
+    _alert_docs = _cached_vault_docs(email, _token) if email else []
+    _page_alerts = _doc_expiry_alerts(_alert_docs)
+    if PROFILE_READY:
+        _page_alerts += compute_smart_alerts(email, _token, scored, df_t)
+    if _page_alerts:
+        for _alert in _page_alerts:
+            st.markdown(
+                f'<div class="alert-item" style="border-left-color:{_alert["color"]}">'
+                f'<div class="alert-title">{_alert["icon"]} {_html.escape(_alert["title"])}</div>'
+                f'<div class="alert-meta">{_html.escape(_alert["detail"])}</div></div>',
+                unsafe_allow_html=True)
+    else:
+        st.success("No urgent alerts. Saved-tender deadlines and Vault expiry dates are being monitored.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── SOURCE HEALTH ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Source Health" in page:
+    render_source_health(df_t, df_j)
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── SETTINGS ──────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif "Settings" in page:
+    st.markdown(
+        '<div class="page-kicker">Account · Platform preferences</div>'
+        '<div class="page-title">Settings</div>'
+        '<div class="page-sub">Manage your language, opportunity coverage and privacy preferences.</div>',
+        unsafe_allow_html=True)
+    _set1, _set2 = st.columns(2)
+    with _set1:
+        st.markdown('<div class="profile-section-title">Language</div>',
+                    unsafe_allow_html=True)
+        st.write("Use the English / हिन्दी switch at the top of every page.")
+        st.caption("Your selected language stays active while you use the platform.")
+    with _set2:
+        st.markdown('<div class="profile-section-title">Opportunity coverage</div>',
+                    unsafe_allow_html=True)
+        st.write("Chhattisgarh and Uttar Pradesh")
+        st.caption("Tender and government-job results are organized by state and district.")
+    st.markdown('<div class="profile-section-title" style="margin-top:24px">Privacy</div>',
+                unsafe_allow_html=True)
+    st.info("Your profile and Vault documents are used only to personalize eligibility and readiness guidance.")
+
+# ══════════════════════════════════════════════════════════════════════════════
 # ── ANALYTICS ─────────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Analytics" in page:
@@ -3514,9 +4016,18 @@ elif "Analytics" in page:
         return fig
 
     def _chart_card(title, fig):
-        st.markdown(f'<div class="chart-card"><div class="chart-title">{title}</div></div>',
-                    unsafe_allow_html=True)
-        st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        _chart_notes = {
+            "Tenders by Category": "Where procurement demand is concentrated.",
+            "Jobs by Category": "Current recruitment demand by role family.",
+            "Tenders by State": "Live opportunity coverage across CG and UP.",
+            "Deadline Distribution (Next 60 Days)": "Upcoming submission pressure by week.",
+            "Top Districts by Tender Count": "Districts with the strongest current activity.",
+            "Top Organizations by Tender Count": "Most active procuring authorities.",
+        }
+        with st.container(border=True):
+            st.markdown(f'<div class="chart-title">{title}</div>', unsafe_allow_html=True)
+            st.caption(_chart_notes.get(title, "Current market distribution."))
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     st.markdown(f"""<div class="sec-hd">
       <span class="sec-title">{i18n.tr("📊 Market Intelligence", lang)}</span>
@@ -3524,7 +4035,7 @@ elif "Analytics" in page:
     </div>""", unsafe_allow_html=True)
 
     if df_t.empty:
-        st.warning("No data available. Run ingest.py first.")
+        st.warning("Market data is being refreshed. Please check again shortly.")
     else:
         # ── KPI row ──
         m1, m2, m3, m4 = st.columns(4)
@@ -3597,21 +4108,25 @@ elif "Analytics" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 # ── PROFILE ───────────────────────────────────────────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
-elif "Profile" in page:
+elif "Profile" in page or "Document Vault" in page:
     if not st.session_state.authenticated:
         st.warning("Sign in to access your profile.")
         st.stop()
 
+    _profile_heading = "📄 Document Vault" if "Document Vault" in page else i18n.tr("👤 My Profile", lang)
     st.markdown(f"""<div class="sec-hd">
-      <span class="sec-title">{i18n.tr("👤 My Profile", lang)}</span>
+      <span class="sec-title">{_profile_heading}</span>
       <div class="sec-divider"></div>
     </div>""", unsafe_allow_html=True)
 
     if not PROFILE_READY:
         st.info("ℹ️ Update your profile below to see suggested matches and personalized fit scores. Your saved details power the recommendations.")
 
+    _profile_tabs = ["🏢  Contractor Profile", "👤  Job Seeker Profile", "📄  Document Vault"]
+    _profile_default = _profile_tabs[2] if "Document Vault" in page else _profile_tabs[0]
     ptab1, ptab2, ptab3 = st.tabs(
-        ["🏢  Contractor Profile", "👤  Job Seeker Profile", "📄  Document Vault"])
+        _profile_tabs, default=_profile_default,
+        key="profile_sections_vault" if "Document Vault" in page else "profile_sections")
 
     # ── Tab 1: Contractor Profile ──────────────────────────────────────────────
     with ptab1:
@@ -3845,7 +4360,7 @@ elif "Profile" in page:
                     elif _info.get("status") == "ok":
                         st.info("No expiry date found — this document may not have one.")
                     elif _info.get("status") == "no_key":
-                        st.warning("Opporta Intelligence needs GEMINI_API_KEY — set the date manually.")
+                        st.warning("Automatic expiry detection is temporarily unavailable — set the date manually.")
                     else:
                         st.warning("Couldn't read it automatically — set the date manually.")
                 else:
@@ -3908,6 +4423,13 @@ elif "Profile" in page:
                 _mime = _doc.get("mime_type", "")
                 _icon = "📄" if "pdf" in _mime else "🖼️" if "image" in _mime else "📁"
                 _up   = str(_doc.get("uploaded_at", ""))[:10]
+                _dtype = str(_doc.get("doc_type") or "").lower()
+                _usefulness = (
+                    "Contractor eligibility evidence" if "license" in _dtype
+                    else "Financial capacity evidence" if "capacity" in _dtype or "turnover" in _dtype or "tax" in _dtype
+                    else "Job eligibility & resume matching" if "resume" in _dtype
+                    else "Supporting bid evidence"
+                )
                 _stt  = _doc_expiry_status(_doc)
                 if _stt:
                     _badge = (f'<span class="tag" style="flex-shrink:0;background:{_stt[1]}1a;'
@@ -3918,7 +4440,8 @@ elif "Profile" in page:
                     f'<div class="doc-card"><div class="doc-icon">{_icon}</div>'
                     f'<div style="flex:1;min-width:0">'
                     f'<div class="doc-name">{_esc(_doc.get("name"))}</div>'
-                    f'<div class="doc-meta">{_esc(_doc.get("filename"))} · {_kb} KB · {_up}</div></div>'
+                    f'<div class="doc-meta">{_esc(_doc.get("filename"))} · {_kb} KB · {_up}</div>'
+                    f'<div class="doc-meta" style="color:#38BDF8">Used for: {_usefulness}</div></div>'
                     f'{_badge}</div>', unsafe_allow_html=True)
         else:
             st.markdown("""<div class="ocard" style="text-align:center;padding:30px">

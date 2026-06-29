@@ -898,12 +898,18 @@ def load_table(name: str) -> pd.DataFrame:
     return pd.DataFrame()
 
 def _drop_expired(df: pd.DataFrame) -> pd.DataFrame:
-    """Remove rows whose deadline has passed. Rows with no deadline are kept."""
-    if "deadline" not in df.columns:
-        return df
-    today = pd.Timestamp(date.today())
-    dl = pd.to_datetime(df["deadline"], errors="coerce")
-    keep = dl.isna() | (dl >= today)
+    """Public view: active dates only, with uncertain OCR kept internal."""
+    keep = pd.Series(True, index=df.index)
+    if "deadline" in df.columns:
+        today = pd.Timestamp(date.today())
+        dl = pd.to_datetime(df["deadline"], errors="coerce")
+        keep &= dl.isna() | (dl >= today)
+    if "status" in df.columns:
+        status = df["status"].fillna("").astype(str).str.lower()
+        keep &= ~status.isin({"expired", "archived", "needs_review"})
+    if "requires_manual_review" in df.columns:
+        review = df["requires_manual_review"].fillna(False).astype(str).str.lower()
+        keep &= ~review.isin({"true", "1", "yes"})
     return df[keep].reset_index(drop=True)
 
 def days_left(d) -> int | None:
@@ -1381,6 +1387,16 @@ def _pdf_widget(doc_url: str, source_id: str, compact: bool = False, ctx: str = 
 
 def _districts_for_state(state: str) -> list[str]:
     return STATE_DISTRICTS.get(state, CG_DISTRICTS + UP_DISTRICTS)
+
+
+def _data_options(df: pd.DataFrame, column: str, all_label: str = "All") -> list[str]:
+    if df.empty or column not in df.columns:
+        return [all_label]
+    values = {
+        str(value).strip() for value in df[column].dropna().tolist()
+        if str(value).strip().lower() not in {"", "nan", "none", "nat"}
+    }
+    return [all_label] + sorted(values, key=str.lower)
 
 # ── LOAD DATA ─────────────────────────────────────────────────────────────────
 df_t = load_table("tenders")
@@ -2806,6 +2822,32 @@ elif "Tenders" in page:
             "Deadline", _deadline_options,
             index=_deadline_options.index(st.session_state.explore_deadline),
             label_visibility="collapsed", key="ex_deadline")
+    tf1, tf2, tf3, tf4 = st.columns(4)
+    with tf1:
+        tender_subcategory = st.selectbox(
+            "Subcategory", _data_options(df_t, "subcategory"),
+            label_visibility="collapsed", key="ex_subcategory")
+    with tf2:
+        tender_sector = st.selectbox(
+            "Sector", _data_options(df_t, "sector"),
+            label_visibility="collapsed", key="ex_sector")
+    with tf3:
+        tender_department = st.selectbox(
+            "Department", _data_options(df_t, "department"),
+            label_visibility="collapsed", key="ex_department")
+    with tf4:
+        tender_source_type = st.selectbox(
+            "Source type", _data_options(df_t, "source_type"),
+            label_visibility="collapsed", key="ex_source_type")
+    tf5, tf6, _tf_space = st.columns([1.5, 1.5, 4.5])
+    with tf5:
+        tender_mode = st.selectbox(
+            "Online / offline", ["All", "online", "offline"],
+            label_visibility="collapsed", key="ex_mode")
+    with tf6:
+        tender_confidence = st.selectbox(
+            "Confidence", ["Any confidence", "60%+", "80%+"],
+            label_visibility="collapsed", key="ex_confidence")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Tender Amendments (Corrigendums) — closes the "missed amendment" gap ──
@@ -2982,6 +3024,18 @@ elif "Tenders" in page:
         if fst  != "All" and _v(rec.get("state")) != fst: continue
         if fcat != "All" and rec.get("category_bucket") != fcat: continue
         if fdst != "All" and _v(rec.get("district","")).lower() != fdst.lower(): continue
+        if (tender_subcategory != "All"
+                and _v(rec.get("subcategory")) != tender_subcategory): continue
+        if tender_sector != "All" and _v(rec.get("sector")) != tender_sector: continue
+        if (tender_department != "All"
+                and _v(rec.get("department")) != tender_department): continue
+        if (tender_source_type != "All"
+                and _v(rec.get("source_type")) != tender_source_type): continue
+        if (tender_mode != "All"
+                and _v(rec.get("online_or_offline")).lower() != tender_mode): continue
+        _confidence = core.parse_int(rec.get("confidence_score"))
+        if tender_confidence == "60%+" and (_confidence is None or _confidence < 60): continue
+        if tender_confidence == "80%+" and (_confidence is None or _confidence < 80): continue
         _raw_value = rec.get("value_lakhs")
         if _raw_value is None or (isinstance(_raw_value, float) and pd.isna(_raw_value)):
             _raw_value = rec.get("value_text")
@@ -3716,11 +3770,53 @@ elif "Jobs" in page:
             with jf4:
                 jsrc = st.selectbox("Source", ["All sources", "📰 Newspaper jobs", "🌐 Online portals"],
                                     label_visibility="collapsed", key="jsrc")
+            jx1, jx2, jx3, jx4, jx5 = st.columns(5)
+            with jx1:
+                job_district = st.selectbox(
+                    "District", _data_options(df_j, "district"),
+                    label_visibility="collapsed", key="jdistrict")
+            with jx2:
+                job_subcategory = st.selectbox(
+                    "Subcategory", _data_options(df_j, "subcategory"),
+                    label_visibility="collapsed", key="jsubcategory")
+            with jx3:
+                job_field = st.selectbox(
+                    "Field", _data_options(df_j, "field"),
+                    label_visibility="collapsed", key="jfield")
+            with jx4:
+                job_department = st.selectbox(
+                    "Department", _data_options(df_j, "department"),
+                    label_visibility="collapsed", key="jdepartment")
+            with jx5:
+                job_source_type = st.selectbox(
+                    "Source type", _data_options(df_j, "source_type"),
+                    label_visibility="collapsed", key="j_source_type")
+            jy1, jy2, jy3, jy4 = st.columns(4)
+            with jy1:
+                job_mode = st.selectbox(
+                    "Online / offline", ["All", "online", "offline"],
+                    label_visibility="collapsed", key="j_mode")
+            with jy2:
+                job_deadline = st.selectbox(
+                    "Deadline", ["Any deadline", "Closing in 7 days",
+                                 "Closing in 30 days", "No deadline listed"],
+                    label_visibility="collapsed", key="j_deadline")
+            with jy3:
+                job_confidence = st.selectbox(
+                    "Confidence", ["Any confidence", "60%+", "80%+"],
+                    label_visibility="collapsed", key="j_confidence")
+            with jy4:
+                job_qualification = st.text_input(
+                    "Qualification", placeholder="Qualification contains…",
+                    label_visibility="collapsed", key="j_qualification").lower()
             st.markdown('</div>', unsafe_allow_html=True)
 
             # A job is an "offline / newspaper" posting when its source portal says so.
             def _is_newspaper_job(rec) -> bool:
-                return str(rec.get("source_portal", "")).lower().startswith(("newspaper", "offline"))
+                source = " ".join(str(rec.get(key, "")) for key in (
+                    "source_portal", "source_type", "online_or_offline"))
+                return ("newspaper" in source.lower() or "epaper" in source.lower()
+                        or str(rec.get("online_or_offline", "")).lower() == "offline")
 
             # Job KPIs
             jk1, jk2, jk3, jk4 = st.columns(4)
@@ -3747,6 +3843,26 @@ elif "Jobs" in page:
                 if jsearch and jsearch not in hay: continue
                 if jstate != "All" and _v(rec.get("state")) != jstate: continue
                 if jcat   != "All" and jcat.lower() not in _v(rec.get("category","")).lower(): continue
+                if job_district != "All" and _v(rec.get("district")) != job_district: continue
+                if (job_subcategory != "All"
+                        and _v(rec.get("subcategory")) != job_subcategory): continue
+                if job_field != "All" and _v(rec.get("field")) != job_field: continue
+                if (job_department != "All"
+                        and _v(rec.get("department")) != job_department): continue
+                if (job_source_type != "All"
+                        and _v(rec.get("source_type")) != job_source_type): continue
+                if (job_mode != "All"
+                        and _v(rec.get("online_or_offline")).lower() != job_mode): continue
+                if (job_qualification
+                        and job_qualification not in _v(rec.get("qualification")).lower()): continue
+                if job_deadline == "No deadline listed" and dl_check is not None: continue
+                if (job_deadline == "Closing in 7 days"
+                        and (dl_check is None or not 0 <= dl_check <= 7)): continue
+                if (job_deadline == "Closing in 30 days"
+                        and (dl_check is None or not 0 <= dl_check <= 30)): continue
+                _job_conf = core.parse_int(rec.get("confidence_score"))
+                if job_confidence == "60%+" and (_job_conf is None or _job_conf < 60): continue
+                if job_confidence == "80%+" and (_job_conf is None or _job_conf < 80): continue
                 if jsrc == "📰 Newspaper jobs" and not _is_newspaper_job(rec): continue
                 if jsrc == "🌐 Online portals" and _is_newspaper_job(rec): continue
                 jobs_filtered.append(rec)

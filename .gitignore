@@ -8,10 +8,10 @@ client_secret.json
 # Generated data & caches
 data/
 __pycache__/
-**/__pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # Scraper dev probe artifacts
 probe_*.png

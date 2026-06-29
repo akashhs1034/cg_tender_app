@@ -12,6 +12,9 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 load_dotenv()
 
 PASS = "[OK]"
@@ -34,16 +37,16 @@ url = os.getenv("SUPABASE_URL", "")
 key = os.getenv("SUPABASE_KEY", "")
 
 if not url or "YOUR-PROJECT" in url:
-    fail("SUPABASE_URL is not set (still has placeholder value)")
+    warn("SUPABASE_URL is not set - local CSV fallback remains available")
 else:
-    ok(f"SUPABASE_URL  = {url}")
+    ok("SUPABASE_URL is configured")
 
 if not key or "YOUR-SERVICE-KEY" in key:
-    fail("SUPABASE_KEY is not set (still has placeholder value)")
+    warn("SUPABASE_KEY is not set - cloud reads/writes will be skipped")
 elif key.startswith("sb_publishable_"):
-    fail(
-        "SUPABASE_KEY is a publishable/anon key - upserts WILL fail.\n"
-        "        Dashboard -> Project Settings -> API -> service_role (secret key)."
+    warn(
+        "SUPABASE_KEY is publishable/anon - app reads work; configure "
+        "SUPABASE_SERVICE_KEY for ingestion writes"
     )
 elif not key.startswith("eyJ"):
     warn("SUPABASE_KEY format unexpected (expected JWT starting with 'eyJ') - double-check it")
@@ -90,9 +93,19 @@ print("\n-- Playwright --------------------------------------------------------"
 try:
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True)
-        browser.close()
-    ok("Chromium browser launches OK")
+        try:
+            browser = pw.chromium.launch(headless=True)
+            browser.close()
+            ok("Playwright-managed Chromium browser launches OK")
+        except Exception as bundled_exc:
+            # Developer machines often have Chrome but have not downloaded
+            # Playwright's pinned binary. CI still installs pinned Chromium.
+            browser = pw.chromium.launch(channel="chrome", headless=True)
+            browser.close()
+            warn(
+                "Playwright-managed Chromium is not installed locally; "
+                "system Chrome launches successfully (CI installs Chromium)"
+            )
 except Exception as exc:
     fail(f"Playwright/Chromium failed: {exc}\n        Run:  python -m playwright install chromium")
 
@@ -152,6 +165,40 @@ for name in ("tenders.csv", "jobs.csv"):
         ok(f"data/{name} - {rows} rows (local fallback ready)")
     else:
         warn(f"data/{name} not found - run  python ingest.py  to generate it")
+
+
+# ---------------------------------------------------------------------------
+# 7. Phase 3 registries and runtime outputs
+# ---------------------------------------------------------------------------
+print("\n-- Phase 3 data engine -----------------------------------------------")
+try:
+    import json
+    import source_registry
+
+    registry = source_registry.load_registry()
+    missing = [
+        item.get("source_id", "<unnamed>") for item in registry
+        if not set(source_registry.REGISTRY_FIELDS).issubset(item)
+    ]
+    if not registry:
+        fail("source registry is empty")
+    elif missing:
+        fail(f"{len(missing)} registry entries are missing required fields")
+    else:
+        ok(f"source registry - {len(registry)} configured sources")
+    if Path("newspaper_sources.json").exists():
+        papers = json.loads(Path("newspaper_sources.json").read_text(encoding="utf-8"))
+        ok(f"newspaper registry - {len(papers)} configured sources")
+    else:
+        fail("newspaper_sources.json not found")
+    queue_path = data / "manual_review_queue.json"
+    if queue_path.exists():
+        queue = json.loads(queue_path.read_text(encoding="utf-8"))
+        ok(f"manual review queue - {int(queue.get('count', 0))} pending")
+    else:
+        warn("manual review queue not generated - run python ingest.py")
+except Exception as exc:
+    fail(f"Phase 3 registry validation failed: {exc}")
 
 
 # ---------------------------------------------------------------------------

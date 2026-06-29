@@ -1,19 +1,9 @@
 """
-scrapers/district_notices.py — district-collectorate "offline" tender scraper.
+District S3WaaS notice discovery for Chhattisgarh and Uttar Pradesh.
 
-The genuinely-offline tenders (physical bid submission, issued by district
-offices — Collector, PWD division, Nagar Nigam, Janpad, RES…) are advertised in
-local newspapers AND posted on each district's official S3WaaS website at:
-
-    CG :  https://<district>.gov.in/en/notice_category/tenders/
-    UP :  https://<district>.nic.in/notice_category/tenders/
-
-These pages are plain HTML (WordPress/S3WaaS), CAPTCHA-free, and carry a clean
-table:  Title | Description | Start Date | End Date | File(PDF).  They are NOT
-on the central e-procurement portals we already scrape, so this closes the
-"offline / district NIT" gap honestly — real data, no fabrication.
-
-Output rows feed the `offline_tenders` table (see data_engine.offline_tender_record).
+The scanner covers tenders, recruitment, jobs, advertisements and general
+notices. Every district/category request is isolated, and discovered results,
+admit cards and unrelated notices are classified but not published.
 
 Standalone:  python -m scrapers.district_notices
 """
@@ -37,6 +27,38 @@ import data_engine     # noqa: E402
 _UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                       "AppleWebKit/537.36 (KHTML, like Gecko) "
                       "Chrome/124.0.0.0 Safari/537.36")}
+
+NOTICE_PATHS = (
+    "/notice_category/tenders/",
+    "/notice_category/recruitment/",
+    "/notice_category/jobs/",
+    "/notice_category/advertisement/",
+    "/notice_category/notices/",
+)
+
+_RESULT_HINTS = (
+    "result", "merit list", "selection list", "selected candidates",
+    "परिणाम", "चयन सूची", "मेरिट सूची",
+)
+_ADMIT_HINTS = ("admit card", "hall ticket", "प्रवेश पत्र")
+_CORRIGENDUM_HINTS = (
+    "corrigendum", "correction", "amendment", "शुद्धिपत्र", "संशोधन",
+)
+_TENDER_HINTS = (
+    "tender", "e-tender", "nit", "notice inviting", "quotation", "rfp", "eoi",
+    "auction", "bid", "निविदा", "टेंडर", "कोटेशन", "नीलामी",
+)
+_JOB_HINTS = (
+    "recruitment", "vacancy", "appointment", "walk-in", "application invited",
+    "job", "भर्ती", "रिक्ति", "नियुक्ति", "आवेदन आमंत्रित",
+)
+_DATE_RE = re.compile(
+    r"\b(?:\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}|"
+    r"\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)"
+    r"[a-z]*\s+\d{2,4})\b", re.I)
+_TENDER_NO_RE = re.compile(
+    r"\b(?:NIT|Tender|Bid|EOI|RFP)\s*(?:No\.?|Number|#)?\s*[:\-]?\s*"
+    r"([A-Z0-9][A-Z0-9/._\-]{2,})", re.I)
 
 # District -> domain slug. Slugs follow the official DISTRICT (not HQ city), which
 # is how the S3WaaS sites are named (e.g. Jagdalpur city -> bastar.gov.in).
@@ -121,6 +143,175 @@ def _url(state: str, slug: str) -> str:
     return f"https://{slug}.nic.in/notice_category/tenders/"
 
 
+def district_site_catalog() -> list[dict]:
+    """Return the complete district source inventory used by the registry."""
+    sites = []
+    for district, slug in _CG.items():
+        sites.append({
+            "source_id": f"district-cg-{slug}",
+            "source_name": f"{district} District Website",
+            "state": "Chhattisgarh", "district": district,
+            "base_url": f"https://{slug}.gov.in/en",
+        })
+    for district, slug in _UP.items():
+        sites.append({
+            "source_id": f"district-up-{slug}",
+            "source_name": f"{district} District Website",
+            "state": "Uttar Pradesh", "district": district,
+            "base_url": f"https://{slug}.nic.in",
+        })
+    for district, state, tender_url in _EXTRA_DISTRICT_SITES:
+        base_url = tender_url.split("/notice_category/", 1)[0].rstrip("/")
+        sites.append({
+            "source_id": f"district-cg-{core.make_source_id(district)[:10]}",
+            "source_name": f"{district} District Website",
+            "state": state, "district": district, "base_url": base_url,
+        })
+    return sites
+
+
+def classify_notice(text: str, category_path: str = "") -> str:
+    """Classify one discovery without promoting result/admit-card noise."""
+    blob = f" {text or ''} {category_path or ''} ".lower()
+    if any(h in blob for h in _ADMIT_HINTS):
+        return "admit_card"
+    if any(h in blob for h in _RESULT_HINTS):
+        return "result"
+    if any(h in blob for h in _CORRIGENDUM_HINTS):
+        return "corrigendum"
+    if any(h in blob for h in _JOB_HINTS):
+        return "job"
+    if any(h in blob for h in _TENDER_HINTS):
+        return "tender"
+    if "/recruitment/" in category_path or "/jobs/" in category_path:
+        return "job"
+    if "/tenders/" in category_path:
+        return "tender"
+    return "irrelevant"
+
+
+def _notice_rows(html: str) -> list:
+    """Find the repeatable content nodes used by common S3WaaS templates."""
+    soup = BeautifulSoup(html, "html.parser")
+    rows = [tr for table in soup.find_all("table") for tr in table.find_all("tr")
+            if tr.find("td")]
+    if rows:
+        return rows
+    selectors = (
+        ".notice-item", ".views-row", ".list-view li", ".list-group-item",
+        "article",
+    )
+    found = []
+    for selector in selectors:
+        found.extend(soup.select(selector))
+    return found
+
+
+def _dates_from(text: str) -> list[str]:
+    return list(dict.fromkeys(_DATE_RE.findall(text or "")))
+
+
+def _parse_notice_page(html: str, source: dict, page_url: str,
+                       category_path: str) -> tuple[list[dict], list[dict], list[dict]]:
+    tenders: list[dict] = []
+    jobs: list[dict] = []
+    discovered: list[dict] = []
+    seen: set[tuple] = set()
+
+    for node in _notice_rows(html):
+        cells = [td.get_text(" ", strip=True) for td in node.find_all("td")]
+        links = []
+        for anchor in node.find_all("a", href=True):
+            href = urljoin(page_url, anchor.get("href", "").strip())
+            if href.startswith(("http://", "https://")):
+                links.append((anchor.get_text(" ", strip=True), href))
+        node_text = " ".join(cells) if cells else node.get_text(" ", strip=True)
+        link_title = next((text for text, _ in links if text), "")
+        title = (cells[0] if cells and cells[0] else link_title or node_text).strip()
+        if not title or len(title) < 4:
+            continue
+        document_url = next(
+            (href for _, href in links
+             if href.lower().split("?", 1)[0].endswith(
+                 (".pdf", ".jpg", ".jpeg", ".png", ".webp"))),
+            links[0][1] if links else page_url,
+        )
+        identity = (title.lower(), document_url.lower())
+        if identity in seen:
+            continue
+        seen.add(identity)
+
+        kind = classify_notice(node_text, category_path)
+        dates = _dates_from(node_text)
+        published = dates[0] if dates else None
+        deadline = dates[-1] if len(dates) > 1 else None
+        discovered.append({
+            "title": title[:300], "classification": kind,
+            "state": source["state"], "district": source["district"],
+            "source_url": page_url, "document_url": document_url,
+        })
+        if kind in {"result", "admit_card", "irrelevant"}:
+            continue
+
+        source_name = source["source_name"]
+        if kind in {"tender", "corrigendum"}:
+            number_match = _TENDER_NO_RE.search(node_text)
+            tenders.append(core.tender_record(
+                title=title, state=source["state"], district=source["district"],
+                organization=_office_for(node_text, source["district"]),
+                department=_office_for(node_text, source["district"]),
+                category=None, deadline=deadline, published_date=published,
+                document_url=document_url, source_url=page_url,
+                source_name=source_name, source_portal="district-collectorate",
+                source_type="district_site",
+                tender_no=(number_match.group(1) if number_match else None),
+                description=(cells[1] if len(cells) > 1 else node_text)[:1000],
+                online_or_offline="offline", is_corrigendum=(kind == "corrigendum"),
+                language=("Hindi" if re.search(r"[\u0900-\u097f]", node_text)
+                          else "English"),
+            ))
+        else:
+            jobs.append(core.job_record(
+                title=title, state=source["state"], district=source["district"],
+                department=_office_for(node_text, source["district"]),
+                deadline=deadline, application_end_date=deadline,
+                description=(cells[1] if len(cells) > 1 else node_text)[:1000],
+                document_url=document_url, apply_link=document_url,
+                source_url=page_url, source_name=source_name,
+                source_portal="district-collectorate",
+                source_type="district_site", online_or_offline="offline",
+                language=("Hindi" if re.search(r"[\u0900-\u097f]", node_text)
+                          else "English"),
+            ))
+    return tenders, jobs, discovered
+
+
+def _scan_page(source: dict, category_path: str) -> dict:
+    url = source["base_url"].rstrip("/") + category_path
+    try:
+        response = requests.get(url, headers=_UA, timeout=15)
+        if response.status_code != 200:
+            return {
+                "source_id": source["source_id"], "url": url,
+                "tenders": [], "jobs": [], "discovered": [],
+                "error": f"HTTP {response.status_code}",
+            }
+        response.encoding = "utf-8"
+        tenders, jobs, discovered = _parse_notice_page(
+            response.text, source, url, category_path)
+        return {
+            "source_id": source["source_id"], "url": url,
+            "tenders": tenders, "jobs": jobs, "discovered": discovered,
+            "error": None,
+        }
+    except Exception as exc:
+        return {
+            "source_id": source["source_id"], "url": url,
+            "tenders": [], "jobs": [], "discovered": [],
+            "error": f"{type(exc).__name__}: {exc}"[:300],
+        }
+
+
 def _parse(html: str, district: str, state: str, page_url: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     out: list[dict] = []
@@ -193,6 +384,17 @@ _AUTHORITY_SITES = [
 ]
 
 
+def authority_site_catalog() -> list[dict]:
+    return [
+        {
+            "source_id": f"authority-{core.make_source_id(name)}",
+            "source_name": name, "state": state, "district": district,
+            "url": url,
+        }
+        for name, state, district, url in _AUTHORITY_SITES
+    ]
+
+
 def _first_date(s):
     if not s:
         return None
@@ -257,27 +459,123 @@ def _fetch_authority(item) -> list[dict]:
         return []
 
 
+_LAST_COLLECTION: dict = {}
+
+
+def collect(max_workers: int = 24) -> dict:
+    """Scan every common category path and return records plus district health."""
+    sources = district_site_catalog()
+    tenders: list[dict] = []
+    jobs: list[dict] = []
+    discovered: list[dict] = []
+    failures: list[dict] = []
+    report = {
+        source["source_id"]: {
+            "source_id": source["source_id"],
+            "source_name": source["source_name"],
+            "state": source["state"], "district": source["district"],
+            "count": 0, "tenders": 0, "jobs": 0, "errors": [],
+            "status": "no_records",
+        }
+        for source in sources
+    }
+    for authority in authority_site_catalog():
+        report[authority["source_id"]] = {
+            **authority, "count": 0, "tenders": 0, "jobs": 0,
+            "errors": [], "status": "no_records",
+        }
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_map = {
+            executor.submit(_scan_page, source, path): (source, path)
+            for source in sources for path in NOTICE_PATHS
+        }
+        for future in as_completed(future_map):
+            source, path = future_map[future]
+            try:
+                result = future.result()
+            except Exception as exc:  # defensive: a district must never stop the run
+                result = {
+                    "tenders": [], "jobs": [], "discovered": [],
+                    "url": source["base_url"].rstrip("/") + path,
+                    "error": f"{type(exc).__name__}: {exc}"[:300],
+                }
+            source_report = report[source["source_id"]]
+            if result.get("error"):
+                failure = {
+                    "source_id": source["source_id"],
+                    "source_name": source["source_name"],
+                    "state": source["state"], "district": source["district"],
+                    "url": result.get("url"), "error": result["error"],
+                    "at": core._now_iso(),
+                }
+                failures.append(failure)
+                source_report["errors"].append({
+                    "url": result.get("url"), "error": result["error"]})
+            tenders.extend(result.get("tenders") or [])
+            jobs.extend(result.get("jobs") or [])
+            discovered.extend(result.get("discovered") or [])
+            source_report["tenders"] += len(result.get("tenders") or [])
+            source_report["jobs"] += len(result.get("jobs") or [])
+
+    # State-authority tender tables do not use the district S3WaaS paths.
+    with ThreadPoolExecutor(max_workers=len(_AUTHORITY_SITES)) as executor:
+        authority_futures = {
+            executor.submit(_fetch_authority, authority): authority
+            for authority in _AUTHORITY_SITES
+        }
+        for future in as_completed(authority_futures):
+            name, state, district, url = authority_futures[future]
+            authority_id = f"authority-{core.make_source_id(name)}"
+            try:
+                authority_records = future.result() or []
+            except Exception as exc:
+                authority_records = []
+                failure = {
+                    "source_id": authority_id,
+                    "source_name": name, "state": state, "district": district,
+                    "url": url, "error": f"{type(exc).__name__}: {exc}"[:300],
+                    "at": core._now_iso(),
+                }
+                failures.append(failure)
+                report[authority_id]["errors"].append({
+                    "url": url, "error": failure["error"]})
+            tenders.extend(core.canonicalize_tender_record(r)
+                           for r in authority_records)
+            report[authority_id]["tenders"] += len(authority_records)
+
+    tenders = core.merge_duplicate_records(tenders, "tender")
+    jobs = core.merge_duplicate_records(jobs, "job")
+    for source_report in report.values():
+        source_report["count"] = source_report["tenders"] + source_report["jobs"]
+        if source_report["count"]:
+            source_report["status"] = "healthy"
+        elif source_report["errors"] and len(source_report["errors"]) >= len(NOTICE_PATHS):
+            source_report["status"] = "failed"
+        elif source_report["errors"]:
+            source_report["status"] = "warning"
+
+    payload = {
+        "tenders": tenders, "jobs": jobs, "discovered": discovered,
+        "report": report, "failures": failures,
+        "generated_at": core._now_iso(),
+    }
+    _LAST_COLLECTION.clear()
+    _LAST_COLLECTION.update(payload)
+    print(
+        f"   district_notices: {len(tenders)} tenders, {len(jobs)} jobs "
+        f"from {len(sources)} district sites; {len(failures)} path failures")
+    return payload
+
+
 def scrape() -> list[dict]:
-    """Fetch all CG + UP district collectorate + authority tender pages (parallel)."""
-    jobs = ([(d, "Chhattisgarh", s) for d, s in _CG.items()] +
-            [(d, "Uttar Pradesh", s) for d, s in _UP.items()])
-    records: list[dict] = []
-    seen: set[str] = set()
-    with ThreadPoolExecutor(max_workers=16) as ex:
-        futs = [ex.submit(_fetch_one, d, st, s) for d, st, s in jobs]
-        futs += [ex.submit(_fetch_url, d, st, u) for d, st, u in _EXTRA_DISTRICT_SITES]
-        futs += [ex.submit(_fetch_authority, a) for a in _AUTHORITY_SITES]
-        for fut in as_completed(futs):
-            for rec in fut.result():
-                if rec["source_id"] not in seen:
-                    seen.add(rec["source_id"])
-                    records.append(rec)
-    n_sites = len(jobs) + len(_EXTRA_DISTRICT_SITES)
-    print(f"   district_notices: {len(records)} CG/UP offline tenders from "
-          f"{n_sites} district sites + {len(_AUTHORITY_SITES)} authorities")
-    if not records:
-        print("   district_notices: WARNING — 0 records; site template may have changed")
-    return records
+    """Legacy ingest hook: return canonical district tender records."""
+    return collect()["tenders"]
+
+
+def scrape_jobs() -> list[dict]:
+    """Legacy ingest hook: return canonical district recruitment records."""
+    return collect()["jobs"]
 
 
 if __name__ == "__main__":

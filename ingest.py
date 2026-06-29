@@ -26,6 +26,7 @@ import pandas as pd
 from dotenv import load_dotenv
 
 import core
+import source_registry
 
 _PRIVATE_ORG = re.compile(
     r"\b(hospitals?|pvt\.?|limited|ltd\.?|private|corporate)\b", re.I
@@ -37,6 +38,7 @@ ROOT = Path(__file__).parent
 SEED = ROOT / "seed"
 DATA = ROOT / "data"
 DATA.mkdir(exist_ok=True)
+_LAST_SOURCE_REPORT: dict[str, dict] = {}
 
 
 # ---------------------------------------------------------------------------
@@ -165,15 +167,33 @@ def run_live_scrapers():
         ("up_upsssc    (upsssc.gov.in)             ", up_upsssc.scrape),
     ]
 
-    for label, fn in _TENDER_SCRAPERS:
-        batch = fn()
-        tenders += batch
+    _LAST_SOURCE_REPORT.clear()
+
+    def run_one(label, fn, kind):
+        source_id = label.split("(")[0].strip()
+        try:
+            batch = fn() or []
+            if not isinstance(batch, list):
+                raise TypeError(f"expected list, got {type(batch).__name__}")
+            error = None
+            status = "healthy" if batch else "no_records"
+        except Exception as exc:
+            batch = []
+            error = f"{type(exc).__name__}: {exc}"[:1000]
+            status = "failed"
+            print(f"   {source_id}: failed safely — {error}")
         counts[label] = len(batch)
+        _LAST_SOURCE_REPORT[source_id] = {
+            "source_id": source_id, "kind": kind, "count": len(batch),
+            "status": status, "error": error,
+        }
+        return batch
+
+    for label, fn in _TENDER_SCRAPERS:
+        tenders += run_one(label, fn, "Tender")
 
     for label, fn in _JOB_SCRAPERS:
-        batch = fn()
-        jobs += batch
-        counts[label] = len(batch)
+        jobs += run_one(label, fn, "Job")
 
     return tenders, jobs, counts
 
@@ -181,29 +201,49 @@ def run_live_scrapers():
 # ---------------------------------------------------------------------------
 # 3. Dedup + persist
 # ---------------------------------------------------------------------------
-def dedup(records):
-    seen, out = set(), []
-    for rec in records:
-        if rec["source_id"] in seen:
-            continue
-        seen.add(rec["source_id"])
-        out.append(rec)
-    return out
+def dedup(records, kind: str = "tender"):
+    """Compatibility wrapper around the cross-source provenance-aware merger."""
+    return core.merge_duplicate_records(records, kind)
 
 
-def write_local(tenders, jobs):
-    for name, rows in [("tenders", tenders), ("jobs", jobs)]:
-        if not rows:
-            continue
-        keys = sorted({k for row in rows for k in row})
+def _csv_value(value):
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False, default=str)
+    return value
+
+
+def write_local(tenders, jobs, offline_tenders=None):
+    datasets = [
+        ("tenders", tenders, core.TENDER_SCHEMA_FIELDS),
+        ("jobs", jobs, core.JOB_SCHEMA_FIELDS),
+    ]
+    if offline_tenders is not None:
+        datasets.append(("offline_tenders", offline_tenders,
+                         core.TENDER_SCHEMA_FIELDS))
+    for name, rows, schema_fields in datasets:
+        if name == "offline_tenders":
+            rows = [
+                {
+                    **row,
+                    "nit_no": row.get("tender_no") or row.get("nit_no"),
+                    "newspaper": (
+                        row.get("newspaper_name") or row.get("newspaper")),
+                }
+                for row in rows
+            ]
+        keys = list(schema_fields)
+        extras = sorted({k for row in rows for k in row if k not in keys})
+        keys.extend(extras)
         with open(DATA / f"{name}.csv", "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=keys)
             w.writeheader()
-            w.writerows(rows)
+            for row in rows:
+                w.writerow({key: _csv_value(row.get(key)) for key in keys})
         print(f"   wrote data/{name}.csv ({len(rows)} rows)")
 
 
-def write_source_health(counts: dict) -> None:
+def write_source_health(counts: dict, *, report: dict | None = None,
+                        registry: list[dict] | None = None) -> None:
     """Persist the latest per-source counts for the read-only UI dashboard.
 
     A zero count is reported as ``no_records`` rather than ``failed`` because the
@@ -211,17 +251,43 @@ def write_source_health(counts: dict) -> None:
     dashboard factual; a future pipeline can add an ``error`` value per source
     without changing the UI contract.
     """
+    report = report or {}
     sources = []
-    for label, count in counts.items():
-        source_id = label.split("(")[0].strip()
-        sources.append({
-            "source": source_id,
-            "display_name": " ".join(label.split()),
-            "kind": "Job" if source_id in {"cg_jobs", "cg_vyapam", "up_jobs", "up_upsssc"} else "Tender",
-            "record_count": int(count),
-            "status": "healthy" if int(count) > 0 else "no_records",
-            "error": None,
-        })
+    if registry:
+        for item in registry:
+            result = report.get(item["source_id"], {})
+            status = result.get("status") or (
+                "inactive" if not item.get("active", True) else "not_run")
+            error = result.get("error")
+            if not error and result.get("errors"):
+                error = "; ".join(
+                    str(e.get("error") if isinstance(e, dict) else e)
+                    for e in result["errors"][:3])
+            sources.append({
+                "source": item["source_id"],
+                "display_name": item.get("source_name") or item["source_id"],
+                "kind": item.get("category") or "both",
+                "source_type": item.get("source_type"),
+                "state": item.get("state"), "district": item.get("district"),
+                "record_count": int(result.get(
+                    "count", result.get("record_count", item.get("last_count", 0))) or 0),
+                "status": status, "error": str(error)[:1000] if error else None,
+            })
+    else:
+        for label, count in counts.items():
+            source_id = label.split("(")[0].strip()
+            result = report.get(source_id, {})
+            sources.append({
+                "source": source_id,
+                "display_name": " ".join(label.split()),
+                "kind": ("Job" if source_id in {
+                    "cg_jobs", "cg_vyapam", "up_jobs", "up_upsssc"
+                } else "Tender"),
+                "record_count": int(count),
+                "status": result.get(
+                    "status", "healthy" if int(count) > 0 else "no_records"),
+                "error": result.get("error"),
+            })
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": "ingest_report",
@@ -230,6 +296,82 @@ def write_source_health(counts: dict) -> None:
     path = DATA / "source_health.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"   wrote data/source_health.json ({len(sources)} sources)")
+
+
+def write_manual_review_queue(items: list[dict]) -> None:
+    path = DATA / "manual_review_queue.json"
+    unique = {
+        item.get("queue_id") or core.make_source_id(
+            item.get("record_type"), item.get("source_url"),
+            (item.get("record") or {}).get("source_id")): item
+        for item in items if isinstance(item, dict)
+    }
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "count": len(unique),
+        "items": list(unique.values()),
+    }
+    path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8",
+    )
+    print(f"   wrote data/manual_review_queue.json ({len(unique)} items)")
+
+
+def _read_generated(name: str, kind: str) -> list[dict]:
+    """Read the prior snapshot so expired opportunities remain archived."""
+    path = DATA / f"{name}.csv"
+    if not path.exists():
+        return []
+    try:
+        with path.open(newline="", encoding="utf-8") as handle:
+            rows = list(csv.DictReader(handle))
+        normalise = (core.canonicalize_tender_record
+                     if kind == "tender" else core.canonicalize_job_record)
+        return [normalise(row) for row in rows if row.get("title")]
+    except Exception as exc:
+        print(f"   archive read warning ({name}): {exc}")
+        return []
+
+
+def _json_safe_row(row: dict) -> dict:
+    out = {}
+    for key, value in row.items():
+        if isinstance(value, float) and pd.isna(value):
+            out[key] = None
+        elif isinstance(value, (date, datetime)):
+            out[key] = value.isoformat()
+        else:
+            out[key] = value
+    return out
+
+
+def _upsert_with_schema_fallback(sb, table: str, rows: list[dict],
+                                 legacy_fields: set[str]) -> None:
+    """Try Phase 3 fields, then retry using the original table schema."""
+    rich_schema_supported = True
+    chunk_size = 200
+    for i in range(0, len(rows), chunk_size):
+        chunk = [_json_safe_row(row) for row in rows[i:i + chunk_size]]
+        if rich_schema_supported:
+            try:
+                sb.table(table).upsert(
+                    chunk, on_conflict="source_id").execute()
+                continue
+            except Exception as exc:
+                message = str(exc).lower()
+                if not any(token in message for token in (
+                        "column", "schema cache", "pgrst204", "does not exist")):
+                    raise
+                rich_schema_supported = False
+                print(
+                    f"   {table}: Phase 3 columns unavailable; using "
+                    f"backward-compatible fields ({type(exc).__name__})")
+        legacy = [
+            {key: value for key, value in row.items() if key in legacy_fields}
+            for row in chunk
+        ]
+        sb.table(table).upsert(legacy, on_conflict="source_id").execute()
 
 
 def push_supabase(tenders, jobs):
@@ -245,13 +387,13 @@ def push_supabase(tenders, jobs):
     try:
         from supabase import create_client
         sb = create_client(url, key)
-        for table, rows in [("tenders", tenders), ("jobs", jobs)]:
+        for table, rows, legacy_fields in [
+            ("tenders", tenders, core.TENDER_DB_FIELDS),
+            ("jobs", jobs, core.JOB_DB_FIELDS),
+        ]:
             if not rows:
                 continue
-            # Chunk upserts to avoid request-size limits
-            chunk = 200
-            for i in range(0, len(rows), chunk):
-                sb.table(table).upsert(rows[i:i+chunk], on_conflict="source_id").execute()
+            _upsert_with_schema_fallback(sb, table, rows, legacy_fields)
             print(f"   upserted {len(rows)} rows -> {table}")
         _cleanup_expired(sb)
     except Exception as e:
@@ -293,7 +435,7 @@ def push_corrigendums(corrigs):
 
 
 def push_offline_tenders(offline):
-    """Upsert district-collectorate offline tenders; clean ones long expired."""
+    """Upsert district/newspaper notices using the established offline schema."""
     if not offline:
         print("   offline tenders: none scraped — skipping push.")
         return
@@ -305,42 +447,33 @@ def push_offline_tenders(offline):
     try:
         from supabase import create_client
         sb = create_client(url, key)
+        fields = {
+            "source_id", "title", "state", "district", "organization", "nit_no",
+            "category", "value_text", "value_lakhs", "emd", "published_date",
+            "deadline", "opening_date", "newspaper", "document_url",
+            "description", "source_portal", "added_by", "scraped_at",
+        }
+        safe_rows = []
+        for row in offline:
+            compatible = dict(row)
+            compatible["nit_no"] = row.get("tender_no") or row.get("nit_no")
+            compatible["newspaper"] = (
+                row.get("newspaper_name") or row.get("newspaper"))
+            safe_rows.append({
+                key: value for key, value in compatible.items() if key in fields
+            })
         chunk = 200
-        for i in range(0, len(offline), chunk):
-            sb.table("offline_tenders").upsert(offline[i:i+chunk], on_conflict="source_id").execute()
+        for i in range(0, len(safe_rows), chunk):
+            sb.table("offline_tenders").upsert(
+                safe_rows[i:i+chunk], on_conflict="source_id").execute()
         print(f"   upserted {len(offline)} rows -> offline_tenders")
-        # Drop offline tenders whose closing date passed > 3 days ago.
-        from datetime import timedelta
-        cutoff = (date.today() - timedelta(days=3)).isoformat()
-        try:
-            resp = (sb.table("offline_tenders").delete()
-                      .lt("deadline", cutoff)
-                      .not_.is_("deadline", "null").execute())
-            n = len(resp.data) if resp.data else 0
-            if n:
-                print(f"   cleaned {n} expired offline tenders")
-        except Exception as e:
-            print(f"   offline tender cleanup warning: {e}")
     except Exception as e:
         print(f"   offline tenders push failed: {e}")
 
 
 def _cleanup_expired(sb):
-    """Delete records whose deadline passed more than 3 days ago from Supabase."""
-    from datetime import timedelta
-    cutoff = (date.today() - timedelta(days=3)).isoformat()
-    for table in ("tenders", "jobs"):
-        try:
-            resp = (sb.table(table)
-                      .delete()
-                      .lt("deadline", cutoff)
-                      .not_.is_("deadline", "null")
-                      .execute())
-            deleted = len(resp.data) if resp.data else 0
-            if deleted:
-                print(f"   cleaned {deleted} expired rows from {table}")
-        except Exception as e:
-            print(f"   cleanup warning ({table}): {e}")
+    """Retain history; the public app filters expired deadlines by default."""
+    print("   expired records retained internally (public app filters them)")
 
 
 def _print_scraper_summary(counts: dict, total_tenders: int, total_jobs: int) -> None:
@@ -363,6 +496,34 @@ def _print_scraper_summary(counts: dict, total_tenders: int, total_jobs: int) ->
             print(f"::warning::{short} returned 0 results - check portal availability")
 
 
+def _canonical_records(records: list[dict], kind: str,
+                       source_label: str) -> list[dict]:
+    normalise = (core.canonicalize_tender_record
+                 if kind == "tender" else core.canonicalize_job_record)
+    out = []
+    for record in records:
+        try:
+            out.append(normalise(record))
+        except Exception as exc:
+            print(
+                f"   {source_label}: skipped one invalid {kind} record "
+                f"({type(exc).__name__}: {exc})")
+    return out
+
+
+def _merge_health(report: dict[str, dict], source_id: str, result: dict) -> None:
+    if source_id not in report:
+        report[source_id] = dict(result)
+        return
+    existing = report[source_id]
+    existing["count"] = int(existing.get("count", 0) or 0) + int(
+        result.get("count", 0) or 0)
+    if result.get("error"):
+        existing["error"] = result["error"]
+    if result.get("status") == "failed":
+        existing["status"] = "failed"
+
+
 def main():
     ap = argparse.ArgumentParser(description="Opporta ingestion pipeline")
     ap.add_argument(
@@ -373,6 +534,10 @@ def main():
         "--no-alerts", action="store_true",
         help="Normal pipeline run (write + push) but skip sending email alerts.",
     )
+    ap.add_argument(
+        "--skip-live", action="store_true",
+        help="Use seed/archive data only (fast local smoke test; daily runs omit this).",
+    )
     args = ap.parse_args()
 
     if args.dry_run:
@@ -380,59 +545,112 @@ def main():
     else:
         print("=== Opporta ingestion ===")
 
-    print("1. Loading seed data...")
+    print("1. Loading source registry and seed data...")
+    registry = source_registry.load_registry()
+    print(f"   source registry: {len(registry)} configured sources")
     t1, j1 = load_master_leads()
     t2 = load_master_tenders()
 
     print("2. Running live scrapers...")
-    t3, j3, scraper_counts = run_live_scrapers()
-
-    tenders = dedup(t1 + t2 + t3)
-    jobs    = dedup(j1 + j3)
+    if args.skip_live:
+        from collections import OrderedDict
+        t3, j3, scraper_counts = [], [], OrderedDict()
+        source_report: dict[str, dict] = {}
+        print("   skipped by --skip-live")
+    else:
+        t3, j3, scraper_counts = run_live_scrapers()
+        source_report = dict(_LAST_SOURCE_REPORT)
 
     print("2b. Scraping tender corrigendums (amendments)...")
-    try:
-        from scrapers import cppp_corrigendum
-        corrigs = dedup(cppp_corrigendum.scrape())
-    except Exception as e:
-        print(f"   corrigendum scrape failed: {e}")
+    if args.skip_live:
         corrigs = []
+    else:
+        try:
+            from scrapers import cppp_corrigendum
+            corrigs = cppp_corrigendum.scrape() or []
+            corrig_error = None
+        except Exception as e:
+            print(f"   corrigendum scrape failed safely: {e}")
+            corrigs = []
+            corrig_error = f"{type(e).__name__}: {e}"[:1000]
+        source_report["cppp_corrigendum"] = {
+            "source_id": "cppp_corrigendum", "count": len(corrigs),
+            "status": ("failed" if corrig_error else
+                       "healthy" if corrigs else "no_records"),
+            "error": corrig_error,
+        }
     scraper_counts["cppp_corrig  (eprocure.gov.in/cppp)     "] = len(corrigs)
 
-    print("2c. Scraping OFFLINE / newspaper tenders (district sites + CG Samvad ads)...")
-    offline = []
-    try:
-        from scrapers import district_notices
-        offline += district_notices.scrape()
-    except Exception as e:
-        print(f"   district offline scrape failed: {e}")
-    try:
-        from scrapers import samvad as _samvad
-        offline += _samvad.scrape_published_ads()
-    except Exception as e:
-        print(f"   samvad newspaper-ad scrape failed: {e}")
+    print("2c. Discovering district tenders/jobs across S3WaaS categories...")
+    district_tenders, district_jobs = [], []
+    if not args.skip_live:
+        try:
+            from scrapers import district_notices
+            district_result = district_notices.collect()
+            district_tenders = district_result["tenders"]
+            district_jobs = district_result["jobs"]
+            source_report.update(district_result.get("report") or {})
+        except Exception as exc:
+            print(f"   district collector failed safely: {exc}")
+    scraper_counts["district     (CG/UP S3WaaS notices)       "] = (
+        len(district_tenders) + len(district_jobs))
 
-    # Regional-newspaper government notices (Vision over reachable e-paper / notice
-    # PDFs). Adds offline tenders AND recruitment jobs; honest 0 without GEMINI key
-    # or where a source is unreachable / JS-gated.
-    try:
-        from scrapers import newspapers as _newspapers
-        _np = _newspapers.collect()
-        _np_t = [_newspapers._table_safe(r, _newspapers._TENDER_COLS,
-                                         ["eligibility", "contact"]) for r in _np["tenders"]]
-        _np_j = [_newspapers._table_safe(r, _newspapers._JOB_COLS,
-                                         ["age_limit", "newspaper"]) for r in _np["jobs"]]
-        offline += _np_t
-        jobs    += _np_j
-        if _np.get("failures"):
-            print(f"   newspapers: {len(_np_t)} tenders, {len(_np_j)} jobs, "
-                  f"{len(_np['failures'])} source(s) logged as unreachable/JS-gated")
-    except Exception as e:
-        print(f"   newspaper collector failed: {e}")
+    print("2d. Collecting public government newspaper/offline notices...")
+    newspaper_tenders, newspaper_jobs, manual_review = [], [], []
+    if not args.skip_live:
+        try:
+            from scrapers import newspapers
+            newspaper_result = newspapers.collect()
+            newspaper_tenders = newspaper_result.get("tenders") or []
+            newspaper_jobs = newspaper_result.get("jobs") or []
+            manual_review = newspaper_result.get("manual_review") or []
+            source_report.update(newspaper_result.get("report") or {})
+            print(
+                f"   newspapers: {len(newspaper_tenders)} tenders, "
+                f"{len(newspaper_jobs)} jobs, "
+                f"{len(manual_review)} queued for review")
+        except Exception as exc:
+            print(f"   newspaper collector failed safely: {exc}")
+    scraper_counts["newspapers   (public PDF/image OCR)        "] = (
+        len(newspaper_tenders) + len(newspaper_jobs))
 
-    offline = dedup(offline)
-    jobs    = dedup(jobs)
-    scraper_counts["district_off (CG/UP collectorate sites)  "] = len(offline)
+    samvad_offline = []
+    if not args.skip_live:
+        try:
+            from scrapers import samvad as _samvad
+            samvad_offline = _samvad.scrape_published_ads() or []
+            samvad_error = None
+        except Exception as exc:
+            samvad_error = f"{type(exc).__name__}: {exc}"[:1000]
+            print(f"   samvad newspaper-ad scrape failed safely: {samvad_error}")
+        _merge_health(source_report, "samvad", {
+            "source_id": "samvad", "count": len(samvad_offline),
+            "status": ("failed" if samvad_error else
+                       "healthy" if samvad_offline else "no_records"),
+            "error": samvad_error,
+        })
+
+    online_tenders = _canonical_records(t1 + t2 + t3, "tender", "online")
+    online_jobs = _canonical_records(j1 + j3, "job", "online")
+    district_tenders = _canonical_records(
+        district_tenders, "tender", "district")
+    district_jobs = _canonical_records(district_jobs, "job", "district")
+    newspaper_tenders = _canonical_records(
+        newspaper_tenders, "tender", "newspaper")
+    newspaper_jobs = _canonical_records(
+        newspaper_jobs, "job", "newspaper")
+    samvad_offline = _canonical_records(
+        samvad_offline, "tender", "samvad offline")
+
+    previous_tenders = _read_generated("tenders", "tender")
+    previous_jobs = _read_generated("jobs", "job")
+    all_new_tenders = (
+        online_tenders + district_tenders + newspaper_tenders + samvad_offline)
+    all_new_jobs = online_jobs + district_jobs + newspaper_jobs
+    tenders = dedup(previous_tenders + all_new_tenders, "tender")
+    jobs = dedup(previous_jobs + all_new_jobs, "job")
+    offline = dedup(
+        district_tenders + newspaper_tenders + samvad_offline, "tender")
 
     _print_scraper_summary(scraper_counts, len(tenders), len(jobs))
 
@@ -441,8 +659,12 @@ def main():
         print("4. [DRY RUN] Skipping Supabase push.")
     else:
         print("3. Writing local fallback...")
-        write_local(tenders, jobs)
-        write_source_health(scraper_counts)
+        write_local(tenders, jobs, offline)
+        write_manual_review_queue(manual_review)
+        registry = source_registry.apply_health(registry, source_report)
+        source_registry.write_registry(registry)
+        write_source_health(
+            scraper_counts, report=source_report, registry=registry)
         print("4. Pushing to cloud...")
         push_supabase(tenders, jobs)
         push_corrigendums(corrigs)

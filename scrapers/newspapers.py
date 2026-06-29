@@ -80,16 +80,35 @@ NEWSPAPERS: list[dict] = [
      "kind": "html_notices"},
     {"name": "Haribhoomi e-paper", "state": "Chhattisgarh",
      "urls": ["https://epaper.haribhoomi.com"],
-     "kind": "epaper_portal"},
+     "kind": "epaper_portal", "epaper_fn": "haribhoomi", "max_assets": 28},
     {"name": "Akashvani",       "state": None,
      "urls": ["https://akashvani.gov.in", "https://www.akashvani.gov.in"],
      "kind": "pdf_index"},
 ]
 
+
+def _load_newspaper_sources() -> list[dict]:
+    """Load the versioned acquisition registry, retaining a safe fallback."""
+    path = Path(__file__).parent.parent / "newspaper_sources.json"
+    try:
+        configured = json.loads(path.read_text(encoding="utf-8"))
+        valid = [
+            item for item in configured
+            if isinstance(item, dict) and item.get("active", True)
+            and item.get("name") and item.get("urls")
+        ]
+        return valid or NEWSPAPERS
+    except (OSError, ValueError, TypeError):
+        return NEWSPAPERS
+
+
+NEWSPAPERS = _load_newspaper_sources()
+
 # A link / anchor is treated as a probable government-notice asset only if its URL
 # or visible text hits one of these (Hindi + English). Keeps us off news/sport ads.
 _GOV_HINTS = [
-    "tender", "निविदा", "e-tender", "nit", "eoi", "rfp", "quotation", "कोटेशन",
+    "tender", "tender notice", "निविदा", "टेंडर", "ई-निविदा",
+    "e-tender", "nit", "eoi", "rfp", "quotation", "कोटेशन",
     "auction", "नीलाम", "corrigendum", "शुद्धिपत्र", "recruitment", "भर्ती",
     "vacancy", "रिक्ति", "bharti", "notice", "सूचना", "vigyapan", "विज्ञापन",
     "advertisement", "वैकेंसी", "appointment", "नियुक्ति", "career", "job",
@@ -99,6 +118,7 @@ _GOV_HINTS = [
 # Structured failure log (Requirement: log extraction failures).
 # ──────────────────────────────────────────────────────────────────────────────
 _FAILURES: list[dict] = []
+_MANUAL_REVIEW: list[dict] = []
 
 
 def _log_fail(source: str, url: str, stage: str, err: str) -> None:
@@ -188,15 +208,49 @@ Translate Hindi VALUES to clean English where natural, but keep proper nouns / n
 
 Return ONLY this JSON (no markdown fences):
 {
- "tenders":[{"work":"","office":"","district":"","state":"","nit_no":"","category":"","value":"","emd":"","published_date":"","closing_date":"","opening_date":"","eligibility":"","contact":"","portal":""}],
- "jobs":[{"title":"","department":"","district":"","state":"","vacancies":"","qualification":"","age_limit":"","salary":"","last_date":"","apply_link":"","contact":""}]
+ "tenders":[{"work":"","office":"","district":"","state":"","nit_no":"","category":"","value":"","emd":"","published_date":"","closing_date":"","opening_date":"","eligibility":"","contact":"","portal":"","language":"","confidence_score":0}],
+ "jobs":[{"title":"","department":"","district":"","state":"","advertisement_no":"","vacancies":"","qualification":"","age_limit":"","salary":"","last_date":"","apply_link":"","contact":"","language":"","confidence_score":0}]
 }
+Set confidence_score from 0 to 100 based only on page legibility and certainty of
+the extracted fields. Do not return full page or article text.
 Use null for any field not printed. Empty arrays if none. NEVER invent or guess — extract only what is actually printed."""
+
+
+def _extraction_confidence(item: dict, kind: str) -> int:
+    raw = core.parse_int(item.get("confidence_score"))
+    if raw is not None:
+        return max(0, min(100, raw))
+    # Deterministic extraction-quality score when a model omits confidence.
+    score = 35
+    score += 20 if item.get("work") or item.get("title") else 0
+    score += 15 if item.get("office") or item.get("department") else 0
+    score += 10 if item.get("district") or item.get("state") else 0
+    score += 10 if item.get("closing_date") or item.get("last_date") else 0
+    score += 10 if (item.get("nit_no") if kind == "tender"
+                    else item.get("advertisement_no")) else 0
+    return min(100, score)
+
+
+def _queue_if_uncertain(record: dict, record_type: str, source_url: str) -> None:
+    confidence = int(record.get("confidence_score") or 0)
+    if confidence >= 60 and not record.get("requires_manual_review"):
+        return
+    _MANUAL_REVIEW.append({
+        "queue_id": core.make_source_id(record_type, record.get("source_id"), source_url),
+        "record_type": record_type,
+        "reason": "Low OCR confidence or incomplete scanned notice",
+        "confidence_score": confidence,
+        "source_url": source_url,
+        "record": record,
+        "queued_at": core._now_iso(),
+    })
 
 
 def _vision_extract(file_bytes: bytes, mime_type: str, *, newspaper: str,
                     state_hint: str | None, source_url: str,
-                    published_hint: str | None = None) -> tuple[list[dict], list[dict], str]:
+                    district_hint: str | None = None,
+                    published_hint: str | None = None,
+                    source_type: str = "newspaper") -> tuple[list[dict], list[dict], str]:
     """Run Vision on one asset → (tender_records, job_records, status). Never raises."""
     if not (os.getenv("GEMINI_API_KEY")):
         return [], [], "no_key"
@@ -213,22 +267,35 @@ def _vision_extract(file_bytes: bytes, mime_type: str, *, newspaper: str,
                 continue
             st_ = item.get("state") or state_hint or data_engine._guess_state(
                 f"{item.get('district') or ''} {item.get('office') or ''} {work}")
-            rec = data_engine.offline_tender_record(
-                title=work, organization=item.get("office"),
-                district=item.get("district"), state=st_,
-                nit_no=item.get("nit_no"), value_text=item.get("value"),
-                emd=item.get("emd"), published_date=item.get("published_date") or published_hint,
-                closing_date=item.get("closing_date"), opening_date=item.get("opening_date"),
-                newspaper=newspaper, document_url=item.get("portal") or source_url,
-                description=work)
-            # carry the extra spec fields without breaking the table record
-            rec["eligibility"] = (str(item.get("eligibility")).strip()
-                                  if item.get("eligibility") else None)
-            rec["contact"]     = (str(item.get("contact")).strip()
-                                  if item.get("contact") else None)
-            rec["category"]    = item.get("category") or rec.get("category")
-            rec["source_url"]  = source_url
+            confidence = _extraction_confidence(item, "tender")
+            uncertain = (
+                confidence < 60 or not item.get("office")
+                or (not item.get("nit_no") and not item.get("closing_date"))
+            )
+            rec = core.tender_record(
+                title=work, organization=item.get("office"), state=st_,
+                district=item.get("district") or district_hint,
+                tender_no=item.get("nit_no"), category=item.get("category"),
+                value_text=item.get("value"), emd=item.get("emd"),
+                published_date=item.get("published_date") or published_hint,
+                deadline=item.get("closing_date"),
+                opening_date=item.get("opening_date"),
+                eligibility=item.get("eligibility"), description=work,
+                newspaper_name=newspaper,
+                document_url=item.get("portal") or source_url,
+                source_url=source_url, source_name=newspaper,
+                source_portal=f"newspaper:{newspaper}",
+                source_type=("epaper" if "epaper" in source_type else "newspaper"),
+                online_or_offline="offline",
+                confidence_score=confidence, language=item.get("language"),
+                is_corrigendum=("corrigendum" in str(work).lower()
+                                or "शुद्धिपत्र" in str(work)),
+                requires_manual_review=uncertain,
+            )
+            if item.get("contact"):
+                rec["requirements"] = f"Contact: {item['contact']}"[:500]
             tenders.append(rec)
+            _queue_if_uncertain(rec, "tender", source_url)
         for item in (data.get("jobs") or []):
             if not isinstance(item, dict):
                 continue
@@ -237,17 +304,25 @@ def _vision_extract(file_bytes: bytes, mime_type: str, *, newspaper: str,
                 continue
             st_ = item.get("state") or state_hint or data_engine._guess_state(
                 f"{item.get('district') or ''} {item.get('department') or ''} {title}")
+            confidence = _extraction_confidence(item, "job")
+            uncertain = (
+                confidence < 60 or not item.get("department")
+                or (not item.get("last_date") and not item.get("apply_link"))
+            )
             jrec = core.job_record(
                 title=title, state=st_, department=item.get("department"),
-                district=item.get("district"), vacancies=item.get("vacancies"),
+                district=item.get("district") or district_hint, vacancies=item.get("vacancies"),
                 qualification=item.get("qualification"), salary=item.get("salary"),
                 deadline=item.get("last_date"), apply_link=item.get("apply_link"),
-                document_url=source_url,
-                source_portal=f"newspaper:{newspaper}")
-            jrec["age_limit"] = (str(item.get("age_limit")).strip()
-                                 if item.get("age_limit") else None)
-            jrec["newspaper"] = newspaper
+                document_url=source_url, advertisement_no=item.get("advertisement_no"),
+                age_limit=item.get("age_limit"), language=item.get("language"),
+                source_url=source_url, source_name=newspaper,
+                source_type=("epaper" if "epaper" in source_type else "newspaper"),
+                source_portal=f"newspaper:{newspaper}",
+                online_or_offline="offline", confidence_score=confidence,
+                requires_manual_review=uncertain)
             jobs.append(jrec)
+            _queue_if_uncertain(jrec, "job", source_url)
         return tenders, jobs, status
     except Exception as exc:
         _log_fail(newspaper, source_url, "vision", exc)
@@ -255,75 +330,129 @@ def _vision_extract(file_bytes: bytes, mime_type: str, *, newspaper: str,
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Haribhoomi e-paper — reverse-engineered full-resolution page reader.
+# Editions are /category/<id>/<city>-main-edition; opening /epaper/default/open?id=<id>
+# embeds every page as {"f_folder":"YYYY-MM","f_filename":"page-NN-<id>.jpg"}, and
+# the full-res scan is /media/<folder>/<filename> (~600 KB JPEG, Vision-readable).
+# ──────────────────────────────────────────────────────────────────────────────
+_HB_EPAPER = "https://epaper.haribhoomi.com"
+_HB_CG_KEYS = ("raipur", "bilaspur", "durg", "korba", "raigarh", "rajnandgaon",
+               "bhilai", "jagdalpur", "ambikapur", "bastar", "dhamtari",
+               "mahasamund", "kanker", "chhattisgarh")
+
+
+def _haribhoomi_epaper_pages(max_editions: int = 4,
+                             max_pages: int = 14) -> list[tuple[str, str]]:
+    """Return [(full_res_image_url, city_district)] for Haribhoomi CG editions."""
+    out: list[tuple[str, str]] = []
+    body, _ct, _s = _fetch(_HB_EPAPER, source="Haribhoomi e-paper", want="text")
+    if not body:
+        return out
+    editions = {m.group(1): m.group(2)
+                for m in re.finditer(r"/category/(\d+)/([a-z0-9-]+)-main-edition", body)}
+    cg = [(i, c.split("-")[0]) for i, c in editions.items()
+          if any(k in c for k in _HB_CG_KEYS)]
+    for edid, city in cg[:max_editions]:
+        h, _c2, _s2 = _fetch(f"{_HB_EPAPER}/epaper/default/open?id={edid}",
+                             source="Haribhoomi e-paper", want="text")
+        if not h:
+            continue
+        pairs = re.findall(r'"f_folder":"(\d{4}-\d{2})","f_filename":"(page-\d+-\d+\.jpg)"', h)
+        for folder, fn in list(dict.fromkeys(pairs))[:max_pages]:
+            out.append((f"{_HB_EPAPER}/media/{folder}/{fn}", city.title()))
+    return out
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Per-newspaper acquisition → extraction
 # ──────────────────────────────────────────────────────────────────────────────
 _MAX_ASSETS_PER_PAPER = 12       # accuracy/cost guard: cap Vision calls per paper
+
+_EPAPER_FNS = {"haribhoomi": _haribhoomi_epaper_pages}
 
 
 def _process_newspaper(paper: dict) -> tuple[list[dict], list[dict], str]:
     name, kind = paper["name"], paper["kind"]
     state_hint = paper.get("state")
+    cap = paper.get("max_assets", _MAX_ASSETS_PER_PAPER)
     tenders: list[dict] = []
     jobs: list[dict] = []
+    vision_statuses: list[str] = []
 
-    # 1) reach the homepage (try each candidate URL)
-    html, base = None, None
-    for u in paper["urls"]:
-        body, ctype, status = _fetch(u, source=name, want="text")
-        if body:
-            html, base = body, u
-            break
-    if html is None:
-        return [], [], "unreachable"
+    if not os.getenv("GEMINI_API_KEY"):
+        _log_fail(
+            name, paper["urls"][0], "ocr",
+            "OCR skipped because GEMINI_API_KEY is not configured",
+        )
+        return [], [], "skipped_no_ocr_key"
 
-    # 2) discover directly-fetchable assets. On a government (.gov.in) site keep
-    #    every PDF (they're official docs); Vision filters relevance.
-    _is_gov = ".gov.in" in (urlparse(base).netloc or "")
-    assets = _discover_assets(html, base, grab_all_pdfs=_is_gov)
+    # (url, kind, district_hint)
+    asset_urls: list[tuple[str, str, str | None]] = []
 
-    # 2b) one-level crawl into the most promising 'tender / recruitment / notice'
-    #     section links — that's where the actual listings + PDFs live.
-    seen_pages: set[str] = set()
-    for pg in assets["notice_pages"][:5]:
-        if pg in seen_pages or pg.rstrip("/") == base.rstrip("/"):
-            continue
-        seen_pages.add(pg)
-        sub, sctype, sstatus = _fetch(pg, source=name, want="text")
-        if sub:
-            sub_assets = _discover_assets(sub, pg, grab_all_pdfs=True)
-            assets["pdfs"]   += sub_assets["pdfs"]
-            assets["images"] += sub_assets["images"]
-    assets["pdfs"]   = list(dict.fromkeys(assets["pdfs"]))
-    assets["images"] = list(dict.fromkeys(assets["images"]))
+    # ── A) portals with a reverse-engineered full-res page reader (live e-paper)
+    epaper_fn = _EPAPER_FNS.get(paper.get("epaper_fn", ""))
+    if epaper_fn:
+        try:
+            for img_url, district in epaper_fn():
+                asset_urls.append((img_url, "image", district))
+        except Exception as exc:
+            _log_fail(name, _HB_EPAPER, "epaper_discover", exc)
+    else:
+        # ── B) generic: reach homepage, discover directly-fetchable assets ──
+        html, base = None, None
+        for u in paper["urls"]:
+            body, ctype, status = _fetch(u, source=name, want="text")
+            if body:
+                html, base = body, u
+                break
+        if html is None:
+            return [], [], "unreachable"
 
-    # explicit per-paper page images (for JS e-paper portals once configured)
-    asset_urls: list[tuple[str, str]] = []           # (url, kind)
-    for p in assets["pdfs"]:
-        asset_urls.append((p, "pdf"))
-    for img in assets["images"]:
-        asset_urls.append((img, "image"))
-    for pg in paper.get("page_images", []):          # manually-wired e-paper images
-        asset_urls.append((pg, "image"))
+        _is_gov = ".gov.in" in (urlparse(base).netloc or "")
+        assets = _discover_assets(html, base, grab_all_pdfs=_is_gov)
+        # one-level crawl into 'tender / recruitment / notice' sections
+        for pg in assets["notice_pages"][:5]:
+            if pg.rstrip("/") == base.rstrip("/"):
+                continue
+            sub, _c, _s = _fetch(pg, source=name, want="text")
+            if sub:
+                sa = _discover_assets(sub, pg, grab_all_pdfs=True)
+                assets["pdfs"] += sa["pdfs"]
+                assets["images"] += sa["images"]
+        for p in dict.fromkeys(assets["pdfs"]):
+            asset_urls.append((p, "pdf", None))
+        for img in dict.fromkeys(assets["images"]):
+            asset_urls.append((img, "image", None))
+        for pg in paper.get("page_images", []):
+            asset_urls.append((pg, "image", None))
 
     if not asset_urls:
-        # nothing directly fetchable — honest zero, logged (typical for JS e-papers)
-        _log_fail(name, base, "discover",
-                  f"no directly-fetchable government assets ({kind}); "
-                  "e-paper page images need configuring")
+        _log_fail(name, paper["urls"][0], "discover",
+                  f"no directly-fetchable government assets ({kind})")
         return [], [], "no_assets"
 
-    # 3) download + Vision each asset (capped), with per-asset isolation
-    for url, akind in asset_urls[:_MAX_ASSETS_PER_PAPER]:
+    # ── download + Vision each asset (capped), per-asset isolation ──
+    for url, akind, district in asset_urls[:cap]:
         payload, ctype, status = _fetch(url, source=name, want="bytes")
         if not payload:
             continue
         mime = ("application/pdf" if (akind == "pdf" or "pdf" in ctype)
                 else ("image/png" if url.lower().endswith(".png") else "image/jpeg"))
         t, j, vstatus = _vision_extract(payload, mime, newspaper=name,
-                                        state_hint=state_hint, source_url=url)
+                                        state_hint=state_hint, source_url=url,
+                                        district_hint=district,
+                                        source_type=kind)
+        vision_statuses.append(vstatus)
+        if str(vstatus).startswith("error"):
+            _log_fail(name, url, "ocr", vstatus)
         tenders += t
         jobs += j
 
+    if vision_statuses and all(str(status).startswith("error")
+                               for status in vision_statuses):
+        return tenders, jobs, "failed"
+    if any(str(status).startswith("error") for status in vision_statuses):
+        return tenders, jobs, "warning"
     return tenders, jobs, "ok"
 
 
@@ -376,14 +505,17 @@ def collect() -> dict:
        "failures":[...], "generated_at": iso}
     """
     _FAILURES.clear()
+    _MANUAL_REVIEW.clear()
     all_tenders: list[dict] = []
     all_jobs: list[dict] = []
     report: dict[str, dict] = {}
 
     with ThreadPoolExecutor(max_workers=4) as ex:
-        futs = {ex.submit(_process_newspaper, p): p["name"] for p in NEWSPAPERS}
+        futs = {ex.submit(_process_newspaper, p): p for p in NEWSPAPERS}
         for fut in as_completed(futs):
-            name = futs[fut]
+            paper = futs[fut]
+            name = paper["name"]
+            source_id = paper.get("source_id") or f"newspaper-{core.make_source_id(name)}"
             try:
                 t, j, status = fut.result()
             except Exception as exc:
@@ -391,12 +523,19 @@ def collect() -> dict:
                 _log_fail(name, "", "process", exc)
             all_tenders += t
             all_jobs += j
-            report[name] = {"tenders": len(t), "jobs": len(j), "status": status}
+            related_failures = [f for f in _FAILURES if f.get("source") == name]
+            report[source_id] = {
+                "source_id": source_id, "source_name": name,
+                "tenders": len(t), "jobs": len(j), "count": len(t) + len(j),
+                "status": status,
+                "error": (related_failures[-1]["error"] if related_failures else None),
+            }
 
-    tenders = _merge_sources(all_tenders)
-    jobs    = _merge_sources(all_jobs)
+    tenders = core.merge_duplicate_records(all_tenders, "tender")
+    jobs = core.merge_duplicate_records(all_jobs, "job")
     return {"tenders": tenders, "jobs": jobs, "report": report,
-            "failures": list(_FAILURES), "generated_at": core._now_iso()}
+            "failures": list(_FAILURES), "manual_review": list(_MANUAL_REVIEW),
+            "generated_at": core._now_iso()}
 
 
 # Columns the DB tables actually have — the rich extra fields (eligibility,
@@ -430,15 +569,13 @@ def _table_safe(rec: dict, cols: set, extra_into_desc: list[str]) -> dict:
 
 
 def scrape() -> list[dict]:
-    """Ingest hook: de-duplicated OFFLINE TENDER records, safe for offline_tenders."""
-    return [_table_safe(r, _TENDER_COLS, ["eligibility", "contact"])
-            for r in collect()["tenders"]]
+    """Ingest hook: de-duplicated canonical newspaper tender records."""
+    return collect()["tenders"]
 
 
 def scrape_jobs() -> list[dict]:
-    """Ingest hook: de-duplicated government JOB records, safe for the jobs table."""
-    return [_table_safe(r, _JOB_COLS, ["age_limit", "newspaper"])
-            for r in collect()["jobs"]]
+    """Ingest hook: de-duplicated canonical newspaper job records."""
+    return collect()["jobs"]
 
 
 # ──────────────────────────────────────────────────────────────────────────────

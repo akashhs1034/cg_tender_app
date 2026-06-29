@@ -773,10 +773,45 @@ NAV_ITEMS = [
     ("ACCOUNT", "Settings", "सेटिंग्स", "⚙️  Settings"),
 ]
 
-OPPORTA_ADMIN_MODE = os.getenv("OPPORTA_ADMIN_MODE", "").strip().lower() in {
+
+def _secret(k):
+    if k in os.environ:
+        return os.environ[k]
+    try:
+        return st.secrets[k]
+    except Exception:
+        return None
+
+
+OPPORTA_ADMIN_MODE = str(_secret("OPPORTA_ADMIN_MODE") or "").strip().lower() in {
     "1", "true", "yes", "on",
 }
-if OPPORTA_ADMIN_MODE:
+_admin_email_setting = _secret("OPPORTA_ADMIN_EMAILS") or ""
+_admin_email_parts = (
+    _admin_email_setting
+    if isinstance(_admin_email_setting, (list, tuple, set))
+    else str(_admin_email_setting).split(",")
+)
+OPPORTA_ADMIN_EMAILS = frozenset(
+    str(item).strip().casefold() for item in _admin_email_parts if str(item).strip()
+)
+
+
+def _is_discovery_admin(user_email: str | None = None) -> bool:
+    candidate = str(
+        user_email
+        if user_email is not None
+        else st.session_state.get("email", "")
+    ).strip().casefold()
+    return bool(
+        OPPORTA_ADMIN_MODE
+        and st.session_state.get("authenticated")
+        and candidate
+        and candidate in OPPORTA_ADMIN_EMAILS
+    )
+
+
+if _is_discovery_admin():
     NAV_ITEMS.append(
         ("INTERNAL", "Discovery Queue", "खोज कतार", "🧭  Discovery Queue")
     )
@@ -786,12 +821,6 @@ def _nav_text(item: tuple, ui_lang: str) -> str:
     return item[2] if ui_lang == "hi" else item[1]
 
 # ── HELPERS ───────────────────────────────────────────────────────────────────
-def _secret(k):
-    if k in os.environ: return os.environ[k]
-    try: return st.secrets[k]
-    except: return None
-
-
 def _app_redirect_url() -> str:
     """Where Supabase sends the user back after Google sign-in / password reset.
 
@@ -1724,7 +1753,7 @@ def render_source_health(tenders: pd.DataFrame, jobs: pd.DataFrame,
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def _load_discovery_queue(path_str: str, modified_at: float) -> list[dict]:
+def _load_local_discovery_queue(path_str: str, modified_at: float) -> list[dict]:
     """Read the local fallback queue. The mtime argument invalidates the cache."""
     del modified_at
     try:
@@ -1734,11 +1763,79 @@ def _load_discovery_queue(path_str: str, modified_at: float) -> list[dict]:
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
-def render_discovery_queue() -> None:
-    """Render Phase 4A candidates only inside explicitly enabled admin mode."""
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_supabase_discovery_queue(
+    supabase_url: str, supabase_key: str
+) -> list[dict]:
+    """Read the private review table using server-side credentials only."""
+    from supabase import create_client
+
+    client = create_client(supabase_url, supabase_key)
+    fields = (
+        "url,title,state,district,category,confidence_score,status,reason"
+    )
+    rows: list[dict] = []
+    offset = 0
+    batch_size = 1_000
+    while True:
+        chunk = (
+            client.table("discovered_sources")
+            .select(fields)
+            .order("confidence_score", desc=True)
+            .order("url")
+            .range(offset, offset + batch_size - 1)
+            .execute()
+            .data
+            or []
+        )
+        rows.extend(item for item in chunk if isinstance(item, dict))
+        if len(chunk) < batch_size:
+            break
+        offset += batch_size
+    return rows
+
+
+def _discovery_queue_records() -> tuple[list[dict], str, bool]:
+    """Prefer Supabase; use JSON only when no cloud setting exists."""
+    supabase_url = str(
+        _secret("SUPABASE_URL") or _secret("supabase_url") or ""
+    ).strip()
+    service_key = str(_secret("SUPABASE_SERVICE_KEY") or "").strip()
+    fallback_key = str(
+        _secret("SUPABASE_KEY") or _secret("supabase_key") or ""
+    ).strip()
+    supabase_key = service_key or fallback_key
+    cloud_configured = bool(supabase_url or service_key or fallback_key)
+
+    if cloud_configured:
+        if not (supabase_url and supabase_key):
+            return [], "supabase", False
+        try:
+            return (
+                _load_supabase_discovery_queue(supabase_url, supabase_key),
+                "supabase",
+                True,
+            )
+        except Exception:
+            # Do not silently replace cloud state with a stale local queue.
+            return [], "supabase", False
+
     queue_path = Path(__file__).parent / "data" / "discovered_sources.json"
     modified_at = queue_path.stat().st_mtime if queue_path.exists() else 0.0
-    records = _load_discovery_queue(str(queue_path), modified_at)
+    return (
+        _load_local_discovery_queue(str(queue_path), modified_at),
+        "local",
+        True,
+    )
+
+
+def render_discovery_queue() -> None:
+    """Render Phase 4A candidates only inside explicitly enabled admin mode."""
+    if not _is_discovery_admin(st.session_state.get("email", "")):
+        st.session_state.current_page = "🏠  Dashboard"
+        return
+
+    records, backend, read_ok = _discovery_queue_records()
 
     st.markdown(
         '<div class="page-kicker">Internal · Source review</div>'
@@ -1747,11 +1844,23 @@ def render_discovery_queue() -> None:
         'discovery pass. Approval does not yet add a source to ingestion.</div>',
         unsafe_allow_html=True,
     )
-    if not records:
-        st.info(
-            "No discovery candidates are available. Run "
-            "`python source_discovery.py` to refresh the local review queue."
+    if not read_ok:
+        st.error(
+            "The private Supabase discovery queue is unavailable or incomplete. "
+            "Check its server-side URL/key configuration."
         )
+        return
+    if not records:
+        if backend == "supabase":
+            st.info(
+                "No discovery candidates are stored yet. Run the "
+                "OPPORTA Discovery Scan workflow."
+            )
+        else:
+            st.info(
+                "No discovery candidates are available. Run "
+                "`python source_discovery.py` to refresh the local review queue."
+            )
         return
 
     pending = sum(item.get("status") == "pending_review" for item in records)
@@ -1794,6 +1903,11 @@ def render_discovery_queue() -> None:
     st.caption(
         "CAPTCHA-required candidates are review markers only; OPPORTA does not "
         "attempt to solve or bypass their access controls."
+    )
+    st.caption(
+        "Queue source: private Supabase table."
+        if backend == "supabase"
+        else "Queue source: local fallback JSON."
     )
 
 
@@ -2181,7 +2295,7 @@ if st.session_state.authenticated and ("Source Health" in page):
 
 # Phase 4A is review-only. A stale/deep-linked route is inaccessible unless the
 # deployment explicitly opts into internal mode.
-if ("Discovery Queue" in page) and not OPPORTA_ADMIN_MODE:
+if ("Discovery Queue" in page) and not _is_discovery_admin(email):
     st.session_state.current_page = "🏠  Dashboard"
     page = "🏠  Dashboard"
 
@@ -4268,7 +4382,7 @@ elif "Alerts" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 # ── DISCOVERY QUEUE (EXPLICIT INTERNAL MODE ONLY) ─────────────────────────────
 # ══════════════════════════════════════════════════════════════════════════════
-elif OPPORTA_ADMIN_MODE and "Discovery Queue" in page:
+elif _is_discovery_admin(email) and "Discovery Queue" in page:
     render_discovery_queue()
 
 # ══════════════════════════════════════════════════════════════════════════════

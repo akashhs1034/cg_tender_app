@@ -86,6 +86,7 @@ alter table if exists jobs
     add column if not exists subcategory text,
     add column if not exists field text,
     add column if not exists age_limit text,
+    add column if not exists published_date date,
     add column if not exists application_start_date date,
     add column if not exists application_end_date date,
     add column if not exists exam_date date,

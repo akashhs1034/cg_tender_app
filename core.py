@@ -266,7 +266,7 @@ JOB_SCHEMA_FIELDS = (
     "source_id", "title", "state", "district", "department", "source_type",
     "source_name", "source_url", "document_url", "advertisement_no", "category",
     "subcategory", "field", "qualification", "vacancies", "age_limit", "salary",
-    "deadline", "application_start_date", "application_end_date", "exam_date",
+    "deadline", "published_date", "application_start_date", "application_end_date", "exam_date",
     "application_fee", "apply_link", "selection_process", "reservation_info",
     "description", "language", "ocr_text", "confidence_score",
     "online_or_offline", "all_sources", "source_count", "first_seen_at",
@@ -583,7 +583,7 @@ def job_record(*, title, state=None, department=None, district=None,
                source_type=None, source_name=None, source_url=None,
                advertisement_no=None, subcategory=None, field=None,
                age_limit=None, application_start_date=None,
-               application_end_date=None, exam_date=None,
+               application_end_date=None, exam_date=None, published_date=None,
                application_fee=None, selection_process=None,
                reservation_info=None, language=None, ocr_text=None,
                confidence_score=None, last_seen_at=None, status=None,
@@ -611,6 +611,8 @@ def job_record(*, title, state=None, department=None, district=None,
         "age_limit": (str(age_limit).strip() if age_limit else None),
         "salary": (str(salary).strip() if salary else None),
         "deadline": d.isoformat() if d else None,
+        "published_date": (parse_date(published_date).isoformat()
+                           if parse_date(published_date) else None),
         "application_start_date": (parse_date(application_start_date).isoformat()
                                    if parse_date(application_start_date) else None),
         "application_end_date": (parse_date(application_end_date).isoformat()
@@ -720,6 +722,7 @@ def canonicalize_job_record(record: dict) -> dict:
         source_url=r.get("source_url"), advertisement_no=r.get("advertisement_no"),
         subcategory=r.get("subcategory"), field=r.get("field"),
         age_limit=r.get("age_limit"),
+        published_date=r.get("published_date"),
         application_start_date=r.get("application_start_date"),
         application_end_date=r.get("application_end_date"),
         exam_date=r.get("exam_date"), application_fee=r.get("application_fee"),
@@ -758,32 +761,104 @@ def _record_source(rec: dict) -> dict:
         "source_name": rec.get("source_name") or rec.get("source_portal"),
         "source_url": rec.get("source_url") or rec.get("document_url") or rec.get("apply_link"),
         "source_type": rec.get("source_type"),
+        "online_or_offline": rec.get("online_or_offline"),
         "seen_at": rec.get("scraped_at") or _now_iso(),
     }
+
+
+def _source_list(value) -> list[dict]:
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (ValueError, TypeError):
+            value = []
+    return [dict(item) for item in (value or []) if isinstance(item, dict)]
+
+
+def _source_signature(source: dict) -> tuple[str, str]:
+    return (
+        _identity_text(source.get("source_name")),
+        str(source.get("source_url") or "").split("#", 1)[0].rstrip("/").lower(),
+    )
+
+
+def _combine_sources(*groups) -> list[dict]:
+    combined: list[dict] = []
+    positions: dict[tuple[str, str], int] = {}
+    for group in groups:
+        for source in _source_list(group):
+            if not source.get("source_name") and not source.get("source_url"):
+                continue
+            signature = _source_signature(source)
+            if signature in positions:
+                current = combined[positions[signature]]
+                for key, value in source.items():
+                    if current.get(key) in (None, "") and value not in (None, ""):
+                        current[key] = value
+            else:
+                positions[signature] = len(combined)
+                combined.append(source)
+    return combined
+
+
+def _url_quality(value) -> int:
+    """Prefer usable official/document links while merging duplicate sources."""
+    url = str(value or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return 0
+    low = url.lower().split("#", 1)[0]
+    score = 10 + (2 if low.startswith("https://") else 0)
+    if any(domain in low for domain in (".gov.in", ".nic.in", ".gov.", ".nic.")):
+        score += 30
+    if low.split("?", 1)[0].endswith((".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png")):
+        score += 8
+    if low.rstrip("/").endswith(("tenders", "jobs", "recruitment", "notices")):
+        score -= 3
+    return score
+
+
+def best_source_url(record: dict) -> str | None:
+    candidates = [
+        record.get("source_url"), record.get("document_url"),
+        record.get("apply_link"),
+    ]
+    candidates.extend(
+        source.get("source_url") for source in _source_list(
+            record.get("all_sources")))
+    usable = [str(url).strip() for url in candidates if _url_quality(url)]
+    return max(usable, key=_url_quality) if usable else None
 
 
 def _merge_record(master: dict, incoming: dict) -> dict:
     """Merge a duplicate without discarding its provenance."""
     empty = (None, "", [], {})
+    source_url_replaced = False
     for key, value in incoming.items():
         if key in {"source_id", "all_sources", "source_count", "first_seen_at"}:
             continue
         current = master.get(key)
-        if current in empty and value not in empty:
+        if key in {"source_url", "document_url", "apply_link"}:
+            if _url_quality(value) > _url_quality(current):
+                master[key] = value
+                source_url_replaced = source_url_replaced or key == "source_url"
+        elif current in empty and value not in empty:
             master[key] = value
         elif key in {"description", "requirements", "ocr_text", "qualification",
                      "eligibility"} and value and len(str(value)) > len(str(current or "")):
             master[key] = value
         elif key == "confidence_score" and value is not None:
-            master[key] = max(int(current or 0), int(value))
+            master[key] = max(parse_int(current) or 0, parse_int(value) or 0)
+        elif key in {"is_corrigendum", "requires_manual_review"}:
+            master[key] = parse_bool(current) or parse_bool(value)
 
-    sources = list(master.get("all_sources") or [])
-    for source in list(incoming.get("all_sources") or []) + [_record_source(incoming)]:
-        if not source.get("source_name") and not source.get("source_url"):
-            continue
-        sig = (source.get("source_name"), source.get("source_url"))
-        if sig not in {(s.get("source_name"), s.get("source_url")) for s in sources}:
-            sources.append(source)
+    if source_url_replaced and incoming.get("source_name"):
+        master["source_name"] = incoming["source_name"]
+
+    sources = _combine_sources(
+        master.get("all_sources"),
+        incoming.get("all_sources"),
+        [_record_source(master), _record_source(incoming)],
+    )
     master["all_sources"] = sources
     master["source_count"] = len(sources) or 1
     master["first_seen_at"] = min(
@@ -792,8 +867,9 @@ def _merge_record(master: dict, incoming: dict) -> dict:
     master["last_seen_at"] = max(
         str(master.get("last_seen_at") or master.get("scraped_at") or ""),
         str(incoming.get("last_seen_at") or incoming.get("scraped_at") or ""))
-    master["requires_manual_review"] = bool(
-        master.get("requires_manual_review") or incoming.get("requires_manual_review"))
+    master["requires_manual_review"] = (
+        parse_bool(master.get("requires_manual_review"))
+        or parse_bool(incoming.get("requires_manual_review")))
     master["status"] = lifecycle_status(
         master.get("deadline"), master.get("confidence_score"),
         master.get("requires_manual_review", False))
@@ -816,8 +892,10 @@ def merge_duplicate_records(records: list[dict], kind: str = "tender") -> list[d
         if not isinstance(raw, dict) or not str(raw.get("title") or "").strip():
             continue
         rec = dict(raw)
-        rec.setdefault("all_sources", [_record_source(rec)])
-        rec.setdefault("source_count", len(rec["all_sources"]) or 1)
+        own_source = _record_source(rec)
+        sources = _combine_sources(rec.get("all_sources"), [own_source])
+        rec["all_sources"] = sources
+        rec["source_count"] = len(sources) or 1
         rec.setdefault("first_seen_at", rec.get("scraped_at") or _now_iso())
         rec.setdefault("last_seen_at", rec.get("scraped_at") or _now_iso())
         rec["status"] = lifecycle_status(
@@ -825,15 +903,24 @@ def merge_duplicate_records(records: list[dict], kind: str = "tender") -> list[d
             rec.get("requires_manual_review", False))
 
         exact_keys = []
+        state_norm = _identity_text(rec.get("state"))
+        district_norm = _identity_text(rec.get("district"))
+        org_norm = _identity_text(rec.get(org_field))
         number = _identity_text(rec.get(number_field) or rec.get("nit_no"))
+        if number in {
+                "", "n a", "na", "none", "not available", "not applicable",
+                "nil", "0"} or len(number) < 3:
+            number = ""
         if number:
             number_scope = ":".join((
-                _identity_text(rec.get("state")),
-                _identity_text(rec.get(org_field)),
+                state_norm,
+                district_norm or org_norm,
             ))
             exact_keys.append(f"number:{number_scope}:{number}")
         for url_field in ("document_url", "source_url", "apply_link"):
-            url = str(rec.get(url_field) or "").split("?", 1)[0].rstrip("/").lower()
+            # Government portals frequently encode the tender/job identity in
+            # query parameters. Preserve them; only browser fragments are noise.
+            url = str(rec.get(url_field) or "").split("#", 1)[0].rstrip("/").lower()
             if url.startswith("http") and not url.endswith(("tenders", "jobs", "recruitment", "notices")):
                 exact_keys.append(f"url:{url}")
         sid = str(rec.get("source_id") or "")
@@ -842,26 +929,47 @@ def merge_duplicate_records(records: list[dict], kind: str = "tender") -> list[d
 
         matched = next((exact[key] for key in exact_keys if key in exact), None)
         title_norm = _identity_text(rec.get("title"))
+        deadline_norm = str(parse_date(rec.get("deadline")) or "")
+        identity_value = parse_value_to_lakhs(
+            rec.get("estimated_value") or rec.get("value_lakhs")
+            or rec.get("value_text"))
+        value_norm = (f"{identity_value:.2f}"
+                      if identity_value is not None else "")
+        if (title_norm and len(title_norm) >= 20 and org_norm
+                and state_norm and district_norm and deadline_norm):
+            exact_keys.append(
+                f"identity:{state_norm}:{district_norm}:{deadline_norm}:"
+                f"{title_norm}:{org_norm}:{value_norm}")
+            if matched is None and exact_keys[-1] in exact:
+                matched = exact[exact_keys[-1]]
         block = (
-            _identity_text(rec.get("state")),
-            str(parse_date(rec.get("deadline")) or ""),
-            _identity_text(rec.get("district"))[:30],
+            state_norm,
+            district_norm[:60],
         )
-        if matched is None:
+        if matched is None and district_norm:
             for idx in blocks.get(block, []):
                 candidate = masters[idx]
+                candidate_deadline = str(parse_date(candidate.get("deadline")) or "")
+                if deadline_norm and candidate_deadline and deadline_norm != candidate_deadline:
+                    continue
                 title_score = SequenceMatcher(
                     None, title_norm, _identity_text(candidate.get("title"))).ratio()
-                if title_score < 0.90:
+                if title_score < 0.96:
                     continue
-                org_a = _identity_text(rec.get(org_field))
+                org_a = org_norm
                 org_b = _identity_text(candidate.get(org_field))
-                org_score = SequenceMatcher(None, org_a, org_b).ratio() if org_a and org_b else 0.8
-                val_a = parse_value_to_lakhs(rec.get("estimated_value") or rec.get("value_lakhs"))
-                val_b = parse_value_to_lakhs(candidate.get("estimated_value") or candidate.get("value_lakhs"))
+                if not org_a or not org_b:
+                    continue
+                org_score = SequenceMatcher(None, org_a, org_b).ratio()
+                val_a = parse_value_to_lakhs(
+                    rec.get("estimated_value") or rec.get("value_lakhs")
+                    or rec.get("value_text"))
+                val_b = parse_value_to_lakhs(
+                    candidate.get("estimated_value") or candidate.get("value_lakhs")
+                    or candidate.get("value_text"))
                 value_close = (val_a is None or val_b is None or
                                abs(val_a - val_b) <= max(1.0, max(val_a, val_b) * 0.03))
-                if org_score >= 0.72 and value_close:
+                if org_score >= 0.88 and value_close:
                     matched = idx
                     break
 

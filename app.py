@@ -989,10 +989,11 @@ def _clickable_title(text, url, length: int = 115) -> str:
 def _render_offline_card(r: dict) -> None:
     """Render one newspaper/offline tender as a card (no fit score — these are
     raw newspaper extractions, so we show the printed facts honestly)."""
-    _t     = _clickable_title(r.get("title"), r.get("document_url"), 120)
+    _url   = _record_link(r)
+    _t     = _clickable_title(r.get("title"), _url, 120)
     _org   = _esc(r.get("organization"))
     _dist  = _esc(r.get("district"))
-    _nit   = _v(r.get("nit_no"))
+    _nit   = _v(r.get("tender_no") or r.get("nit_no"))
     _val   = _v(r.get("value_text")) or (f"₹{float(r.get('value_lakhs')):.0f}L"
                                          if r.get("value_lakhs") else "—")
     _close = _v(r.get("deadline"))
@@ -1009,8 +1010,8 @@ def _render_offline_card(r: dict) -> None:
         + (f'<div class="alert-meta" style="color:#94A3B8;margin-top:4px">{_meta}</div>'
            if _meta else "")
         + '</div>', unsafe_allow_html=True)
-    if r.get("document_url"):
-        st.link_button("🌐 Open Official Procurement Portal", r["document_url"],
+    if _url:
+        st.link_button("🌐 Open Official Procurement Portal", _url,
                        width="stretch")
 
 def _profile_to_resume_text(p: dict) -> str:
@@ -1398,9 +1399,111 @@ def _data_options(df: pd.DataFrame, column: str, all_label: str = "All") -> list
     }
     return [all_label] + sorted(values, key=str.lower)
 
+
+def _present(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, float) and pd.isna(value):
+        return False
+    return str(value).strip().lower() not in {"", "nan", "none", "nat", "—"}
+
+
+def _clean_record(record: dict) -> dict:
+    return {
+        key: (None if isinstance(value, float) and pd.isna(value) else value)
+        for key, value in record.items()
+    }
+
+
+def _dedupe_public_frame(df: pd.DataFrame, kind: str) -> pd.DataFrame:
+    """Safety dedup for legacy Supabase rows before any public filtering."""
+    if df.empty:
+        return df
+    normalise = (core.canonicalize_tender_record
+                 if kind == "tender" else core.canonicalize_job_record)
+    records = []
+    for raw in df.to_dict("records"):
+        clean = _clean_record(raw)
+        try:
+            records.append(normalise(clean))
+        except Exception:
+            records.append(clean)
+    merged = core.merge_duplicate_records(records, kind)
+    return pd.DataFrame(merged).reset_index(drop=True)
+
+
+def _record_modes(record: dict) -> set[str]:
+    modes: set[str] = set()
+    values = [
+        record.get("online_or_offline"), record.get("source_type"),
+        record.get("source_name"), record.get("source_portal"),
+        record.get("newspaper_name"), record.get("newspaper"),
+    ]
+    sources = record.get("all_sources") or []
+    if isinstance(sources, str):
+        try:
+            sources = json.loads(sources)
+        except (ValueError, TypeError):
+            sources = []
+    for source in sources:
+        if isinstance(source, dict):
+            values.extend((
+                source.get("online_or_offline"), source.get("source_type"),
+                source.get("source_name"),
+            ))
+    blob = " ".join(str(value or "") for value in values).lower()
+    if "newspaper" in blob or "epaper" in blob:
+        modes.update({"newspaper", "offline"})
+    if "offline" in blob or "district_site" in blob:
+        modes.add("offline")
+    if "online" in blob or any(term in blob for term in (
+            "tender_portal", "job_portal", "eproc", "etender", "cppp", "gem")):
+        modes.add("online")
+    if not modes:
+        modes.add("online")
+    return modes
+
+
+def _mode_label(record: dict) -> str:
+    modes = _record_modes(record)
+    if "online" in modes and "newspaper" in modes:
+        return "Online + Newspaper"
+    if "online" in modes and "offline" in modes:
+        return "Online + Offline"
+    if "newspaper" in modes:
+        return "Newspaper"
+    return "Offline" if "offline" in modes else "Online"
+
+
+def _matches_mode(record: dict, selected: str) -> bool:
+    if selected == "All":
+        return True
+    return selected.lower() in _record_modes(record)
+
+
+def _record_link(record: dict) -> str | None:
+    return core.best_source_url(record)
+
+
+def _source_label(record: dict) -> str:
+    direct = _v(record.get("source_name") or record.get("source_portal"), "")
+    if direct:
+        return direct
+    sources = record.get("all_sources") or []
+    if isinstance(sources, str):
+        try:
+            sources = json.loads(sources)
+        except (ValueError, TypeError):
+            sources = []
+    for source in sources:
+        if isinstance(source, dict) and _present(source.get("source_name")):
+            return _v(source["source_name"], "")
+    return ""
+
+
 # ── LOAD DATA ─────────────────────────────────────────────────────────────────
-df_t = load_table("tenders")
-df_j = load_table("jobs")
+df_t = _dedupe_public_frame(load_table("tenders"), "tender")
+df_j = _dedupe_public_frame(load_table("jobs"), "job")
 
 # Fold the 45+ raw scraped categories into ~10 clean buckets (core.normalize_category)
 # and use those everywhere — filters, chips, the Profile sector picker, scoring —
@@ -2767,20 +2870,13 @@ elif "Tenders" in page:
     # ── FILTERS (on top — users filter first) ────────────────────────────────
     all_cats = ["All"] + [c for c in TENDER_CATS_BY_FREQ]
     st.markdown('<div class="filter-row">', unsafe_allow_html=True)
-    f1, f2, f3, f4 = st.columns([3, 1.5, 1.5, 1.5])
+    f1, f2, f3, f4, f5 = st.columns([3.2, 1.25, 1.45, 1.15, 1.6])
     with f1:
         new_search = st.text_input("Search", value=st.session_state.explore_search,
-                                   placeholder="Search title, org, district, scope of work...",
+                                   placeholder="Title, organization, district, tender no., scope of work…",
                                    label_visibility="collapsed", key="ex_search")
         st.session_state.explore_search = new_search.lower()
     with f2:
-        if st.session_state.explore_category not in all_cats:
-            st.session_state.explore_category = "All"
-        st.session_state.explore_category = st.selectbox(
-            "Category", all_cats,
-            index=all_cats.index(st.session_state.explore_category),
-            label_visibility="collapsed", key="ex_cat")
-    with f3:
         states_opts = ["All", "Chhattisgarh", "Uttar Pradesh"]
         if st.session_state.explore_state not in states_opts:
             st.session_state.explore_state = "All"
@@ -2791,7 +2887,7 @@ elif "Tenders" in page:
             label_visibility="collapsed", key="ex_state")
         if st.session_state.explore_state != prev_state:
             st.session_state.explore_district = "All"
-    with f4:
+    with f3:
         sel_state = st.session_state.explore_state
         if sel_state == "All":
             dist_opts = ["All"] + sorted(set(CG_DISTRICTS + UP_DISTRICTS))
@@ -2803,51 +2899,17 @@ elif "Tenders" in page:
             "District", dist_opts,
             index=dist_opts.index(st.session_state.explore_district),
             label_visibility="collapsed", key="ex_dist")
-    f5, f6, _filter_space = st.columns([1.5, 1.5, 4.5])
-    with f5:
-        _value_options = ["All values", "Under ₹10L", "₹10L–₹50L",
-                          "₹50L–₹1Cr", "₹1Cr–₹5Cr", "₹5Cr+"]
-        if st.session_state.explore_value not in _value_options:
-            st.session_state.explore_value = "All values"
-        st.session_state.explore_value = st.selectbox(
-            "Estimated value", _value_options,
-            index=_value_options.index(st.session_state.explore_value),
-            label_visibility="collapsed", key="ex_value")
-    with f6:
-        _deadline_options = ["Any deadline", "Closing in 7 days", "Closing in 15 days",
-                             "Closing in 30 days", "No deadline listed"]
-        if st.session_state.explore_deadline not in _deadline_options:
-            st.session_state.explore_deadline = "Any deadline"
-        st.session_state.explore_deadline = st.selectbox(
-            "Deadline", _deadline_options,
-            index=_deadline_options.index(st.session_state.explore_deadline),
-            label_visibility="collapsed", key="ex_deadline")
-    tf1, tf2, tf3, tf4 = st.columns(4)
-    with tf1:
-        tender_subcategory = st.selectbox(
-            "Subcategory", _data_options(df_t, "subcategory"),
-            label_visibility="collapsed", key="ex_subcategory")
-    with tf2:
-        tender_sector = st.selectbox(
-            "Sector", _data_options(df_t, "sector"),
-            label_visibility="collapsed", key="ex_sector")
-    with tf3:
-        tender_department = st.selectbox(
-            "Department", _data_options(df_t, "department"),
-            label_visibility="collapsed", key="ex_department")
-    with tf4:
-        tender_source_type = st.selectbox(
-            "Source type", _data_options(df_t, "source_type"),
-            label_visibility="collapsed", key="ex_source_type")
-    tf5, tf6, _tf_space = st.columns([1.5, 1.5, 4.5])
-    with tf5:
+    with f4:
         tender_mode = st.selectbox(
-            "Online / offline", ["All", "online", "offline"],
+            "Mode", ["All", "Online", "Offline"],
             label_visibility="collapsed", key="ex_mode")
-    with tf6:
-        tender_confidence = st.selectbox(
-            "Confidence", ["Any confidence", "60%+", "80%+"],
-            label_visibility="collapsed", key="ex_confidence")
+    with f5:
+        if st.session_state.explore_category not in all_cats:
+            st.session_state.explore_category = "All"
+        st.session_state.explore_category = st.selectbox(
+            "Tender Category", all_cats,
+            index=all_cats.index(st.session_state.explore_category),
+            label_visibility="collapsed", key="ex_cat")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ── Tender Amendments (Corrigendums) — closes the "missed amendment" gap ──
@@ -2882,7 +2944,9 @@ elif "Tenders" in page:
     # advertise tenders ONLY in local newspapers, never on e-procurement portals.
     # This captures them district-wise: browse what's collected, add tenders by
     # letting Opporta Intelligence read an e-paper page, or open district papers.
-    _off_n = len(load_table("offline_tenders"))
+    df_off_public = _dedupe_public_frame(
+        load_table("offline_tenders"), "tender")
+    _off_n = len(df_off_public)
     with st.expander(f"📰  Offline / Newspaper Tenders · {_off_n} collected — district-wise NITs printed in CG/UP papers",
                      expanded=True):
         st.caption("Government offices (PWD, Collector, Nagar Nigam, Gram Panchayat, Jal Sansadhan…) "
@@ -2894,7 +2958,7 @@ elif "Tenders" in page:
 
         # ---- Tab 1: browse the shared offline-tender store, grouped by district
         with _ot1:
-            df_off = load_table("offline_tenders")
+            df_off = df_off_public
             if df_off.empty:
                 st.info("No offline tenders captured yet. Use **➕ Add from e-paper** to extract them "
                         "from a newspaper page, or open your district's papers under **🗞 Newspaper directory**.")
@@ -3013,43 +3077,18 @@ elif "Tenders" in page:
     fcat = st.session_state.explore_category
     fst  = st.session_state.explore_state
     fdst = st.session_state.explore_district
-    fval = st.session_state.explore_value
-    fddl = st.session_state.explore_deadline
 
     rows = []
     for _, r in df_t.iterrows():
         rec      = r.to_dict()
-        haystack = f"{_v(rec.get('title'))} {_v(rec.get('organization'))} {_v(rec.get('district'))} {_v(rec.get('description'))}".lower()
+        haystack = " ".join(str(rec.get(field) or "") for field in (
+            "title", "organization", "department", "district", "tender_no",
+            "nit_no", "description", "requirements")).lower()
         if q and q not in haystack: continue
         if fst  != "All" and _v(rec.get("state")) != fst: continue
         if fcat != "All" and rec.get("category_bucket") != fcat: continue
         if fdst != "All" and _v(rec.get("district","")).lower() != fdst.lower(): continue
-        if (tender_subcategory != "All"
-                and _v(rec.get("subcategory")) != tender_subcategory): continue
-        if tender_sector != "All" and _v(rec.get("sector")) != tender_sector: continue
-        if (tender_department != "All"
-                and _v(rec.get("department")) != tender_department): continue
-        if (tender_source_type != "All"
-                and _v(rec.get("source_type")) != tender_source_type): continue
-        if (tender_mode != "All"
-                and _v(rec.get("online_or_offline")).lower() != tender_mode): continue
-        _confidence = core.parse_int(rec.get("confidence_score"))
-        if tender_confidence == "60%+" and (_confidence is None or _confidence < 60): continue
-        if tender_confidence == "80%+" and (_confidence is None or _confidence < 80): continue
-        _raw_value = rec.get("value_lakhs")
-        if _raw_value is None or (isinstance(_raw_value, float) and pd.isna(_raw_value)):
-            _raw_value = rec.get("value_text")
-        _value_lakhs = core.parse_value_to_lakhs(_raw_value)
-        if fval == "Under ₹10L" and (_value_lakhs is None or _value_lakhs >= 10): continue
-        if fval == "₹10L–₹50L" and (_value_lakhs is None or not 10 <= _value_lakhs < 50): continue
-        if fval == "₹50L–₹1Cr" and (_value_lakhs is None or not 50 <= _value_lakhs < 100): continue
-        if fval == "₹1Cr–₹5Cr" and (_value_lakhs is None or not 100 <= _value_lakhs < 500): continue
-        if fval == "₹5Cr+" and (_value_lakhs is None or _value_lakhs < 500): continue
-        _days = days_left(rec.get("deadline"))
-        if fddl == "No deadline listed" and _days is not None: continue
-        if fddl == "Closing in 7 days" and (_days is None or not 0 <= _days <= 7): continue
-        if fddl == "Closing in 15 days" and (_days is None or not 0 <= _days <= 15): continue
-        if fddl == "Closing in 30 days" and (_days is None or not 0 <= _days <= 30): continue
+        if not _matches_mode(rec, tender_mode): continue
         if PROFILE_READY:
             s, _, eligible = core.score_tender_for_user(rec, profile)
             rows.append((s, eligible, rec))
@@ -3061,10 +3100,13 @@ elif "Tenders" in page:
     rows.sort(key=lambda x: (1 if x[1] else 0, x[0]), reverse=True)
 
     # Results header
-    count_col, _ = st.columns([1, 3])
-    with count_col:
-        st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:18px">{len(rows)} results found</div>',
-                    unsafe_allow_html=True)
+    if rows:
+        count_col, _ = st.columns([1, 3])
+        with count_col:
+            st.markdown(
+                f'<div class="sec-badge" style="display:inline-block;margin-bottom:18px">'
+                f'{len(rows)} results found</div>',
+                unsafe_allow_html=True)
 
     if not st.session_state.authenticated:
         st.info("🔐 Sign in and complete your profile to see which tenders you're eligible for.")
@@ -3074,40 +3116,89 @@ elif "Tenders" in page:
     if not rows:
         st.markdown("""<div class="ocard" style="text-align:center;padding:40px;color:#7C8AA0">
           <div style="font-size:2rem;margin-bottom:12px">🔍</div>
-          <div style="font-size:.9rem;font-weight:600;color:#64748B">No tenders match your filters</div>
-          <div style="font-size:.77rem;color:#566179;margin-top:6px">Try broadening your search or changing the state/district</div>
+          <div style="font-size:.9rem;font-weight:600;color:#64748B">No matching opportunities found.</div>
+          <div style="font-size:.77rem;color:#566179;margin-top:6px">Try changing state, district, mode, or category.</div>
         </div>""", unsafe_allow_html=True)
 
     for s, eligible, rec in rows[:80]:
-        dl       = days_left(rec.get("deadline"))
-        dl_txt   = f"⏱ {dl}d left" if dl is not None and dl >= 0 else ("⚠ Expired" if dl is not None else "No deadline")
-        val      = _v(rec.get("value_text")) or (f"₹{float(rec.get('value_lakhs',0)):.0f}L" if rec.get("value_lakhs") else "—")
-        district = _v(rec.get("district"), "State-wide")
+        dl = days_left(rec.get("deadline"))
+        deadline = _v(rec.get("deadline"), "")
+        deadline_text = (
+            f"{deadline} · {dl}d left" if deadline and dl is not None and dl >= 0
+            else deadline)
+        raw_value = (
+            rec.get("value_text") or rec.get("estimated_value")
+            or rec.get("value_lakhs"))
+        value_text = ""
+        if _present(raw_value):
+            if (rec.get("value_text") or rec.get("estimated_value")):
+                value_text = _v(raw_value, "")
+            else:
+                try:
+                    value_text = f"₹{float(raw_value):,.2f} L"
+                except (TypeError, ValueError):
+                    value_text = _v(raw_value, "")
+        tender_no = _v(rec.get("tender_no") or rec.get("nit_no"), "")
+        organization = _v(rec.get("department") or rec.get("organization"), "")
+        state = _v(rec.get("state"), "")
+        district = _v(rec.get("district"), "")
+        location = " · ".join(value for value in (state, district) if value)
+        category = _v(
+            rec.get("subcategory") or rec.get("category_bucket")
+            or rec.get("category"), "")
+        mode = _mode_label(rec)
+        emd = _v(rec.get("emd"), "")
+        published = _v(rec.get("published_date"), "")
+        source_name = _source_label(rec)
+        record_url = _record_link(rec)
+        tags = []
+        if category:
+            tags.append(f'<span class="tag tag-cat">{_html.escape(category)}</span>')
+        tags.append(f'<span class="tag tag-green">{_html.escape(mode)}</span>')
+        if value_text:
+            tags.append(f'<span class="tag tag-val">💰 {_html.escape(value_text)}</span>')
+        if emd:
+            tags.append(f'<span class="tag tag-val">EMD {_html.escape(emd)}</span>')
+        if deadline_text:
+            tags.append(f'<span class="tag tag-dl">Closes {_html.escape(deadline_text)}</span>')
+        if published:
+            tags.append(f'<span class="tag tag-loc">Published {_html.escape(published)}</span>')
+        if source_name:
+            tags.append(f'<span class="tag tag-loc">Source: {_html.escape(source_name)}</span>')
+
         # Binary verdict only — no percentage score. Eligible / Not Eligible
         # is decided from the user's profile (class, turnover, experience).
         if eligible is None:
-            elig_html = '<span class="tag tag-cat">🔒 Complete profile to check eligibility</span>'
+            elig_html = ""
         elif eligible:
             elig_html = '<span class="tag tag-green">✅ Eligible</span>'
         else:
             elig_html = ('<span class="tag" style="background:rgba(239,68,68,.1);color:#F87171;'
                          'border:1px solid rgba(239,68,68,.25)">❌ Not Eligible</span>')
         score_html = (f'<div class="ring {ring_cls(s)}" title="Opporta Intelligence match score">{s}%</div>'
-                      if PROFILE_READY else
-                      '<div class="ring ring-md" title="Complete profile for a match score">—</div>')
+                      if PROFILE_READY else "")
+        identity_html = (
+            f'<div class="ocard-org"><b>Tender No:</b> {_html.escape(tender_no)}</div>'
+            if tender_no else "")
+        org_location = " · ".join(value for value in (organization, location) if value)
+        org_html = (
+            f'<div class="ocard-org">🏛 {_html.escape(org_location)}</div>'
+            if org_location else "")
+        corrigendum_html = ""
+        if rec.get("is_corrigendum") or rec.get("linked_original_tender"):
+            corrigendum_html = (
+                '<div class="alert-meta" style="color:#F59E0B;margin-top:8px">'
+                '⚠ Corrigendum / amendment linked — verify changed dates and terms.'
+                '</div>')
 
         st.markdown(f"""<div class="ocard">
           <div class="ocard-row">
             <div class="ocard-body">
-              <div class="ocard-title">{_clickable_title(rec.get('title'), rec.get('document_url'), 115)}</div>
-              <div class="ocard-org">🏛 {safe_str(rec.get('organization'), 55)} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
-              <div class="ocard-tags">
-                <span class="tag tag-val">💰 {val}</span>
-                <span class="tag tag-dl">{dl_txt}</span>
-                <span class="tag tag-loc">📍 {district}</span>
-                <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
-                {elig_html}
-              </div>
+              <div class="ocard-title">{_clickable_title(rec.get('title'), record_url, 115)}</div>
+              {identity_html}
+              {org_html}
+              <div class="ocard-tags">{''.join(tags)}{elig_html}</div>
+              {corrigendum_html}
             </div>
             {score_html}
           </div>
@@ -3143,11 +3234,11 @@ elif "Tenders" in page:
 
             if rec.get("description"):
                 st.write(_v(rec.get("description")))
-            doc_url = rec.get("document_url")
+            doc_url = record_url
             if doc_url and str(doc_url) not in ("nan","None","—",""):
                 _pdf_widget(doc_url, rec.get("source_id",""), ctx="exp")
             _act1, _act2, _act3, _act4 = st.columns(4)
-            _doc_url = str(rec.get("document_url") or "").strip()
+            _doc_url = str(record_url or "").strip()
             if _doc_url.startswith("http"):
                 _act1.link_button("View official", _doc_url,
                                   key=_rec_key("official", rec), width="stretch")
@@ -3757,66 +3848,41 @@ elif "Jobs" in page:
         else:
             # Job filters (on top — users filter first)
             st.markdown('<div class="filter-row">', unsafe_allow_html=True)
-            jf1, jf2, jf3, jf4 = st.columns([2.6, 1.3, 1.3, 1.5])
+            jf1, jf2, jf3, jf4, jf5 = st.columns([3.1, 1.25, 1.45, 1.35, 1.6])
             with jf1:
-                jsearch = st.text_input("Search jobs", placeholder="Title, department, qualification...",
+                jsearch = st.text_input(
+                    "Search jobs",
+                    placeholder="Title, department, qualification, advertisement no.…",
                                         label_visibility="collapsed", key="jsearch").lower()
             with jf2:
                 jstates = ["All", "Chhattisgarh", "Uttar Pradesh"]
                 jstate  = st.selectbox("State", jstates, label_visibility="collapsed", key="jstate")
             with jf3:
-                jcats = ["All"] + sorted(df_j["category"].dropna().unique().tolist()) if "category" in df_j else ["All"]
-                jcat  = st.selectbox("Category", jcats, label_visibility="collapsed", key="jcat")
-            with jf4:
-                jsrc = st.selectbox("Source", ["All sources", "📰 Newspaper jobs", "🌐 Online portals"],
-                                    label_visibility="collapsed", key="jsrc")
-            jx1, jx2, jx3, jx4, jx5 = st.columns(5)
-            with jx1:
+                if jstate == "All":
+                    job_districts = _data_options(df_j, "district")
+                else:
+                    state_jobs = df_j[df_j["state"] == jstate] if "state" in df_j else df_j
+                    job_districts = _data_options(state_jobs, "district")
+                if st.session_state.get("jdistrict", "All") not in job_districts:
+                    st.session_state["jdistrict"] = "All"
                 job_district = st.selectbox(
-                    "District", _data_options(df_j, "district"),
+                    "District", job_districts,
                     label_visibility="collapsed", key="jdistrict")
-            with jx2:
-                job_subcategory = st.selectbox(
-                    "Subcategory", _data_options(df_j, "subcategory"),
-                    label_visibility="collapsed", key="jsubcategory")
-            with jx3:
-                job_field = st.selectbox(
-                    "Field", _data_options(df_j, "field"),
-                    label_visibility="collapsed", key="jfield")
-            with jx4:
-                job_department = st.selectbox(
-                    "Department", _data_options(df_j, "department"),
-                    label_visibility="collapsed", key="jdepartment")
-            with jx5:
-                job_source_type = st.selectbox(
-                    "Source type", _data_options(df_j, "source_type"),
-                    label_visibility="collapsed", key="j_source_type")
-            jy1, jy2, jy3, jy4 = st.columns(4)
-            with jy1:
+            with jf4:
                 job_mode = st.selectbox(
-                    "Online / offline", ["All", "online", "offline"],
+                    "Mode", ["All", "Online", "Offline", "Newspaper"],
                     label_visibility="collapsed", key="j_mode")
-            with jy2:
-                job_deadline = st.selectbox(
-                    "Deadline", ["Any deadline", "Closing in 7 days",
-                                 "Closing in 30 days", "No deadline listed"],
-                    label_visibility="collapsed", key="j_deadline")
-            with jy3:
-                job_confidence = st.selectbox(
-                    "Confidence", ["Any confidence", "60%+", "80%+"],
-                    label_visibility="collapsed", key="j_confidence")
-            with jy4:
-                job_qualification = st.text_input(
-                    "Qualification", placeholder="Qualification contains…",
-                    label_visibility="collapsed", key="j_qualification").lower()
+            with jf5:
+                jcats = (_data_options(df_j, "category")
+                         if "category" in df_j else ["All"])
+                jcat = st.selectbox(
+                    "Job Category", jcats,
+                    label_visibility="collapsed", key="jcat")
             st.markdown('</div>', unsafe_allow_html=True)
 
             # A job is an "offline / newspaper" posting when its source portal says so.
             def _is_newspaper_job(rec) -> bool:
-                source = " ".join(str(rec.get(key, "")) for key in (
-                    "source_portal", "source_type", "online_or_offline"))
-                return ("newspaper" in source.lower() or "epaper" in source.lower()
-                        or str(rec.get("online_or_offline", "")).lower() == "offline")
+                return "newspaper" in _record_modes(rec)
 
             # Job KPIs
             jk1, jk2, jk3, jk4 = st.columns(4)
@@ -3839,36 +3905,25 @@ elif "Jobs" in page:
                 dl_check = days_left(rec.get("deadline"))
                 if dl_check is not None and dl_check < 0:
                     continue  # skip expired
-                hay = f"{_v(rec.get('title'))} {_v(rec.get('department'))} {_v(rec.get('qualification'))} {_v(rec.get('description'))}".lower()
+                hay = " ".join(str(rec.get(field) or "") for field in (
+                    "title", "department", "qualification", "advertisement_no",
+                    "description")).lower()
                 if jsearch and jsearch not in hay: continue
                 if jstate != "All" and _v(rec.get("state")) != jstate: continue
-                if jcat   != "All" and jcat.lower() not in _v(rec.get("category","")).lower(): continue
+                if jcat != "All" and _v(rec.get("category")) != jcat: continue
                 if job_district != "All" and _v(rec.get("district")) != job_district: continue
-                if (job_subcategory != "All"
-                        and _v(rec.get("subcategory")) != job_subcategory): continue
-                if job_field != "All" and _v(rec.get("field")) != job_field: continue
-                if (job_department != "All"
-                        and _v(rec.get("department")) != job_department): continue
-                if (job_source_type != "All"
-                        and _v(rec.get("source_type")) != job_source_type): continue
-                if (job_mode != "All"
-                        and _v(rec.get("online_or_offline")).lower() != job_mode): continue
-                if (job_qualification
-                        and job_qualification not in _v(rec.get("qualification")).lower()): continue
-                if job_deadline == "No deadline listed" and dl_check is not None: continue
-                if (job_deadline == "Closing in 7 days"
-                        and (dl_check is None or not 0 <= dl_check <= 7)): continue
-                if (job_deadline == "Closing in 30 days"
-                        and (dl_check is None or not 0 <= dl_check <= 30)): continue
-                _job_conf = core.parse_int(rec.get("confidence_score"))
-                if job_confidence == "60%+" and (_job_conf is None or _job_conf < 60): continue
-                if job_confidence == "80%+" and (_job_conf is None or _job_conf < 80): continue
-                if jsrc == "📰 Newspaper jobs" and not _is_newspaper_job(rec): continue
-                if jsrc == "🌐 Online portals" and _is_newspaper_job(rec): continue
+                if not _matches_mode(rec, job_mode): continue
                 jobs_filtered.append(rec)
 
-            st.markdown(f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">{len(jobs_filtered)} postings</div>',
-                        unsafe_allow_html=True)
+            if jobs_filtered:
+                st.markdown(
+                    f'<div class="sec-badge" style="display:inline-block;margin-bottom:16px">'
+                    f'{len(jobs_filtered)} postings</div>',
+                    unsafe_allow_html=True)
+            else:
+                st.info(
+                    "No matching opportunities found. Try changing state, "
+                    "district, mode, or category.")
 
             # Strict: show a match % ONLY when a real job-seeker profile exists.
             _job_prof_text = (_profile_to_resume_text(profile)
@@ -3878,26 +3933,55 @@ elif "Jobs" in page:
                 st.info("ℹ️ Add your qualification, degree or skills in Profile → Job Seeker to see your suggested match % for every job.")
 
             for rec in jobs_filtered[:100]:
-                dl     = days_left(rec.get("deadline"))
-                dl_txt = f"⏱ {dl}d left" if dl is not None and dl >= 0 else "Open"
-                vac    = _v(rec.get("vacancies"))
-                try:
-                    vac_num = int(float(vac))
-                    vac_txt = f"{vac_num:,} posts"
-                except Exception:
-                    vac_txt = vac if vac != "—" else ""
-
-                salary_v  = _esc(rec.get("salary"))
-                cat_v     = _esc(rec.get("category"), "General")
-                dept_v    = _esc(rec.get("department"))
-                state_v   = _esc(rec.get("state"))
-                title_v   = _html.escape(safe_str(rec.get("title"), 100))
-
-                vac_tag   = f'<span class="tag tag-loc">&#128101; {vac_txt}</span>' if vac_txt else ""
-                sal_tag   = f'<span class="tag tag-val">&#x20B9; {salary_v}</span>' if salary_v != "—" else ""
-                jvac_div  = f'<div class="jvac">{vac_txt}</div>' if vac_txt else ""
-                news_tag  = ('<span class="tag tag-green">&#128240; Newspaper</span>'
-                             if _is_newspaper_job(rec) else "")
+                dl = days_left(rec.get("deadline"))
+                deadline = _v(rec.get("deadline"), "")
+                deadline_text = (
+                    f"{deadline} · {dl}d left"
+                    if deadline and dl is not None and dl >= 0 else deadline)
+                advertisement_no = _v(rec.get("advertisement_no"), "")
+                department = _v(rec.get("department"), "")
+                state = _v(rec.get("state"), "")
+                district = _v(rec.get("district"), "")
+                location = " · ".join(value for value in (state, district) if value)
+                category = _v(
+                    rec.get("subcategory") or rec.get("category"), "")
+                qualification = _v(rec.get("qualification"), "")
+                salary = _v(rec.get("salary"), "")
+                age_limit = _v(rec.get("age_limit"), "")
+                published = _v(rec.get("published_date"), "")
+                source_name = _source_label(rec)
+                mode = _mode_label(rec)
+                record_url = _record_link(rec)
+                vacancies = ""
+                if _present(rec.get("vacancies")):
+                    try:
+                        vacancies = f"{int(float(rec['vacancies'])):,} posts"
+                    except (TypeError, ValueError):
+                        vacancies = _v(rec.get("vacancies"), "")
+                tags = []
+                if category:
+                    tags.append(
+                        f'<span class="tag tag-cat">{_html.escape(category)}</span>')
+                tags.append(
+                    f'<span class="tag tag-green">{_html.escape(mode)}</span>')
+                if vacancies:
+                    tags.append(
+                        f'<span class="tag tag-loc">👥 {_html.escape(vacancies)}</span>')
+                if salary:
+                    tags.append(
+                        f'<span class="tag tag-val">Pay {_html.escape(salary)}</span>')
+                if age_limit:
+                    tags.append(
+                        f'<span class="tag tag-loc">Age {_html.escape(age_limit)}</span>')
+                if deadline_text:
+                    tags.append(
+                        f'<span class="tag tag-dl">Closes {_html.escape(deadline_text)}</span>')
+                if published:
+                    tags.append(
+                        f'<span class="tag tag-loc">Published {_html.escape(published)}</span>')
+                if source_name:
+                    tags.append(
+                        f'<span class="tag tag-loc">Source: {_html.escape(source_name)}</span>')
 
                 # Auto eligibility badge from profile
                 match_div = ""
@@ -3909,33 +3993,57 @@ elif "Jobs" in page:
                                  f'<div style="font-size:.95rem;font-weight:700;color:{_c}">{_p}%</div>'
                                  f'<div style="font-size:.6rem;color:#64748B">match</div></div>')
 
+                identity_html = (
+                    f'<div class="jcard-dept"><b>Advt No:</b> '
+                    f'{_html.escape(advertisement_no)}</div>'
+                    if advertisement_no else "")
+                dept_location = " · ".join(
+                    value for value in (department, location) if value)
+                department_html = (
+                    f'<div class="jcard-dept">{_html.escape(dept_location)}</div>'
+                    if dept_location else "")
+                qualification_html = (
+                    f'<div class="alert-meta" style="color:#94A3B8;margin-top:6px">'
+                    f'<b>Qualification:</b> {_html.escape(qualification[:220])}</div>'
+                    if qualification else "")
                 card_html = (
                     f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
-                    f'<div class="jcard-title">{title_v}</div>'
-                    f'<div class="jcard-dept">{dept_v} &nbsp;&middot;&nbsp; {state_v}</div>'
-                    f'<div class="ocard-tags">'
-                    f'<span class="tag tag-dl">{dl_txt}</span>'
-                    f'{vac_tag}'
-                    f'<span class="tag tag-cat">{cat_v}</span>'
-                    f'{sal_tag}{news_tag}'
-                    f'</div></div>{match_div}{jvac_div}</div></div>'
+                    f'<div class="jcard-title">'
+                    f'{_clickable_title(rec.get("title"), record_url, 110)}</div>'
+                    f'{identity_html}{department_html}{qualification_html}'
+                    f'<div class="ocard-tags">{"".join(tags)}</div>'
+                    f'</div>{match_div}</div></div>'
                 )
                 st.markdown(card_html, unsafe_allow_html=True)
 
                 with st.expander(f"Details · Resume Match — {safe_str(rec.get('title'), 55)}"):
-                    jd1, jd2 = st.columns(2)
-                    jd1.write(f"**Department:** {_plain(rec.get('department'))}")
-                    jd1.write(f"**Qualification:** {_plain(rec.get('qualification'))}")
-                    jd1.write(f"**Category:** {_plain(rec.get('category'))}")
-                    jd2.write(f"**Salary:** {_plain(rec.get('salary'))}")
-                    jd2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
-                    jd2.write(f"**Vacancies:** {_v(rec.get('vacancies'))}")
+                    facts = [
+                        ("Advertisement No", advertisement_no),
+                        ("Department", department),
+                        ("Location", location),
+                        ("Category", category),
+                        ("Mode", mode),
+                        ("Qualification", qualification),
+                        ("Vacancies", vacancies),
+                        ("Salary / Pay Scale", salary),
+                        ("Age Limit", age_limit),
+                        ("Deadline", deadline),
+                        ("Published", published),
+                        ("Source", source_name),
+                    ]
+                    facts = [(label, value) for label, value in facts if value]
+                    if facts:
+                        jd1, jd2 = st.columns(2)
+                        for index, (label, value) in enumerate(facts):
+                            (jd1 if index % 2 == 0 else jd2).write(
+                                f"**{label}:** {value}")
                     desc = _plain(rec.get("description"))
                     if desc:
                         st.caption(desc[:600] + ("…" if len(desc) > 600 else ""))
-                    doc_url = _v(rec.get("document_url") or rec.get("apply_link"))
-                    if doc_url != "—":
-                        _pdf_widget(doc_url, rec.get("source_id","j"), compact=True, ctx="job")
+                    if record_url:
+                        st.link_button(
+                            "🌐 Open official notification / apply",
+                            record_url, width="stretch")
 
                     if st.session_state.authenticated:
                         st.markdown('<hr class="glass-divider">', unsafe_allow_html=True)

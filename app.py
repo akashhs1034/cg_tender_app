@@ -773,6 +773,14 @@ NAV_ITEMS = [
     ("ACCOUNT", "Settings", "सेटिंग्स", "⚙️  Settings"),
 ]
 
+OPPORTA_ADMIN_MODE = os.getenv("OPPORTA_ADMIN_MODE", "").strip().lower() in {
+    "1", "true", "yes", "on",
+}
+if OPPORTA_ADMIN_MODE:
+    NAV_ITEMS.append(
+        ("INTERNAL", "Discovery Queue", "खोज कतार", "🧭  Discovery Queue")
+    )
+
 
 def _nav_text(item: tuple, ui_lang: str) -> str:
     return item[2] if ui_lang == "hi" else item[1]
@@ -1715,6 +1723,80 @@ def render_source_health(tenders: pd.DataFrame, jobs: pd.DataFrame,
             unsafe_allow_html=True)
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _load_discovery_queue(path_str: str, modified_at: float) -> list[dict]:
+    """Read the local fallback queue. The mtime argument invalidates the cache."""
+    del modified_at
+    try:
+        value = json.loads(Path(path_str).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return []
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def render_discovery_queue() -> None:
+    """Render Phase 4A candidates only inside explicitly enabled admin mode."""
+    queue_path = Path(__file__).parent / "data" / "discovered_sources.json"
+    modified_at = queue_path.stat().st_mtime if queue_path.exists() else 0.0
+    records = _load_discovery_queue(str(queue_path), modified_at)
+
+    st.markdown(
+        '<div class="page-kicker">Internal · Source review</div>'
+        '<div class="page-title">Discovery Queue</div>'
+        '<div class="page-sub">Public source candidates found by the bounded Phase 4A '
+        'discovery pass. Approval does not yet add a source to ingestion.</div>',
+        unsafe_allow_html=True,
+    )
+    if not records:
+        st.info(
+            "No discovery candidates are available. Run "
+            "`python source_discovery.py` to refresh the local review queue."
+        )
+        return
+
+    pending = sum(item.get("status") == "pending_review" for item in records)
+    captcha = sum(item.get("status") == "captcha_required" for item in records)
+    rejected = sum(item.get("status") == "rejected" for item in records)
+    metric_columns = st.columns(4)
+    metric_columns[0].metric("Candidates", len(records))
+    metric_columns[1].metric("Pending review", pending)
+    metric_columns[2].metric("CAPTCHA only", captcha)
+    metric_columns[3].metric("Rejected", rejected)
+
+    rows = pd.DataFrame(
+        [
+            {
+                "URL": item.get("url", ""),
+                "Title": item.get("title", ""),
+                "State": item.get("state", ""),
+                "District": item.get("district", ""),
+                "Category": item.get("category", "unknown"),
+                "Confidence": int(item.get("confidence_score", 0) or 0),
+                "Status": item.get("status", ""),
+                "Reason": item.get("reason", ""),
+            }
+            for item in records
+        ]
+    )
+    st.dataframe(
+        rows,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "URL": st.column_config.LinkColumn(
+                "Open link", display_text="Open source ↗"
+            ),
+            "Confidence": st.column_config.ProgressColumn(
+                "Confidence score", min_value=0, max_value=100, format="%d"
+            ),
+        },
+    )
+    st.caption(
+        "CAPTCHA-required candidates are review markers only; OPPORTA does not "
+        "attempt to solve or bypass their access controls."
+    )
+
+
 def render_job_intelligence(jobs: pd.DataFrame) -> None:
     """Job-only resume matching. Tender and bid controls never appear here."""
     st.markdown(
@@ -2094,6 +2176,12 @@ if st.session_state.authenticated and ("Explore" in page):
 # Source diagnostics are an administrator concern, not a public product page.
 # Redirect any stale session left over from older navigation versions.
 if st.session_state.authenticated and ("Source Health" in page):
+    st.session_state.current_page = "🏠  Dashboard"
+    page = "🏠  Dashboard"
+
+# Phase 4A is review-only. A stale/deep-linked route is inaccessible unless the
+# deployment explicitly opts into internal mode.
+if ("Discovery Queue" in page) and not OPPORTA_ADMIN_MODE:
     st.session_state.current_page = "🏠  Dashboard"
     page = "🏠  Dashboard"
 
@@ -2971,10 +3059,13 @@ elif "Tenders" in page:
                 # Surguja that aren't in the city-based standard list still appear).
                 _std = (CG_DISTRICTS + UP_DISTRICTS if _of_state == "All"
                         else _districts_for_state(_of_state))
-                _present = {_v(r.get("district")) for r in _orows
-                            if r.get("district")
-                            and (_of_state == "All" or _v(r.get("state")) == _of_state)}
-                _of_dlist = ["All"] + sorted({d for d in _std} | {d for d in _present if d != "—"})
+                _present_districts = {_v(r.get("district")) for r in _orows
+                                      if r.get("district")
+                                      and (_of_state == "All"
+                                           or _v(r.get("state")) == _of_state)}
+                _of_dlist = ["All"] + sorted(
+                    {d for d in _std}
+                    | {d for d in _present_districts if d != "—"})
                 _of_dist = _ob2.selectbox("District", _of_dlist, key="off_b_dist")
                 _ofilt = [r for r in _orows
                           if (_of_state == "All" or _v(r.get("state")) == _of_state)
@@ -4173,6 +4264,12 @@ elif "Alerts" in page:
                 unsafe_allow_html=True)
     else:
         st.success("No urgent alerts. Saved-tender deadlines and Vault expiry dates are being monitored.")
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ── DISCOVERY QUEUE (EXPLICIT INTERNAL MODE ONLY) ─────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+elif OPPORTA_ADMIN_MODE and "Discovery Queue" in page:
+    render_discovery_queue()
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── SOURCE HEALTH ─────────────────────────────────────────────────────────────

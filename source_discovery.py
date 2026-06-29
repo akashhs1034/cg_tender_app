@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import threading
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,6 +42,28 @@ MAX_HTML_BYTES = 2_000_000
 MAX_SITEMAP_BYTES = 4_000_000
 MAX_REDIRECTS = 3
 MAX_CANDIDATES_PER_SOURCE = 30
+SUPABASE_BATCH_SIZE = 200
+
+SUPABASE_FIELDS = (
+    "url",
+    "title",
+    "domain",
+    "state",
+    "district",
+    "source_type",
+    "category",
+    "matched_keywords",
+    "confidence_score",
+    "discovered_from",
+    "first_seen_at",
+    "last_seen_at",
+    "robots_allowed",
+    "requires_ocr",
+    "requires_playwright",
+    "requires_captcha",
+    "status",
+    "reason",
+)
 
 _robots_cache: dict[str, RobotFileParser | None] = {}
 _robots_lock = threading.Lock()
@@ -443,15 +466,19 @@ def _merge_candidate(
     }
     merged["discovered_from"] = ", ".join(sorted(origins))
 
-    ranks = {"pending_review": 3, "captcha_required": 2, "rejected": 1}
-    status_record = max(
-        (current, incoming),
-        key=lambda item: ranks.get(str(item.get("status")), 0),
-    )
-    merged["status"] = status_record.get("status", "rejected")
-    merged["reason"] = status_record.get("reason", "")
     for flag in ("requires_captcha", "requires_ocr", "requires_playwright"):
         merged[flag] = bool(current.get(flag) or incoming.get(flag))
+    if merged["requires_captcha"]:
+        merged["status"] = "captcha_required"
+        merged["reason"] = "CAPTCHA detected; not fetched or bypassed"
+    else:
+        ranks = {"pending_review": 2, "rejected": 1}
+        status_record = max(
+            (current, incoming),
+            key=lambda item: ranks.get(str(item.get("status")), 0),
+        )
+        merged["status"] = status_record.get("status", "rejected")
+        merged["reason"] = status_record.get("reason", "")
     merged["robots_allowed"] = bool(
         current.get("robots_allowed") and incoming.get("robots_allowed")
     )
@@ -503,12 +530,136 @@ def write_candidates(
     return records
 
 
+def _limit_candidates(
+    candidates: Iterable[dict[str, Any]], max_links: int | None
+) -> list[dict[str, Any]]:
+    """Deduplicate one scan and enforce its configured global candidate bound."""
+    unique: dict[str, dict[str, Any]] = {}
+    for item in candidates:
+        key = normalize_url(str(item.get("url", "")))
+        if not key:
+            continue
+        unique[key] = (
+            _merge_candidate(unique[key], item) if key in unique else item
+        )
+    ranked = sorted(
+        unique.values(),
+        key=lambda item: (
+            {"captcha_required": 0, "pending_review": 1}.get(
+                str(item.get("status")), 2
+            ),
+            -int(item.get("confidence_score", 0)),
+            str(item.get("url", "")),
+        ),
+    )
+    return ranked if max_links is None else ranked[: max(0, max_links)]
+
+
+def _supabase_credentials() -> tuple[str, str, str]:
+    """Return URL, preferred server-side key, and a non-secret key label."""
+    url = os.getenv("SUPABASE_URL", "").strip()
+    service_key = os.getenv("SUPABASE_SERVICE_KEY", "").strip()
+    fallback_key = os.getenv("SUPABASE_KEY", "").strip()
+    if url and service_key:
+        return url, service_key, "service key"
+    if url and fallback_key:
+        return url, fallback_key, "fallback key"
+    return "", "", ""
+
+
+def _existing_first_seen(client: Any) -> dict[str, str]:
+    existing: dict[str, str] = {}
+    offset = 0
+    batch_size = 1_000
+    while True:
+        rows = (
+            client.table("discovered_sources")
+            .select("url,first_seen_at")
+            .order("url")
+            .range(offset, offset + batch_size - 1)
+            .execute()
+            .data
+            or []
+        )
+        for item in rows:
+            url = normalize_url(str(item.get("url", "")))
+            if url and item.get("first_seen_at"):
+                existing[url] = str(item["first_seen_at"])
+        if len(rows) < batch_size:
+            break
+        offset += batch_size
+    return existing
+
+
+def _supabase_row(
+    item: dict[str, Any], existing_first_seen: dict[str, str]
+) -> dict[str, Any]:
+    row = {field: item.get(field) for field in SUPABASE_FIELDS}
+    row["url"] = normalize_url(str(row.get("url", "")))
+    row["first_seen_at"] = (
+        existing_first_seen.get(row["url"]) or row.get("first_seen_at")
+    )
+    row["matched_keywords"] = list(row.get("matched_keywords") or [])
+    row["confidence_score"] = int(row.get("confidence_score") or 0)
+    for flag in (
+        "robots_allowed",
+        "requires_ocr",
+        "requires_playwright",
+        "requires_captcha",
+    ):
+        row[flag] = bool(row.get(flag))
+    if row["requires_captcha"]:
+        row["status"] = "captcha_required"
+        row["reason"] = "CAPTCHA detected; not fetched or bypassed"
+    return row
+
+
+def sync_candidates_to_supabase(
+    records: Iterable[dict[str, Any]], *, client: Any | None = None
+) -> tuple[str, int, str]:
+    """Upsert the review queue, preserving cloud first-seen timestamps.
+
+    Returns ``(status, count, detail)`` where status is skipped, synced, or
+    failed. A supplied client exists only to support isolated validation.
+    """
+    key_label = "provided client"
+    if client is None:
+        url, key, key_label = _supabase_credentials()
+        if not (url and key):
+            return "skipped", 0, "Supabase credentials are not configured"
+        try:
+            from supabase import create_client
+
+            client = create_client(url, key)
+        except Exception as exc:
+            return "failed", 0, f"{type(exc).__name__}: {str(exc)[:240]}"
+
+    try:
+        existing_first_seen = _existing_first_seen(client)
+        rows = [
+            _supabase_row(item, existing_first_seen)
+            for item in records
+            if normalize_url(str(item.get("url", "")))
+        ]
+        for start in range(0, len(rows), SUPABASE_BATCH_SIZE):
+            batch = rows[start : start + SUPABASE_BATCH_SIZE]
+            (
+                client.table("discovered_sources")
+                .upsert(batch, on_conflict="url")
+                .execute()
+            )
+        return "synced", len(rows), f"using {key_label}"
+    except Exception as exc:
+        return "failed", 0, f"{type(exc).__name__}: {str(exc)[:240]}"
+
+
 def run_discovery(
     *,
     output_path: Path = OUTPUT,
     timeout: float = DEFAULT_TIMEOUT,
     workers: int = 12,
     source_limit: int | None = None,
+    max_links: int | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, str]]:
     queries = load_discovery_queries()
     registry = [source for source in load_registry() if source.get("active", True)]
@@ -539,7 +690,8 @@ def run_discovery(
             except Exception as exc:  # absolute per-source failure isolation
                 failures[source_id] = f"{type(exc).__name__}: {str(exc)[:180]}"
 
-    return write_candidates(candidates, output_path), failures
+    limited = _limit_candidates(candidates, max_links)
+    return write_candidates(limited, output_path), failures
 
 
 def _arguments() -> argparse.Namespace:
@@ -555,16 +707,49 @@ def _arguments() -> argparse.Namespace:
         default=None,
         help="Optional bounded source count for diagnostics.",
     )
+    parser.add_argument(
+        "--max-links",
+        type=int,
+        default=None,
+        help="Optional global cap on unique candidates produced by this scan.",
+    )
     return parser.parse_args()
+
+
+def _positive_env_int(name: str) -> int | None:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return None
+    try:
+        number = int(value)
+    except ValueError:
+        return None
+    return number if number > 0 else None
 
 
 def main() -> int:
     args = _arguments()
+    mode = os.getenv("OPPORTA_DISCOVERY_MODE", "full").strip().lower()
+    source_limit = (
+        args.source_limit
+        if args.source_limit is not None
+        else _positive_env_int("OPPORTA_DISCOVERY_MAX_SOURCES")
+    )
+    max_links = (
+        args.max_links
+        if args.max_links is not None
+        else _positive_env_int("OPPORTA_DISCOVERY_MAX_LINKS")
+    )
+    if mode == "basic":
+        source_limit = source_limit or 30
+        max_links = max_links or 500
+
     records, failures = run_discovery(
         output_path=args.output,
         timeout=max(1.0, args.timeout),
         workers=args.workers,
-        source_limit=args.source_limit,
+        source_limit=source_limit,
+        max_links=max_links,
     )
     counts = {
         status: sum(1 for item in records if item.get("status") == status)
@@ -582,7 +767,19 @@ def main() -> int:
             f"{len(failures)} source(s) failed in isolation; "
             "other sources and the review queue were preserved."
         )
-    print(f"Fallback queue: {args.output}")
+    sync_status, synced_count, sync_detail = sync_candidates_to_supabase(records)
+    if sync_status == "synced":
+        print(
+            f"Supabase: upserted {synced_count} candidate(s) into "
+            f"public.discovered_sources ({sync_detail})."
+        )
+    elif sync_status == "skipped":
+        print("Supabase: not configured; local fallback remains active.")
+    else:
+        print(f"Supabase sync failed safely: {sync_detail}")
+        print(f"Local fallback queue: {args.output}")
+        return 1
+    print(f"Local fallback queue: {args.output}")
     return 0
 
 

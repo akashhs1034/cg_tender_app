@@ -211,33 +211,36 @@ export default function JobsPage() {
                   {j.examDate && <span className="flex items-center gap-1 text-text-muted">Exam: {j.examDate}</span>}
                 </div>
 
-                {/* Actions */}
-                <div className="flex flex-wrap gap-2 pt-3 border-t border-border-subtle">
+                {/* Actions — full labels on sm+, icon-only secondaries on mobile for a clean row */}
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border-subtle">
                   <Link href={`/jobs/${j.id}`}>
                     <Button size="sm" className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold text-xs h-8 gap-1.5">
                       <Eye className="w-3.5 h-3.5" /> View Details
                     </Button>
                   </Link>
                   <Link href={`/jobs/${j.id}`}>
-                    <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <CheckCircle className="w-3.5 h-3.5" /> Check Eligibility
+                    <Button size="sm" variant="outline" title="Check Eligibility" aria-label="Check Eligibility"
+                      className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
+                      <CheckCircle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Check Eligibility</span>
                     </Button>
                   </Link>
                   <Link href="/exam-planner">
-                    <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <GraduationCap className="w-3.5 h-3.5" /> Exam Planner
+                    <Button size="sm" variant="outline" title="Exam Planner" aria-label="Exam Planner"
+                      className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
+                      <GraduationCap className="w-3.5 h-3.5" /><span className="hidden sm:inline">Exam Planner</span>
                     </Button>
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => toggleSave(j.id)} aria-pressed={saved.has(j.id)}
+                    title={saved.has(j.id) ? 'Saved' : 'Save'} aria-label={saved.has(j.id) ? 'Saved' : 'Save'}
                     className={cn('text-xs h-8 gap-1.5', saved.has(j.id)
                       ? 'border-[#6C3EF4]/40 text-[#6C3EF4] bg-[#6C3EF4]/10'
                       : 'border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
                     {saved.has(j.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                    {saved.has(j.id) ? 'Saved' : 'Save'}
+                    <span className="hidden sm:inline">{saved.has(j.id) ? 'Saved' : 'Save'}</span>
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => share(j.title, `/jobs/${j.id}`)}
+                  <Button size="sm" variant="outline" onClick={() => share(j.title, `/jobs/${j.id}`)} title="Share" aria-label="Share"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <Share2 className="w-3.5 h-3.5" /> Share
+                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Share</span>
                   </Button>
                 </div>
               </div>

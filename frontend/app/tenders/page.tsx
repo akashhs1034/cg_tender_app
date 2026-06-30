@@ -211,33 +211,36 @@ export default function TendersPage() {
                   <span className="flex items-center gap-1 text-text-muted">Source: {t.source}</span>
                 </div>
 
-                {/* Actions */}
-                <div className="flex flex-wrap gap-2 pt-3 border-t border-border-subtle">
+                {/* Actions — full labels on sm+, icon-only secondaries on mobile for a clean row */}
+                <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border-subtle">
                   <Link href={`/tenders/${t.id}`}>
                     <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold text-xs h-8 gap-1.5">
                       <Eye className="w-3.5 h-3.5" /> View Details
                     </Button>
                   </Link>
                   <Link href={`/tenders/${t.id}`}>
-                    <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" /> Analyze
+                    <Button size="sm" variant="outline" title="Analyze" aria-label="Analyze"
+                      className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">Analyze</span>
                     </Button>
                   </Link>
                   <Link href="/bid-documents">
-                    <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <FileEdit className="w-3.5 h-3.5" /> Bid Document
+                    <Button size="sm" variant="outline" title="Bid Document" aria-label="Bid Document"
+                      className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
+                      <FileEdit className="w-3.5 h-3.5" /><span className="hidden sm:inline">Bid Document</span>
                     </Button>
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => toggleSave(t.id)} aria-pressed={saved.has(t.id)}
+                    title={saved.has(t.id) ? 'Saved' : 'Save'} aria-label={saved.has(t.id) ? 'Saved' : 'Save'}
                     className={cn('text-xs h-8 gap-1.5', saved.has(t.id)
                       ? 'border-brand-blue/40 text-brand-blue bg-brand-blue/10'
                       : 'border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
                     {saved.has(t.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                    {saved.has(t.id) ? 'Saved' : 'Save'}
+                    <span className="hidden sm:inline">{saved.has(t.id) ? 'Saved' : 'Save'}</span>
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => share(t.title, `/tenders/${t.id}`)}
+                  <Button size="sm" variant="outline" onClick={() => share(t.title, `/tenders/${t.id}`)} title="Share" aria-label="Share"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <Share2 className="w-3.5 h-3.5" /> Share
+                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Share</span>
                   </Button>
                 </div>
               </div>

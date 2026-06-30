@@ -33,7 +33,7 @@ export default function DashboardPage() {
       </div>
 
       {/* CG / UP split */}
-      <div className="grid grid-cols-2 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
         <div className="rounded-xl border border-border-subtle bg-surface p-5">
           <div className="flex items-center gap-2 mb-3">
             <MapPin className="w-4 h-4 text-brand-blue" />

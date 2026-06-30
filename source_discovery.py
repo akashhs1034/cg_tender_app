@@ -465,12 +465,35 @@ def _merge_candidate(
         if value.strip()
     }
     merged["discovered_from"] = ", ".join(sorted(origins))
+    for field in (
+        "reviewed_by",
+        "reviewed_at",
+        "review_note",
+        "approved_at",
+        "approved_source_id",
+    ):
+        if current.get(field) is not None:
+            merged[field] = current.get(field)
 
     for flag in ("requires_captcha", "requires_ocr", "requires_playwright"):
         merged[flag] = bool(current.get(flag) or incoming.get(flag))
+    merged["requires_captcha"] = bool(
+        merged["requires_captcha"]
+        or str(current.get("status")) == "captcha_required"
+    )
     if merged["requires_captcha"]:
         merged["status"] = "captcha_required"
         merged["reason"] = "CAPTCHA detected; not fetched or bypassed"
+    elif (
+        str(current.get("status")) == "approved"
+        or (
+            str(current.get("status")) == "rejected"
+            and bool(current.get("reviewed_by") or current.get("reviewed_at"))
+        )
+    ):
+        # A fresh discovery pass must not erase a human review decision.
+        merged["status"] = current["status"]
+        merged["reason"] = current.get("reason", merged.get("reason", ""))
     else:
         ranks = {"pending_review": 2, "rejected": 1}
         status_record = max(
@@ -567,14 +590,17 @@ def _supabase_credentials() -> tuple[str, str, str]:
     return "", "", ""
 
 
-def _existing_first_seen(client: Any) -> dict[str, str]:
-    existing: dict[str, str] = {}
+def _existing_cloud_state(client: Any) -> dict[str, dict[str, Any]]:
+    existing: dict[str, dict[str, Any]] = {}
     offset = 0
     batch_size = 1_000
     while True:
         rows = (
             client.table("discovered_sources")
-            .select("url,first_seen_at")
+            .select(
+                "url,first_seen_at,status,reason,requires_captcha,"
+                "reviewed_by,reviewed_at"
+            )
             .order("url")
             .range(offset, offset + batch_size - 1)
             .execute()
@@ -583,8 +609,8 @@ def _existing_first_seen(client: Any) -> dict[str, str]:
         )
         for item in rows:
             url = normalize_url(str(item.get("url", "")))
-            if url and item.get("first_seen_at"):
-                existing[url] = str(item["first_seen_at"])
+            if url:
+                existing[url] = item
         if len(rows) < batch_size:
             break
         offset += batch_size
@@ -592,12 +618,13 @@ def _existing_first_seen(client: Any) -> dict[str, str]:
 
 
 def _supabase_row(
-    item: dict[str, Any], existing_first_seen: dict[str, str]
+    item: dict[str, Any], existing_state: dict[str, dict[str, Any]]
 ) -> dict[str, Any]:
     row = {field: item.get(field) for field in SUPABASE_FIELDS}
     row["url"] = normalize_url(str(row.get("url", "")))
+    previous = existing_state.get(row["url"], {})
     row["first_seen_at"] = (
-        existing_first_seen.get(row["url"]) or row.get("first_seen_at")
+        previous.get("first_seen_at") or row.get("first_seen_at")
     )
     row["matched_keywords"] = list(row.get("matched_keywords") or [])
     row["confidence_score"] = int(row.get("confidence_score") or 0)
@@ -608,9 +635,23 @@ def _supabase_row(
         "requires_captcha",
     ):
         row[flag] = bool(row.get(flag))
+    row["requires_captcha"] = bool(
+        row["requires_captcha"]
+        or previous.get("requires_captcha")
+        or str(previous.get("status")) == "captcha_required"
+    )
     if row["requires_captcha"]:
         row["status"] = "captcha_required"
         row["reason"] = "CAPTCHA detected; not fetched or bypassed"
+    elif (
+        str(previous.get("status")) == "approved"
+        or (
+            str(previous.get("status")) == "rejected"
+            and bool(previous.get("reviewed_by") or previous.get("reviewed_at"))
+        )
+    ):
+        row["status"] = previous["status"]
+        row["reason"] = previous.get("reason") or row.get("reason")
     return row
 
 
@@ -635,9 +676,9 @@ def sync_candidates_to_supabase(
             return "failed", 0, f"{type(exc).__name__}: {str(exc)[:240]}"
 
     try:
-        existing_first_seen = _existing_first_seen(client)
+        existing_state = _existing_cloud_state(client)
         rows = [
-            _supabase_row(item, existing_first_seen)
+            _supabase_row(item, existing_state)
             for item in records
             if normalize_url(str(item.get("url", "")))
         ]

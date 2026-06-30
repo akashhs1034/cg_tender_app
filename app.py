@@ -3,6 +3,7 @@ app.py -- OPPORTA  ·  Every Opportunity. One Platform.
 Elite Intelligence OS for CG & UP Government Tenders & Jobs.
 """
 from __future__ import annotations
+import hashlib
 import json, os
 from datetime import date, datetime
 from pathlib import Path
@@ -1763,6 +1764,21 @@ def _load_local_discovery_queue(path_str: str, modified_at: float) -> list[dict]
     return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
 
 
+def _discovery_supabase_config() -> tuple[str, str, bool]:
+    supabase_url = str(
+        _secret("SUPABASE_URL") or _secret("supabase_url") or ""
+    ).strip()
+    service_key = str(_secret("SUPABASE_SERVICE_KEY") or "").strip()
+    fallback_key = str(
+        _secret("SUPABASE_KEY") or _secret("supabase_key") or ""
+    ).strip()
+    return (
+        supabase_url,
+        service_key or fallback_key,
+        bool(supabase_url or service_key or fallback_key),
+    )
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _load_supabase_discovery_queue(
     supabase_url: str, supabase_key: str
@@ -1772,7 +1788,9 @@ def _load_supabase_discovery_queue(
 
     client = create_client(supabase_url, supabase_key)
     fields = (
-        "url,title,state,district,category,confidence_score,status,reason"
+        "url,title,domain,state,district,source_type,category,confidence_score,"
+        "status,reason,requires_ocr,requires_playwright,requires_captcha,"
+        "reviewed_by,reviewed_at,review_note,approved_at,approved_source_id"
     )
     rows: list[dict] = []
     offset = 0
@@ -1797,15 +1815,7 @@ def _load_supabase_discovery_queue(
 
 def _discovery_queue_records() -> tuple[list[dict], str, bool]:
     """Prefer Supabase; use JSON only when no cloud setting exists."""
-    supabase_url = str(
-        _secret("SUPABASE_URL") or _secret("supabase_url") or ""
-    ).strip()
-    service_key = str(_secret("SUPABASE_SERVICE_KEY") or "").strip()
-    fallback_key = str(
-        _secret("SUPABASE_KEY") or _secret("supabase_key") or ""
-    ).strip()
-    supabase_key = service_key or fallback_key
-    cloud_configured = bool(supabase_url or service_key or fallback_key)
+    supabase_url, supabase_key, cloud_configured = _discovery_supabase_config()
 
     if cloud_configured:
         if not (supabase_url and supabase_key):
@@ -1829,8 +1839,276 @@ def _discovery_queue_records() -> tuple[list[dict], str, bool]:
     )
 
 
+def _read_json_list(path: Path) -> list[dict]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return []
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _write_json_list(path: Path, records: list[dict]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(records, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def _approved_source_id(url: str) -> str:
+    from source_validator import normalize_url
+
+    normalized = normalize_url(url)
+    return "approved-" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:20]
+
+
+def _approved_source_record(
+    candidate: dict, admin_email: str, review_note: str, reviewed_at: str
+) -> dict:
+    from source_validator import normalize_url
+
+    url = normalize_url(str(candidate.get("url", "")))
+    return {
+        "source_id": candidate.get("approved_source_id") or _approved_source_id(url),
+        "url": url,
+        "title": candidate.get("title") or url,
+        "domain": candidate.get("domain") or "",
+        "state": candidate.get("state") or "",
+        "district": candidate.get("district") or "",
+        "source_type": candidate.get("source_type") or "web",
+        "category": candidate.get("category") or "unknown",
+        "confidence_score": int(candidate.get("confidence_score") or 0),
+        "approved_by": admin_email,
+        "approved_at": reviewed_at,
+        "status": "active",
+        "requires_ocr": bool(candidate.get("requires_ocr")),
+        "requires_playwright": bool(candidate.get("requires_playwright")),
+        "requires_captcha": False,
+        "notes": review_note,
+    }
+
+
+def _review_updates(
+    candidate: dict,
+    action: str,
+    admin_email: str,
+    review_note: str,
+    reviewed_at: str,
+) -> dict:
+    updates = {
+        "reviewed_by": admin_email,
+        "reviewed_at": reviewed_at,
+        "review_note": review_note,
+    }
+    if action == "approve":
+        updates.update(
+            {
+                "status": "approved",
+                "approved_at": reviewed_at,
+                "approved_source_id": (
+                    candidate.get("approved_source_id")
+                    or _approved_source_id(str(candidate.get("url", "")))
+                ),
+            }
+        )
+    elif action == "reject":
+        updates["status"] = "rejected"
+    elif action == "captcha":
+        updates.update({"status": "captcha_required", "requires_captcha": True})
+    return updates
+
+
+def _review_local_candidate(
+    candidate: dict,
+    action: str,
+    admin_email: str,
+    review_note: str,
+    reviewed_at: str,
+) -> tuple[bool, str]:
+    data_dir = Path(__file__).parent / "data"
+    queue_path = data_dir / "discovered_sources.json"
+    approved_path = data_dir / "approved_sources.json"
+    queue = _read_json_list(queue_path)
+    index = next(
+        (
+            position
+            for position, item in enumerate(queue)
+            if str(item.get("url")) == str(candidate.get("url"))
+        ),
+        None,
+    )
+    if index is None:
+        return False, "Candidate no longer exists in the local review queue."
+
+    current = dict(queue[index])
+    if action == "approve" and (
+        current.get("requires_captcha")
+        or current.get("status") == "captcha_required"
+    ):
+        return False, "CAPTCHA-required sources cannot be approved for automatic scanning."
+
+    updates = _review_updates(
+        current, action, admin_email, review_note, reviewed_at
+    )
+    current.update(updates)
+    queue[index] = current
+    _write_json_list(queue_path, queue)
+
+    approved = _read_json_list(approved_path)
+    source_id = (
+        current.get("approved_source_id")
+        or _approved_source_id(str(current.get("url", "")))
+    )
+    approved_index = next(
+        (
+            position
+            for position, item in enumerate(approved)
+            if item.get("source_id") == source_id
+            or item.get("url") == current.get("url")
+        ),
+        None,
+    )
+    if action == "approve":
+        record = _approved_source_record(
+            current, admin_email, review_note, reviewed_at
+        )
+        if approved_index is None:
+            approved.append(record)
+        else:
+            approved[approved_index] = record
+        _write_json_list(approved_path, approved)
+    elif action in {"reject", "captcha"} and approved_index is not None:
+        approved[approved_index]["status"] = (
+            "captcha_required" if action == "captcha" else "inactive"
+        )
+        approved[approved_index]["notes"] = review_note
+        if action == "captcha":
+            approved[approved_index]["requires_captcha"] = True
+        _write_json_list(approved_path, approved)
+    return True, "Review decision saved."
+
+
+def _review_supabase_candidate(
+    candidate: dict,
+    action: str,
+    admin_email: str,
+    review_note: str,
+    reviewed_at: str,
+    supabase_url: str,
+    supabase_key: str,
+) -> tuple[bool, str]:
+    try:
+        from supabase import create_client
+
+        client = create_client(supabase_url, supabase_key)
+        rows = (
+            client.table("discovered_sources")
+            .select("*")
+            .eq("url", candidate.get("url"))
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if not rows:
+            return False, "Candidate no longer exists in the private review table."
+        current = rows[0]
+        if action == "approve" and (
+            current.get("requires_captcha")
+            or current.get("status") == "captcha_required"
+        ):
+            return False, "CAPTCHA-required sources cannot be approved for automatic scanning."
+
+        updates = _review_updates(
+            current, action, admin_email, review_note, reviewed_at
+        )
+        (
+            client.table("discovered_sources")
+            .update(updates)
+            .eq("url", current.get("url"))
+            .execute()
+        )
+        source_id = (
+            updates.get("approved_source_id")
+            or current.get("approved_source_id")
+            or _approved_source_id(str(current.get("url", "")))
+        )
+        if action == "approve":
+            current.update(updates)
+            approved = _approved_source_record(
+                current, admin_email, review_note, reviewed_at
+            )
+            (
+                client.table("approved_sources")
+                .upsert(approved, on_conflict="source_id")
+                .execute()
+            )
+        elif action in {"reject", "captcha"}:
+            deactivation = {
+                "status": (
+                    "captcha_required" if action == "captcha" else "inactive"
+                ),
+                "notes": review_note,
+            }
+            if action == "captcha":
+                deactivation["requires_captcha"] = True
+            (
+                client.table("approved_sources")
+                .update(deactivation)
+                .eq("source_id", source_id)
+                .execute()
+            )
+        return True, "Review decision saved."
+    except Exception as exc:
+        return False, f"Review action failed safely ({type(exc).__name__})."
+
+
+def _review_discovery_candidate(
+    candidate: dict, action: str, review_note: str
+) -> tuple[bool, str]:
+    admin_email = str(st.session_state.get("email", "")).strip().casefold()
+    if not _is_discovery_admin(admin_email):
+        return False, "Administrator access is required."
+    if action not in {"approve", "reject", "captcha", "note"}:
+        return False, "Unsupported review action."
+    if action == "note" and not review_note.strip():
+        return False, "Enter a review note before saving."
+
+    reviewed_at = datetime.now().astimezone().isoformat()
+    supabase_url, supabase_key, cloud_configured = _discovery_supabase_config()
+    if cloud_configured:
+        if not (supabase_url and supabase_key):
+            return False, "Supabase review credentials are incomplete."
+        return _review_supabase_candidate(
+            candidate,
+            action,
+            admin_email,
+            review_note.strip(),
+            reviewed_at,
+            supabase_url,
+            supabase_key,
+        )
+    try:
+        return _review_local_candidate(
+            candidate,
+            action,
+            admin_email,
+            review_note.strip(),
+            reviewed_at,
+        )
+    except Exception as exc:
+        return False, f"Local review action failed safely ({type(exc).__name__})."
+
+
+def _clear_discovery_queue_caches() -> None:
+    _load_local_discovery_queue.clear()
+    _load_supabase_discovery_queue.clear()
+
+
 def render_discovery_queue() -> None:
-    """Render Phase 4A candidates only inside explicitly enabled admin mode."""
+    """Render Phase 4B review controls only for an allowlisted administrator."""
     if not _is_discovery_admin(st.session_state.get("email", "")):
         st.session_state.current_page = "🏠  Dashboard"
         return
@@ -1841,7 +2119,8 @@ def render_discovery_queue() -> None:
         '<div class="page-kicker">Internal · Source review</div>'
         '<div class="page-title">Discovery Queue</div>'
         '<div class="page-sub">Public source candidates found by the bounded Phase 4A '
-        'discovery pass. Approval does not yet add a source to ingestion.</div>',
+        'discovery pass. Approval permits only the private Phase 4B file scanner; '
+        'it never publishes a tender or job.</div>',
         unsafe_allow_html=True,
     )
     if not read_ok:
@@ -1864,13 +2143,26 @@ def render_discovery_queue() -> None:
         return
 
     pending = sum(item.get("status") == "pending_review" for item in records)
+    approved = sum(item.get("status") == "approved" for item in records)
     captcha = sum(item.get("status") == "captcha_required" for item in records)
     rejected = sum(item.get("status") == "rejected" for item in records)
-    metric_columns = st.columns(4)
+    metric_columns = st.columns(5)
     metric_columns[0].metric("Candidates", len(records))
     metric_columns[1].metric("Pending review", pending)
-    metric_columns[2].metric("CAPTCHA only", captcha)
-    metric_columns[3].metric("Rejected", rejected)
+    metric_columns[2].metric("Approved", approved)
+    metric_columns[3].metric("CAPTCHA only", captcha)
+    metric_columns[4].metric("Rejected", rejected)
+
+    status_filter = st.selectbox(
+        "Queue status",
+        ["All", "pending_review", "approved", "rejected", "captcha_required"],
+        key="discovery_status_filter",
+    )
+    visible_records = (
+        records
+        if status_filter == "All"
+        else [item for item in records if item.get("status") == status_filter]
+    )
 
     rows = pd.DataFrame(
         [
@@ -1884,22 +2176,110 @@ def render_discovery_queue() -> None:
                 "Status": item.get("status", ""),
                 "Reason": item.get("reason", ""),
             }
-            for item in records
+            for item in visible_records
         ]
     )
-    st.dataframe(
-        rows,
-        hide_index=True,
-        width="stretch",
-        column_config={
-            "URL": st.column_config.LinkColumn(
-                "Open link", display_text="Open source ↗"
+    if rows.empty:
+        st.info("No candidates match this review status.")
+    else:
+        st.dataframe(
+            rows,
+            hide_index=True,
+            width="stretch",
+            column_config={
+                "URL": st.column_config.LinkColumn(
+                    "Open link", display_text="Open source ↗"
+                ),
+                "Confidence": st.column_config.ProgressColumn(
+                    "Confidence score", min_value=0, max_value=100, format="%d"
+                ),
+            },
+        )
+
+        candidate_by_url = {
+            str(item.get("url")): item for item in visible_records
+        }
+        selected_url = st.selectbox(
+            "Review candidate",
+            list(candidate_by_url),
+            format_func=lambda url: (
+                f"{safe_str(candidate_by_url[url].get('title'), 78)} · "
+                f"{candidate_by_url[url].get('status', 'pending_review')}"
             ),
-            "Confidence": st.column_config.ProgressColumn(
-                "Confidence score", min_value=0, max_value=100, format="%d"
-            ),
-        },
-    )
+            key="discovery_review_candidate",
+        )
+        selected = candidate_by_url[selected_url]
+        review_key = hashlib.sha256(selected_url.encode("utf-8")).hexdigest()[:12]
+        with st.container(border=True):
+            st.markdown(f"**{safe_str(selected.get('title'), 140)}**")
+            st.caption(
+                " · ".join(
+                    value
+                    for value in (
+                        str(selected.get("domain") or ""),
+                        str(selected.get("state") or ""),
+                        str(selected.get("district") or ""),
+                        str(selected.get("category") or "unknown"),
+                        str(selected.get("status") or "pending_review"),
+                    )
+                    if value
+                )
+            )
+            st.link_button("Open source ↗", selected_url)
+            review_note = st.text_area(
+                "Review note",
+                value=str(selected.get("review_note") or ""),
+                key=f"discovery_review_note_{review_key}",
+                placeholder="Record verification details or the rejection reason.",
+            )
+            captcha_locked = bool(
+                selected.get("requires_captcha")
+                or selected.get("status") == "captcha_required"
+            )
+            if captcha_locked:
+                st.warning(
+                    "This source is CAPTCHA-restricted and cannot be approved "
+                    "for automatic scanning."
+                )
+            action_columns = st.columns(4)
+            approve_clicked = action_columns[0].button(
+                "Approve",
+                key=f"discovery_approve_{review_key}",
+                disabled=captcha_locked,
+                width="stretch",
+            )
+            reject_clicked = action_columns[1].button(
+                "Reject",
+                key=f"discovery_reject_{review_key}",
+                width="stretch",
+            )
+            captcha_clicked = action_columns[2].button(
+                "Mark CAPTCHA Required",
+                key=f"discovery_captcha_{review_key}",
+                width="stretch",
+            )
+            note_clicked = action_columns[3].button(
+                "Save Review Note",
+                key=f"discovery_note_{review_key}",
+                width="stretch",
+            )
+            action = (
+                "approve" if approve_clicked
+                else "reject" if reject_clicked
+                else "captcha" if captcha_clicked
+                else "note" if note_clicked
+                else ""
+            )
+            if action:
+                ok, message = _review_discovery_candidate(
+                    selected, action, review_note
+                )
+                if ok:
+                    _clear_discovery_queue_caches()
+                    st.success(message)
+                    st.rerun()
+                else:
+                    st.error(message)
     st.caption(
         "CAPTCHA-required candidates are review markers only; OPPORTA does not "
         "attempt to solve or bypass their access controls."

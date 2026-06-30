@@ -10,6 +10,7 @@ import { AppShell } from '@/components/app-shell'
 import { adminQueue } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 
 type QueueStatus = 'Pending' | 'Approved' | 'Rejected' | 'CaptchaRequired'
 
@@ -41,6 +42,7 @@ export default function AdminPage() {
   const [filter, setFilter] = useState<QueueStatus | 'All'>('All')
   const [expanded, setExpanded] = useState<string | null>(null)
   const [localStatuses, setLocalStatuses] = useState<Record<string, QueueStatus>>({})
+  const { toast } = useToast()
 
   const getStatus = (id: string, original: QueueStatus): QueueStatus =>
     localStatuses[id] ?? original
@@ -57,6 +59,17 @@ export default function AdminPage() {
 
   return (
     <AppShell isAdmin pageTitle="Admin Discovery Queue" pageSubtitle="Review and approve newly discovered opportunity batches">
+      {/* Demo-mode notice */}
+      <div className="mb-6 flex items-start gap-3 rounded-xl border border-brand-blue/25 bg-brand-blue/5 px-5 py-4">
+        <Database className="w-4 h-4 text-brand-blue mt-0.5 flex-shrink-0" />
+        <div>
+          <p className="text-sm font-semibold text-text-primary">Demo discovery data</p>
+          <p className="text-xs text-text-muted mt-0.5">
+            Approvals here are local previews. Live discovery, scraping, and ingestion connect after Supabase / backend integration.
+          </p>
+        </div>
+      </div>
+
       {/* Alert banner for pending items */}
       {pendingCount > 0 && (
         <div className="mb-6 flex items-start gap-3 rounded-xl border border-warning/25 bg-warning/5 px-5 py-4">
@@ -198,7 +211,7 @@ export default function AdminPage() {
                     <div className="flex gap-2">
                       <Button
                         size="sm"
-                        onClick={() => setStatus(q.id, 'Approved')}
+                        onClick={() => { setStatus(q.id, 'Approved'); toast('Batch approved', 'success', { description: q.source }) }}
                         className="bg-success hover:bg-success/90 text-white font-semibold text-xs h-8 gap-1.5"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" /> Approve
@@ -206,7 +219,7 @@ export default function AdminPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => setStatus(q.id, 'Rejected')}
+                        onClick={() => { setStatus(q.id, 'Rejected'); toast('Batch rejected', 'info', { description: q.source }) }}
                         className="border-danger/30 text-danger hover:bg-danger/10 text-xs h-8 gap-1.5"
                       >
                         <XCircle className="w-3.5 h-3.5" /> Reject
@@ -219,7 +232,7 @@ export default function AdminPage() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => setLocalStatuses((prev) => { const n = { ...prev }; delete n[q.id]; return n })}
+                      onClick={() => { setLocalStatuses((prev) => { const n = { ...prev }; delete n[q.id]; return n }); toast('Reverted', 'info') }}
                       className="border-border-subtle text-text-muted hover:text-text-primary text-xs h-8 gap-1.5"
                     >
                       <RefreshCw className="w-3 h-3" /> Undo
@@ -231,6 +244,7 @@ export default function AdminPage() {
                     <Button
                       size="sm"
                       variant="outline"
+                      onClick={() => toast('Re-scrape queued', 'info', { description: 'Demo only — scraping runs on the backend.' })}
                       className="border-[#F97316]/25 text-[#F97316] hover:bg-[#F97316]/10 text-xs h-8 gap-1.5"
                     >
                       <RefreshCw className="w-3 h-3" /> Retry Scrape

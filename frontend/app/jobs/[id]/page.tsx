@@ -14,6 +14,7 @@ import { AiMatchBadge } from '@/components/ui/ai-match-badge'
 import { jobs } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import { notFound } from 'next/navigation'
 
 const tabs = [
@@ -37,6 +38,10 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
   const defaultTab = searchParams?.get('tab') ?? 'overview'
   const [activeTab, setActiveTab] = useState(defaultTab)
+  const { toast } = useToast()
+
+  const applyExternal = () =>
+    toast('Application portal', 'info', { description: 'Demo only — opens the official board website after backend integration.' })
 
   return (
     <AppShell>
@@ -56,10 +61,10 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
             <p className="text-sm text-text-muted mt-1">{job.advNumber}</p>
           </div>
           <div className="flex flex-wrap gap-2 flex-shrink-0">
-            <Button size="sm" className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
+            <Button size="sm" onClick={applyExternal} className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
               <ExternalLink className="w-3.5 h-3.5" /> Apply Now
             </Button>
-            <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => setActiveTab('match')} className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
               <Target className="w-3.5 h-3.5" /> Check My Match
             </Button>
           </div>
@@ -275,7 +280,7 @@ export default function JobDetailsPage({ params }: { params: Promise<{ id: strin
                 ))}
               </ol>
               <div className="mt-5">
-                <Button className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
+                <Button onClick={applyExternal} className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
                   <ExternalLink className="w-4 h-4" /> Apply on Official Website
                 </Button>
               </div>

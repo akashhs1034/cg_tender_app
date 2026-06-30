@@ -14,6 +14,7 @@ import { AiMatchBadge } from '@/components/ui/ai-match-badge'
 import { tenders } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import { notFound } from 'next/navigation'
 
 const tabs = [
@@ -39,6 +40,7 @@ export default function TenderDetailsPage({ params }: { params: Promise<{ id: st
   if (!tender) notFound()
 
   const [activeTab, setActiveTab] = useState('overview')
+  const { toast } = useToast()
 
   return (
     <AppShell>
@@ -58,10 +60,10 @@ export default function TenderDetailsPage({ params }: { params: Promise<{ id: st
             <p className="text-sm text-text-muted mt-1">{tender.nitNumber}</p>
           </div>
           <div className="flex flex-wrap gap-2 flex-shrink-0">
-            <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
+            <Button size="sm" onClick={() => setActiveTab('checklist')} className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
               <FileEdit className="w-3.5 h-3.5" /> Prepare Bid
             </Button>
-            <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => toast('Opening source', 'info', { description: tender.source })} className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
               <ExternalLink className="w-3.5 h-3.5" /> Open Source
             </Button>
           </div>
@@ -228,7 +230,7 @@ export default function TenderDetailsPage({ params }: { params: Promise<{ id: st
                 <h4 className="font-semibold text-sm text-text-primary">Upload Company Documents</h4>
               </div>
               <p className="text-xs text-text-muted mb-3">Upload your documents once and reuse them across all tenders.</p>
-              <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5 text-xs">
+              <Button size="sm" onClick={() => toast('Upload — coming soon', 'info', { description: 'Your document vault connects after backend integration.' })} className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5 text-xs">
                 <Upload className="w-3.5 h-3.5" /> Upload Documents
               </Button>
             </div>
@@ -241,7 +243,7 @@ export default function TenderDetailsPage({ params }: { params: Promise<{ id: st
             <div className="rounded-xl border border-border-subtle bg-surface p-6">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-heading font-semibold text-base text-text-primary">Bid Preparation Checklist</h3>
-                <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold text-xs gap-1.5">
+                <Button size="sm" onClick={() => toast('Bid draft queued', 'info', { description: 'Demo only — bid drafting connects after backend integration.' })} className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold text-xs gap-1.5">
                   <FileText className="w-3.5 h-3.5" /> Generate Draft Bid
                 </Button>
               </div>
@@ -367,10 +369,10 @@ export default function TenderDetailsPage({ params }: { params: Promise<{ id: st
                   style={{ width: `${tender.bidReadiness}%` }} />
               </div>
               <div className="flex gap-3">
-                <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold text-xs gap-1.5">
+                <Button size="sm" onClick={() => toast('Checklist generated', 'success', { description: 'Demo bid checklist ready.' })} className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold text-xs gap-1.5">
                   <FileText className="w-3.5 h-3.5" /> Generate Bid Checklist
                 </Button>
-                <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:bg-surface-elevated text-xs gap-1.5">
+                <Button size="sm" variant="outline" onClick={() => toast('Bid draft queued', 'info', { description: 'Demo only — connects after backend integration.' })} className="border-border-subtle text-text-secondary hover:bg-surface-elevated text-xs gap-1.5">
                   <FileEdit className="w-3.5 h-3.5" /> Generate Draft Bid File
                 </Button>
               </div>

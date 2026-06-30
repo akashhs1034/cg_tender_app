@@ -19,9 +19,9 @@ import {
   Settings,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { OpportaLogo } from '@/components/opporta-logo'
 import { LanguageSwitcher } from '@/components/language-switcher'
+import { useToast } from '@/components/ui/toast'
 
 const navItems = [
   { label: 'Profile', href: '/profile', icon: User },
@@ -44,6 +44,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const { toast } = useToast()
 
   return (
     <>
@@ -130,7 +131,10 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
               <Link href="/profile" className="flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors">
                 <User className="w-3.5 h-3.5" /> Profile
               </Link>
-              <button className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors">
+              <button
+                onClick={() => { setProfileOpen(false); toast('Settings — coming soon', 'info', { description: 'Account settings connect after backend integration.' }) }}
+                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors"
+              >
                 <Settings className="w-3.5 h-3.5" /> Settings
               </button>
               <Link href="/" className="flex items-center gap-2.5 px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors">

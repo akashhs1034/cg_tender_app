@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Search, X, MapPin, CalendarClock, Users, GraduationCap, BookOpen,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import { jobs, JOB_CATEGORIES, getDistricts } from '@/lib/mock-data'
 import type { State } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
@@ -22,9 +24,20 @@ export default function ExamPlannerPage() {
   const [stateFilter, setStateFilter] = useState<State | 'All'>('All')
   const [districtFilter, setDistrictFilter] = useState('All')
   const [catFilter, setCatFilter] = useState('All')
+  // Deep-link focus from a job card ("Exam Planner" → /exam-planner?jobId=…).
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('jobId')
+    if (id && jobs.some((j) => j.id === id)) setFocusId(id)
+  }, [])
+
+  const focusedJob = focusId ? jobs.find((j) => j.id === focusId) ?? null : null
 
   const q = search.trim().toLowerCase()
   const filtered = jobs.filter((j) => {
+    if (focusId) return j.id === focusId
     if (q && !j.advNumber.toLowerCase().includes(q) && !j.title.toLowerCase().includes(q)) return false
     if (stateFilter !== 'All' && j.state !== stateFilter) return false
     if (districtFilter !== 'All' && j.district !== districtFilter) return false
@@ -34,6 +47,13 @@ export default function ExamPlannerPage() {
 
   return (
     <AppShell pageTitle="Exam Planner" pageSubtitle="Plan your preparation for upcoming government exams" bg="jobs">
+      <PageHero
+        variant="jobs"
+        eyebrow="Exam Planner"
+        icon={<GraduationCap className="h-3.5 w-3.5" />}
+        title="Exam Planner"
+        subtitle="Plan your preparation for upcoming government exams — filter by state, district, category or advertisement number."
+      />
       <PageTabs
         accent="purple"
         tabs={[
@@ -42,7 +62,24 @@ export default function ExamPlannerPage() {
         ]}
       />
 
+      {focusedJob && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#6C3EF4]/25 bg-[#6C3EF4]/5 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6C3EF4]">Study plan</p>
+            <p className="truncate text-sm font-semibold text-text-primary">{focusedJob.title}</p>
+            <p className="text-xs text-text-muted">{focusedJob.advNumber}</p>
+          </div>
+          <button
+            onClick={() => setFocusId(null)}
+            className="flex items-center gap-1.5 rounded-md border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+          >
+            <X className="h-3.5 w-3.5" /> Show all notifications
+          </button>
+        </div>
+      )}
+
       {/* Job selector / filter area */}
+      {!focusId && (
       <div className="mb-5 p-4 rounded-xl border border-border-subtle bg-surface">
         <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
@@ -103,6 +140,7 @@ export default function ExamPlannerPage() {
           </div>
         </div>
       </div>
+      )}
 
       <p className="text-xs text-text-muted mb-4">Showing {filtered.length} of {jobs.length} notifications</p>
 
@@ -150,7 +188,11 @@ export default function ExamPlannerPage() {
                     <BookOpen className="w-3.5 h-3.5" /> View Job
                   </Button>
                 </Link>
-                <Button size="sm" className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold text-xs h-8 gap-1.5">
+                <Button
+                  size="sm"
+                  onClick={() => toast('Study plan ready', 'success', { description: `${j.examDate ? `Exam ${j.examDate} — ` : ''}open the job to view the full exam planner.` })}
+                  className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold text-xs h-8 gap-1.5"
+                >
                   <GraduationCap className="w-3.5 h-3.5" /> Build Study Plan
                 </Button>
               </div>

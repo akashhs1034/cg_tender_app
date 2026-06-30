@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter, Plus_Jakarta_Sans, Geist_Mono, Orbitron } from 'next/font/google'
 import { LanguageProvider } from '@/lib/language-context'
+import { ToastProvider } from '@/components/ui/toast'
 import './globals.css'
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'] })
@@ -41,7 +42,9 @@ export default function RootLayout({
     >
       <body className="font-sans antialiased min-h-screen">
         <LanguageProvider>
-          {children}
+          <ToastProvider>
+            {children}
+          </ToastProvider>
         </LanguageProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>

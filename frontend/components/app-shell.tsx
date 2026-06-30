@@ -15,7 +15,8 @@ interface AppShellProps {
 
 export function AppShell({ children, isAdmin = false, pageTitle, pageSubtitle, bg = 'global' }: AppShellProps) {
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex flex-col lg:flex-row min-h-screen bg-background">
+      <BackgroundShell variant={bg} />
       <AppNav isAdmin={isAdmin} />
       <div className="flex-1 flex flex-col min-w-0">
         {/* Page Header (desktop) */}
@@ -34,8 +35,14 @@ export function AppShell({ children, isAdmin = false, pageTitle, pageSubtitle, b
           </div>
         )}
         <main className="relative flex-1 px-4 py-6 lg:px-8 lg:py-7">
-          <BackgroundShell variant={bg} />
           <div className="relative z-10">
+            {/* Page header (mobile) — the desktop header above is hidden on small screens */}
+            {pageTitle && (
+              <div className="lg:hidden mb-4">
+                <h1 className="font-heading font-bold text-xl text-text-primary leading-tight">{pageTitle}</h1>
+                {pageSubtitle && <p className="text-[13px] text-text-muted mt-0.5">{pageSubtitle}</p>}
+              </div>
+            )}
             {children}
           </div>
         </main>

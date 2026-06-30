@@ -6,6 +6,7 @@ import {
   Search, X, MapPin, Clock, FileEdit, FileText, ClipboardCheck,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { DemoBanner } from '@/components/demo-banner'
 import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
@@ -48,6 +49,7 @@ export default function BidDocumentsPage() {
 
   return (
     <AppShell pageTitle="Bid Documents" pageSubtitle="Prepare and track bid paperwork for any tender" bg="tenders">
+      <DemoBanner>Bid drafting is an interactive preview. It connects to your document vault and AI bid engine once those are wired up.</DemoBanner>
       <PageHero
         variant="tenders"
         eyebrow="Bid Documents"

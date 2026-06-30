@@ -85,7 +85,7 @@ export default function SavedPage() {
           <p className="text-xs text-text-muted mb-4">{tenders.length} saved tender{tenders.length > 1 ? 's' : ''}</p>
           <div className="grid gap-4">
             {tenders.map((t) => (
-              <div key={t.id} className="rounded-2xl border border-border-subtle bg-surface hover:border-brand-blue/25 transition-all duration-200 p-5">
+              <div key={t.id} className="rounded-2xl card-premium hover-lift p-5">
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2 mb-1.5">

@@ -212,7 +212,7 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
           </div>
         ) : (
           filtered.map((j) => (
-            <div key={j.id} className="rounded-2xl border border-border-subtle bg-surface hover:border-[#6C3EF4]/25 transition-all duration-200 overflow-hidden group">
+            <div key={j.id} className="rounded-2xl card-premium hover-lift-violet overflow-hidden group">
               <div className="p-5">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 mb-3">

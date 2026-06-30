@@ -10,6 +10,8 @@ interface HeroConfig {
   size: number
   mesh: string
   accent: string
+  /** Gradient class applied to the hero title. */
+  titleGradient: string
   /** Soft radial glow behind the visual so darker assets (the seal) pop. */
   glow: string
 }
@@ -17,9 +19,9 @@ interface HeroConfig {
 // Each main surface gets its own 3D visual + accent glow. Assets live in
 // /public and are referenced from the web root ("/logo-3d-seal.png", etc.).
 const HERO: Record<HeroVariant, HeroConfig> = {
-  dashboard: { img: '/logo-3d-seal.png', size: 140, mesh: 'bg-hero-3d', accent: 'text-brand-blue', glow: 'rgba(59,124,244,0.40)' },
-  tenders: { img: '/hero-tenders-3d.png', size: 168, mesh: 'bg-mesh-tender', accent: 'text-brand-blue', glow: 'rgba(34,211,238,0.28)' },
-  jobs: { img: '/hero-jobs-3d.png', size: 168, mesh: 'bg-mesh-job', accent: 'text-[#6C3EF4]', glow: 'rgba(108,62,244,0.30)' },
+  dashboard: { img: '/logo-3d-seal.png', size: 140, mesh: 'bg-hero-3d', accent: 'text-brand-blue', titleGradient: 'text-gradient', glow: 'rgba(76,141,255,0.42)' },
+  tenders: { img: '/hero-tenders-3d.png', size: 168, mesh: 'bg-mesh-tender', accent: 'text-brand-blue', titleGradient: 'text-gradient', glow: 'rgba(45,224,240,0.30)' },
+  jobs: { img: '/hero-jobs-3d.png', size: 168, mesh: 'bg-mesh-job', accent: 'text-[#8B5CF6]', titleGradient: 'text-gradient-violet', glow: 'rgba(139,92,246,0.32)' },
 }
 
 interface PageHeroProps {
@@ -75,7 +77,7 @@ export function PageHero({ variant, title, subtitle, eyebrow, icon, children, cl
             <span>{eyebrow}</span>
           </div>
         )}
-        <h1 className="font-heading text-xl font-bold leading-tight text-text-primary text-balance sm:text-2xl">{title}</h1>
+        <h1 className={cn('font-heading text-2xl font-extrabold leading-tight text-balance sm:text-3xl', cfg.titleGradient)}>{title}</h1>
         {subtitle && <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">{subtitle}</p>}
         {children && <div className="mt-4 flex flex-wrap items-center gap-2">{children}</div>}
       </div>

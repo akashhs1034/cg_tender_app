@@ -67,7 +67,7 @@ export function TenderDetailClient({ tender }: { tender: Tender }) {
           <div className="flex flex-wrap gap-2 flex-shrink-0">
             {tender.documentUrl ? (
               <a href={tender.documentUrl} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
+                <Button size="sm" className="btn-glow bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
                   <Download className="w-3.5 h-3.5" /> View Document
                 </Button>
               </a>

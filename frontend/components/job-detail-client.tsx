@@ -59,7 +59,7 @@ export function JobDetailClient({ job }: { job: Job }) {
           <div className="flex flex-wrap gap-2 flex-shrink-0">
             {applyHref ? (
               <a href={applyHref} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
+                <Button size="sm" className="btn-glow bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
                   <ExternalLink className="w-3.5 h-3.5" /> Apply Now
                 </Button>
               </a>

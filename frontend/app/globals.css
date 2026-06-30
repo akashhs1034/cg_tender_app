@@ -70,56 +70,65 @@
 :root {
   color-scheme: dark;
 
-  /* Core palette */
-  --navy: #080E1D;
-  --indigo-deep: #111829;
-  --brand-blue: #3B7CF4;
-  --brand-cyan: #22D3EE;
-  --surface: #141C2E;
-  --surface-elevated: #1C2640;
-  --border-subtle: rgba(255,255,255,0.08);
-  --text-primary: #F0F4FF;
-  --text-secondary: #A8B4CC;
-  --text-muted: #5A6A84;
-  --ai-badge: #6C3EF4;
-  --success: #10B981;
-  --warning: #F59E0B;
-  --danger: #EF4444;
+  /* Core palette — deeper, higher-contrast navy for a more premium feel */
+  --navy: #060A14;
+  --indigo-deep: #0C1322;
+  --brand-blue: #4C8DFF;
+  --brand-blue-strong: #2E6BF0;
+  --brand-cyan: #2DE0F0;
+  --brand-violet: #8B5CF6;
+  --surface: #111A2C;
+  --surface-elevated: #1A2540;
+  --border-subtle: rgba(255,255,255,0.09);
+  --text-primary: #F4F7FF;
+  --text-secondary: #AEB9D2;
+  --text-muted: #6B7A96;
+  --ai-badge: #8B5CF6;
+  --success: #19C37D;
+  --warning: #F8B23C;
+  --danger: #F2545B;
 
-  /* Shadcn tokens mapped to dark navy theme */
-  --background: #080E1D;
-  --foreground: #F0F4FF;
-  --card: #141C2E;
-  --card-foreground: #F0F4FF;
-  --popover: #1C2640;
-  --popover-foreground: #F0F4FF;
-  --primary: #3B7CF4;
+  /* Brand gradients & elevation system */
+  --brand-gradient: linear-gradient(120deg, #4C8DFF 0%, #2DE0F0 100%);
+  --violet-gradient: linear-gradient(120deg, #8B5CF6 0%, #4C8DFF 100%);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.45), 0 12px 32px -16px rgba(0,0,0,0.75);
+  --shadow-glow-blue: 0 0 0 1px rgba(76,141,255,0.28), 0 14px 38px -14px rgba(76,141,255,0.42);
+  --shadow-glow-violet: 0 0 0 1px rgba(139,92,246,0.28), 0 14px 38px -14px rgba(139,92,246,0.42);
+
+  /* Shadcn tokens mapped to the refined dark theme */
+  --background: #060A14;
+  --foreground: #F4F7FF;
+  --card: #111A2C;
+  --card-foreground: #F4F7FF;
+  --popover: #1A2540;
+  --popover-foreground: #F4F7FF;
+  --primary: #4C8DFF;
   --primary-foreground: #ffffff;
-  --secondary: #1C2640;
-  --secondary-foreground: #F0F4FF;
-  --muted: #1C2640;
-  --muted-foreground: #5A6A84;
-  --accent: #22D3EE;
-  --accent-foreground: #080E1D;
-  --destructive: #EF4444;
-  --border: rgba(255,255,255,0.08);
-  --input: rgba(255,255,255,0.06);
-  --ring: #3B7CF4;
-  --chart-1: #3B7CF4;
-  --chart-2: #22D3EE;
-  --chart-3: #10B981;
-  --chart-4: #F59E0B;
-  --chart-5: #6C3EF4;
-  --radius: 0.75rem;
+  --secondary: #1A2540;
+  --secondary-foreground: #F4F7FF;
+  --muted: #1A2540;
+  --muted-foreground: #6B7A96;
+  --accent: #2DE0F0;
+  --accent-foreground: #060A14;
+  --destructive: #F2545B;
+  --border: rgba(255,255,255,0.09);
+  --input: rgba(255,255,255,0.07);
+  --ring: #4C8DFF;
+  --chart-1: #4C8DFF;
+  --chart-2: #2DE0F0;
+  --chart-3: #19C37D;
+  --chart-4: #F8B23C;
+  --chart-5: #8B5CF6;
+  --radius: 0.85rem;
 
-  --sidebar: #111829;
-  --sidebar-foreground: #A8B4CC;
-  --sidebar-primary: #3B7CF4;
+  --sidebar: #0C1322;
+  --sidebar-foreground: #AEB9D2;
+  --sidebar-primary: #4C8DFF;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #1C2640;
-  --sidebar-accent-foreground: #F0F4FF;
-  --sidebar-border: rgba(255,255,255,0.06);
-  --sidebar-ring: #3B7CF4;
+  --sidebar-accent: #1A2540;
+  --sidebar-accent-foreground: #F4F7FF;
+  --sidebar-border: rgba(255,255,255,0.07);
+  --sidebar-ring: #4C8DFF;
 }
 
 @layer base {
@@ -128,9 +137,20 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* Subtle layered depth behind the whole app */
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -8%, rgba(76,141,255,0.10) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 100% 0%, rgba(45,224,240,0.06) 0%, transparent 55%);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
   html {
     @apply font-sans;
+  }
+  h1, h2, h3 {
+    letter-spacing: -0.015em;
   }
 }
 
@@ -152,14 +172,14 @@
   background:
     radial-gradient(ellipse 60% 50% at 80% 20%, rgba(59, 124, 244, 0.12) 0%, transparent 70%),
     radial-gradient(ellipse 40% 40% at 10% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 60%),
-    #080E1D;
+    #060A14;
 }
 
 .bg-mesh-job {
   background:
     radial-gradient(ellipse 60% 50% at 20% 20%, rgba(108, 62, 244, 0.12) 0%, transparent 70%),
     radial-gradient(ellipse 40% 40% at 90% 80%, rgba(16, 185, 129, 0.08) 0%, transparent 60%),
-    #080E1D;
+    #060A14;
 }
 
 .bg-mesh-hero {
@@ -167,7 +187,7 @@
     radial-gradient(ellipse 80% 60% at 50% -10%, rgba(59, 124, 244, 0.18) 0%, transparent 60%),
     radial-gradient(ellipse 40% 40% at 90% 60%, rgba(34, 211, 238, 0.10) 0%, transparent 50%),
     radial-gradient(ellipse 30% 30% at 5% 80%, rgba(108, 62, 244, 0.08) 0%, transparent 50%),
-    #080E1D;
+    #060A14;
 }
 
 /* OPPORTA wordmark */
@@ -194,7 +214,57 @@
     radial-gradient(ellipse 90% 70% at 50% 0%, rgba(59, 124, 244, 0.22) 0%, transparent 55%),
     radial-gradient(ellipse 50% 40% at 90% 55%, rgba(34, 211, 238, 0.12) 0%, transparent 50%),
     radial-gradient(ellipse 35% 35% at 5% 75%, rgba(108, 62, 244, 0.10) 0%, transparent 50%),
-    #080E1D;
+    #060A14;
+}
+
+/* ── Premium redesign utilities ─────────────────────────────────────────── */
+
+/* Gradient text for hero titles / key numbers */
+.text-gradient {
+  background: linear-gradient(100deg, #6BA5FF 0%, #2DE0F0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.text-gradient-violet {
+  background: linear-gradient(100deg, #A78BFA 0%, #6BA5FF 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+/* Elevated card surface with subtle top-light gradient + depth shadow */
+.card-premium {
+  background: linear-gradient(180deg, rgba(26,37,64,0.55) 0%, rgba(17,26,44,0.85) 100%);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-card);
+}
+
+/* Smooth hover lift used on interactive cards */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-glow-blue);
+  border-color: rgba(76,141,255,0.35);
+}
+.hover-lift-violet:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-glow-violet);
+  border-color: rgba(139,92,246,0.35);
+}
+
+/* Glowing primary button */
+.btn-glow {
+  box-shadow: 0 6px 20px -6px rgba(76,141,255,0.55);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+.btn-glow:hover {
+  box-shadow: 0 10px 28px -6px rgba(76,141,255,0.7);
+  transform: translateY(-1px);
 }
 
 /* Scrollbar */

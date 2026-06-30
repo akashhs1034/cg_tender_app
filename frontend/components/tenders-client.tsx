@@ -208,7 +208,7 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
           </div>
         ) : (
           filtered.map((t) => (
-            <div key={t.id} className="rounded-2xl border border-border-subtle bg-surface hover:border-brand-blue/25 transition-all duration-200 overflow-hidden group">
+            <div key={t.id} className="rounded-2xl card-premium hover-lift overflow-hidden group">
               <div className="p-5">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 mb-3">

@@ -1,0 +1,5 @@
+# Dev/test-only dependencies (not needed to run the app).
+# Used by test_card_smoke.py to re-render markdown exactly like Streamlit's
+# frontend (CommonMark) and assert no raw HTML leaks into cards.
+-r requirements.txt
+markdown-it-py>=3.0

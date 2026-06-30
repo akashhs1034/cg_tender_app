@@ -7,7 +7,7 @@ import hashlib
 import json, os
 from datetime import date, datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 import pandas as pd
 import streamlit as st
@@ -1013,14 +1013,34 @@ def save_offline_tenders(records: list[dict]) -> int:
         st.error(f"Could not save offline tenders: {e}")
         return 0
 
+
+def _safe_http_url(value) -> str:
+    """Return only an absolute HTTP(S) URL suitable for a link attribute."""
+    url = str(value or "").strip()
+    if not url or any(character in url for character in "\r\n\t"):
+        return ""
+    try:
+        parsed = urlsplit(url)
+    except ValueError:
+        return ""
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or not parsed.netloc
+        or parsed.username
+        or parsed.password
+    ):
+        return ""
+    return url
+
+
 def _clickable_title(text, url, length: int = 115) -> str:
     """Render a tender title as a tappable link (opens the official portal / PDF
     in a new tab) when a usable URL exists, else plain escaped text. This is what
     makes every card directly clickable — no 'view details' tap needed first."""
     t = _html.escape(safe_str(text, length))
-    u = str(url or "").strip()
-    if u and u.lower() not in ("nan", "none", "—", "") and (u.startswith("http") or u.startswith("/")):
-        return (f'<a href="{_html.escape(u)}" target="_blank" rel="noopener" '
+    u = _safe_http_url(url)
+    if u:
+        return (f'<a href="{_html.escape(u, quote=True)}" target="_blank" rel="noopener" '
                 f'class="ocard-link">{t} <span class="ext">↗ open</span></a>')
     return t
 
@@ -1042,12 +1062,14 @@ def _render_offline_card(r: dict) -> None:
         (f"⏰ closes {_html.escape(_close)}" if _close != "—" else ""),
         (f"🗞 {_html.escape(_paper)}"   if _paper != "—" else ""),
     ] if x)
-    st.markdown(
+    card_html = (
         f'<div class="ocard"><div class="ocard-title">📰 {_t}</div>'
         f'<div class="ocard-org">🏛 {_org} &nbsp;·&nbsp; 📍 {_dist}</div>'
         + (f'<div class="alert-meta" style="color:#94A3B8;margin-top:4px">{_meta}</div>'
            if _meta else "")
-        + '</div>', unsafe_allow_html=True)
+        + '</div>'
+    )
+    _render_card_html(card_html)
     if _url:
         st.link_button("🌐 Open Official Procurement Portal", _url,
                        width="stretch")
@@ -1098,11 +1120,12 @@ def _render_study_plan(plan: dict) -> None:
 
     for _ph in plan.get("phases", []):
         _topics = "".join(f'<span class="tag tag-cat">{_esc(_t)}</span>' for _t in _ph.get("topics", []))
-        st.markdown(
+        _render_card_html(
             f'<div class="ocard"><div class="ocard-title">{_esc(_ph.get("name"))} '
             f'<span style="color:#10B981;font-size:.72rem;font-weight:600">· {_esc(_ph.get("duration"))}</span></div>'
             f'<div class="ocard-org" style="margin-bottom:9px">{_esc(_ph.get("focus"))}</div>'
-            f'<div class="ocard-tags">{_topics}</div></div>', unsafe_allow_html=True)
+            f'<div class="ocard-tags">{_topics}</div></div>'
+        )
 
     if plan.get("high_priority_topics"):
         st.markdown('<div class="profile-section-title" style="margin-top:14px">🔥 High-Priority Topics</div>',
@@ -1170,6 +1193,12 @@ import re as _re, html as _html
 def _esc(val, fallback="—") -> str:
     """Return HTML-escaped version of _v() — safe to embed in HTML templates."""
     return _html.escape(_v(val, fallback))
+
+
+def _render_card_html(card_html: str) -> None:
+    """Render one compact HTML card without Markdown indentation leakage."""
+    compact_html = " ".join(str(card_html).split())
+    st.markdown(compact_html, unsafe_allow_html=True)
 
 
 # ── Bid Workshop helpers ──────────────────────────────────────────────────────
@@ -1416,11 +1445,12 @@ def _pdf_widget(doc_url: str, source_id: str, compact: bool = False, ctx: str = 
     to broken downloads. We now always route the user to the authoritative
     source via st.link_button (opens in a new tab), so links never break.
     """
-    if not doc_url or str(doc_url) in ("nan", "None", "—", ""):
+    safe_url = _safe_http_url(doc_url)
+    if not safe_url:
         return
     st.link_button(
         "🌐 Open Official Procurement Portal",
-        url=str(doc_url),
+        url=safe_url,
         width=("stretch" if not compact else "content"),
     )
 
@@ -1520,7 +1550,7 @@ def _matches_mode(record: dict, selected: str) -> bool:
 
 
 def _record_link(record: dict) -> str | None:
-    return core.best_source_url(record)
+    return _safe_http_url(core.best_source_url(record)) or None
 
 
 def _source_label(record: dict) -> str:
@@ -2327,14 +2357,14 @@ def render_job_intelligence(jobs: pd.DataFrame) -> None:
         format_func=lambda idx: safe_str(_records.iloc[idx].get("title"), 100),
         key="job_intel_pick")
     _job = _records.iloc[_pick].to_dict()
-    st.markdown(
+    _render_card_html(
         f'<div class="jcard"><div class="jcard-title">{_esc(_job.get("title"))}</div>'
         f'<div class="jcard-dept">{_esc(_job.get("department"))} · '
         f'{_esc(_job.get("state"))}</div><div class="ocard-tags">'
         f'<span class="tag tag-cat">{_esc(_job.get("category"), "General")}</span>'
         f'<span class="tag tag-dl">Deadline · {_esc(_job.get("deadline"))}</span>'
-        f'</div></div>',
-        unsafe_allow_html=True)
+        f'</div></div>'
+    )
 
     _profile_resume = _profile_to_resume_text(profile)
     _resume_file = st.file_uploader(
@@ -3104,33 +3134,39 @@ if "Dashboard" in page:
                 elig_txt   = "✅ Eligible" if eligible else "⚠ Review"
                 district   = _v(rec.get("district"), "State-wide")
                 color      = score_color(s)
+                organization_html = _esc(rec.get("organization"))
+                state_html = _esc(rec.get("state"))
+                value_html = _html.escape(val)
+                deadline_html = _html.escape(dl_txt)
+                district_html = _html.escape(district)
+                category_html = _esc(rec.get("category"), "General")
 
-                st.markdown(f"""<div class="ocard">
+                _render_card_html(f"""<div class="ocard">
                   <div class="ocard-row">
                     <div class="ocard-body">
                       <div class="ocard-title">{_clickable_title(rec.get('title'), rec.get('document_url'))}</div>
-                      <div class="ocard-org">🏛 {safe_str(rec.get('organization'), 60)} &nbsp;·&nbsp; {_v(rec.get('state'))}</div>
+                      <div class="ocard-org">🏛 {organization_html} &nbsp;·&nbsp; {state_html}</div>
                       <div class="ocard-tags">
-                        <span class="tag tag-val">💰 {val}</span>
-                        <span class="tag tag-dl">{dl_txt}</span>
-                        <span class="tag tag-loc">📍 {district}</span>
-                        <span class="tag tag-cat">{_v(rec.get('category'), 'General')}</span>
+                        <span class="tag tag-val">💰 {value_html}</span>
+                        <span class="tag tag-dl">{deadline_html}</span>
+                        <span class="tag tag-loc">📍 {district_html}</span>
+                        <span class="tag tag-cat">{category_html}</span>
                         <span class="tag {elig_cls}">{elig_txt}</span>
                       </div>
                     </div>
-                    <div class="ring {rc}" style="color:{color};border-color:{color}">{s}</div>
+                    <div class="ring {rc}" style="color:{color};border-color:{color}">{int(s)}%</div>
                   </div>
-                </div>""", unsafe_allow_html=True)
+                </div>""")
 
                 with st.expander(f"Details — {safe_str(rec.get('title'), 50)}"):
                     dc1, dc2 = st.columns(2)
-                    dc1.write(f"**Organization:** {_v(rec.get('organization'))}")
-                    dc1.write(f"**Category:** {_v(rec.get('category'))}")
-                    dc1.write(f"**District:** {district}")
-                    dc1.write(f"**State:** {_v(rec.get('state'))}")
-                    dc2.write(f"**Value:** {val}")
-                    dc2.write(f"**Deadline:** {_v(rec.get('deadline'))}")
-                    dc2.write(f"**Source ID:** {_v(rec.get('source_id'))}")
+                    dc1.write(f"**Organization:** {_plain(rec.get('organization'))}")
+                    dc1.write(f"**Category:** {_plain(rec.get('category'))}")
+                    dc1.write(f"**District:** {_plain(district)}")
+                    dc1.write(f"**State:** {_plain(rec.get('state'))}")
+                    dc2.write(f"**Value:** {_plain(val)}")
+                    dc2.write(f"**Deadline:** {_plain(rec.get('deadline'))}")
+                    dc2.write(f"**Source ID:** {_plain(rec.get('source_id'))}")
                     if reasons:
                         st.markdown("**Match reasons:**")
                         for r in reasons:
@@ -3147,17 +3183,17 @@ if "Dashboard" in page:
                 st.session_state.current_page = "📄  Tenders"
                 st.rerun()
         elif not PROFILE_READY:
-            st.markdown("""<div class="ocard" style="text-align:center;padding:36px">
+            _render_card_html("""<div class="ocard" style="text-align:center;padding:36px">
               <div style="font-size:2rem;margin-bottom:12px">👤</div>
               <div style="font-size:.9rem;font-weight:700;color:#94A3B8">Complete your profile to see suggested matches</div>
               <div style="font-size:.78rem;color:#64748B;margin-top:6px;line-height:1.6">Add your contractor class, sectors &amp; districts and your personalized fit scores will appear here.</div>
-            </div>""", unsafe_allow_html=True)
+            </div>""")
         else:
-            st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
+            _render_card_html("""<div class="ocard" style="text-align:center;padding:32px">
               <div style="font-size:2rem;margin-bottom:12px">📋</div>
               <div style="font-size:.88rem;font-weight:600;color:#94A3B8">No tenders currently match your criteria</div>
               <div style="font-size:.77rem;color:#64748B;margin-top:6px">Try widening your sectors or target districts in Profile</div>
-            </div>""", unsafe_allow_html=True)
+            </div>""")
 
         # ══════════════════════════════════════════════════════════════════════
         # SECTION 3: Smart Pipeline Alerts  (folded into Dashboard)
@@ -3182,11 +3218,11 @@ if "Dashboard" in page:
                     f'</div>',
                     unsafe_allow_html=True)
         else:
-            st.markdown("""<div class="ocard" style="text-align:center;padding:24px">
+            _render_card_html("""<div class="ocard" style="text-align:center;padding:24px">
               <div style="font-size:1.5rem;margin-bottom:6px">🔕</div>
               <div style="font-size:.82rem;color:#94A3B8;font-weight:600">No critical alerts</div>
               <div style="font-size:.74rem;color:#64748B;margin-top:4px">You'll be alerted on approaching deadlines for saved tenders and brand-new high-match opportunities.</div>
-            </div>""", unsafe_allow_html=True)
+            </div>""")
 
         # ── Tools launcher (folded modules) ──
         st.markdown("<br>", unsafe_allow_html=True)
@@ -3218,23 +3254,25 @@ if "Dashboard" in page:
                 _jdept  = _esc(_jr.get("department"))
                 _jstate = _esc(_jr.get("state"))
                 _jvac   = _v(_jr.get("vacancies"))
-                _vac_badge = f'<div class="jvac">{_jvac} posts</div>' if _jvac not in ("—", "") else ''
-                st.markdown(
+                _vac_badge = (
+                    f'<div class="jvac">{_html.escape(_jvac)} posts</div>'
+                    if _jvac not in ("—", "") else ""
+                )
+                _render_card_html(
                     f'<div class="jcard"><div class="jcard-row"><div class="jcard-body">'
                     f'<div class="jcard-title">{_jtitle}</div>'
                     f'<div class="jcard-dept">🏛 {_jdept} &nbsp;&middot;&nbsp; {_jstate}</div>'
-                    f'</div>{_vac_badge}</div></div>',
-                    unsafe_allow_html=True,
+                    f'</div>{_vac_badge}</div></div>'
                 )
             if st.button("💼  See all government jobs  →", width="stretch",
                          key="dash_see_all_jobs"):
                 st.session_state.current_page = "💼  Jobs"
                 st.rerun()
         else:
-            st.markdown("""<div class="jcard" style="text-align:center;padding:28px;color:#7C8AA0">
+            _render_card_html("""<div class="jcard" style="text-align:center;padding:28px;color:#7C8AA0">
               <div style="font-size:1.6rem;margin-bottom:8px">💼</div>
               <div style="font-size:.84rem;font-weight:600;color:#64748B">No open jobs right now — check back tomorrow</div>
-            </div>""", unsafe_allow_html=True)
+            </div>""")
 
         # ══════════════════════════════════════════════════════════════════════
         # SECTION 5: compact route to the dedicated bid workspace
@@ -3699,11 +3737,11 @@ elif "Tenders" in page:
         st.info("ℹ️ Update your profile (contractor class, turnover, experience) to see which tenders you're eligible for.")
 
     if not rows:
-        st.markdown("""<div class="ocard" style="text-align:center;padding:40px;color:#7C8AA0">
+        _render_card_html("""<div class="ocard" style="text-align:center;padding:40px;color:#7C8AA0">
           <div style="font-size:2rem;margin-bottom:12px">🔍</div>
           <div style="font-size:.9rem;font-weight:600;color:#64748B">No matching opportunities found.</div>
           <div style="font-size:.77rem;color:#566179;margin-top:6px">Try changing state, district, mode, or category.</div>
-        </div>""", unsafe_allow_html=True)
+        </div>""")
 
     for s, eligible, rec in rows[:80]:
         dl = days_left(rec.get("deadline"))
@@ -3776,7 +3814,7 @@ elif "Tenders" in page:
                 '⚠ Corrigendum / amendment linked — verify changed dates and terms.'
                 '</div>')
 
-        st.markdown(f"""<div class="ocard">
+        card_html = f"""<div class="ocard">
           <div class="ocard-row">
             <div class="ocard-body">
               <div class="ocard-title">{_clickable_title(rec.get('title'), record_url, 115)}</div>
@@ -3787,38 +3825,47 @@ elif "Tenders" in page:
             </div>
             {score_html}
           </div>
-        </div>""", unsafe_allow_html=True)
+        </div>"""
+        _render_card_html(card_html)
 
-        with st.expander(f"View details · Analyze · Save · Share"):
+        with st.expander(
+            f"View details · Analyze · Save · Share — "
+            f"{safe_str(_plain(rec.get('title')), 55)}"
+        ):
             _lang = st.session_state.get("lang", "en")
             _exp  = i18n.tender_explainer(rec, _lang)
 
             # ── Plain-language: what this tender is about ──
             st.markdown(f"**📋 {i18n.t('about_this_tender', _lang)}**")
-            st.write(_exp["about"])
+            st.write(_plain(_exp["about"]))
 
             # ── Key facts (two compact columns) ──
             if _exp["facts"]:
                 _fc1, _fc2 = st.columns(2)
                 for _i, (_flabel, _fval) in enumerate(_exp["facts"]):
-                    (_fc1 if _i % 2 == 0 else _fc2).markdown(f"**{_flabel}:** {_fval}")
+                    (_fc1 if _i % 2 == 0 else _fc2).markdown(
+                        f"**{_plain(_flabel)}:** {_plain(_fval)}"
+                    )
 
             # ── How to take part (simple numbered steps) ──
             st.markdown(f"**🪜 {i18n.t('how_to_take_part', _lang)}**")
             for _i, _step in enumerate(_exp["steps"], 1):
-                st.markdown(f"{_i}. {_step}")
+                st.markdown(f"{_i}. {_plain(_step)}")
 
             # ── Money & deposits you will need (EMD/TDR · solvency · form fee) ──
             st.markdown(f"**💰 {i18n.t('money_requirements', _lang)}**")
             for _m in i18n.tender_money_reqs(rec, _lang):
+                money_label = _html.escape(_plain(_m["label"]))
+                money_value = _html.escape(_plain(_m["value"]))
+                money_meaning = _html.escape(_plain(_m["meaning"]))
                 st.markdown(
-                    f"- **{_m['label']}** — {_m['value']}  \n"
-                    f"  <span style='color:#7C8AA0;font-size:.85em'>{_m['meaning']}</span>",
+                    f"- **{money_label}** — {money_value}  \n"
+                    f"  <span style='color:#7C8AA0;font-size:.85em'>{money_meaning}</span>",
                     unsafe_allow_html=True)
             st.caption("ℹ️ " + i18n.t("official_doc_note", _lang))
 
             if rec.get("description"):
-                st.write(_v(rec.get("description")))
+                st.write(_plain(rec.get("description")))
             doc_url = record_url
             if doc_url and str(doc_url) not in ("nan","None","—",""):
                 _pdf_widget(doc_url, rec.get("source_id",""), ctx="exp")
@@ -3842,7 +3889,8 @@ elif "Tenders" in page:
                 _act3.button("Sign in to save", key=_rec_key("save_locked", rec),
                              width="stretch", disabled=True)
             _share_text = quote(
-                f"{safe_str(rec.get('title'), 120)}\n{_doc_url or 'Shared from OPPORTA'}")
+                f"{safe_str(_plain(rec.get('title')), 120)}\n"
+                f"{_doc_url or 'Shared from OPPORTA'}")
             _act4.link_button("Share", f"https://wa.me/?text={_share_text}",
                               key=_rec_key("share", rec), width="stretch")
 
@@ -3879,10 +3927,10 @@ elif "Bid Workspace" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 elif "Workspace" in page or "Tender Intelligence" in page:
     if not st.session_state.authenticated:
-        st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
+        _render_card_html("""<div class="ocard" style="text-align:center;padding:40px">
           <div style="font-size:2rem;margin-bottom:12px">🔐</div>
           <div style="font-size:.9rem;font-weight:600;color:#64748B">Sign in to access Tender Intelligence</div>
-        </div>""", unsafe_allow_html=True)
+        </div>""")
         st.stop()
 
     # Prefill the evaluator search when arriving from Tender Portal.
@@ -3988,7 +4036,7 @@ elif "Workspace" in page or "Tender Intelligence" in page:
                     f'{pdf_tag}'
                     f'</div></div>'
                 )
-                st.markdown(tcard_html, unsafe_allow_html=True)
+                _render_card_html(tcard_html)
                 if doc_url:
                     _pdf_widget(doc_url, selected_tender.get("source_id","eval"), compact=True, ctx="ev")
 
@@ -4169,15 +4217,15 @@ elif "Workspace" in page or "Tender Intelligence" in page:
                                     key="ra_job")
             selected_job = df_j.iloc[job_idx].to_dict()
 
-            st.markdown(f"""<div class="jcard" style="margin:10px 0 18px">
-              <div class="jcard-title">{safe_str(selected_job.get('title'), 100)}</div>
-              <div class="jcard-dept">{_v(selected_job.get('department'))} &nbsp;·&nbsp;
-                {_v(selected_job.get('state'))} &nbsp;·&nbsp;
-                Vacancies: {_v(selected_job.get('vacancies'))}</div>
+            _render_card_html(f"""<div class="jcard" style="margin:10px 0 18px">
+              <div class="jcard-title">{_esc(selected_job.get('title'))}</div>
+              <div class="jcard-dept">{_esc(selected_job.get('department'))} &nbsp;·&nbsp;
+                {_esc(selected_job.get('state'))} &nbsp;·&nbsp;
+                Vacancies: {_esc(selected_job.get('vacancies'))}</div>
               <div style="font-size:.77rem;color:#7C8AA0;line-height:1.5">
-                {safe_str(selected_job.get('qualification'), 220)}
+                {_html.escape(safe_str(_plain(selected_job.get('qualification')), 220))}
               </div>
-            </div>""", unsafe_allow_html=True)
+            </div>""")
 
             resume_file = st.file_uploader(
                 "Upload your resume (PDF or TXT)",
@@ -4426,10 +4474,10 @@ elif "Jobs" in page:
     # ── TAB 1: Active Job Board (live grid + filters) ──
     with jtab1:
         if df_j.empty:
-            st.markdown("""<div class="ocard" style="text-align:center;padding:40px">
+            _render_card_html("""<div class="ocard" style="text-align:center;padding:40px">
               <div style="font-size:2rem;margin-bottom:12px">💼</div>
               <div style="font-size:.9rem;color:#64748B">No job data. Run ingest.py to fetch live listings.</div>
-            </div>""", unsafe_allow_html=True)
+            </div>""")
         else:
             # Job filters (on top — users filter first)
             st.markdown('<div class="filter-row">', unsafe_allow_html=True)
@@ -4599,9 +4647,12 @@ elif "Jobs" in page:
                     f'<div class="ocard-tags">{"".join(tags)}</div>'
                     f'</div>{match_div}</div></div>'
                 )
-                st.markdown(card_html, unsafe_allow_html=True)
+                _render_card_html(card_html)
 
-                with st.expander(f"Details · Resume Match — {safe_str(rec.get('title'), 55)}"):
+                with st.expander(
+                    f"View details · Analyze — "
+                    f"{safe_str(_plain(rec.get('title')), 55)}"
+                ):
                     facts = [
                         ("Advertisement No", advertisement_no),
                         ("Department", department),
@@ -4621,7 +4672,7 @@ elif "Jobs" in page:
                         jd1, jd2 = st.columns(2)
                         for index, (label, value) in enumerate(facts):
                             (jd1 if index % 2 == 0 else jd2).write(
-                                f"**{label}:** {value}")
+                                f"**{label}:** {_plain(value)}")
                     desc = _plain(rec.get("description"))
                     if desc:
                         st.caption(desc[:600] + ("…" if len(desc) > 600 else ""))
@@ -4643,7 +4694,8 @@ elif "Jobs" in page:
                             st.markdown(
                                 f'<div class="res-panel" style="padding:10px 16px">'
                                 f'<b style="color:{_acol};font-size:1.3rem">{_apct}%</b>'
-                                f'&nbsp; <span style="color:#94A3B8;font-size:.82rem">Profile match · {_auto["verdict"]}</span>'
+                                f'&nbsp; <span style="color:#94A3B8;font-size:.82rem">'
+                                f'Profile match · {_html.escape(str(_auto["verdict"]))}</span>'
                                 f'</div>', unsafe_allow_html=True)
                             if _auto["met"]:
                                 st.success("✅ Met: " + " · ".join(_auto["met"][:4]))
@@ -4668,7 +4720,8 @@ elif "Jobs" in page:
                                 color = score_color(pct)
                                 st.markdown(f"""<div class="res-panel">
                                   <b style="color:{color};font-size:1.5rem">{pct}%</b>
-                                  &nbsp; <span style="color:#94A3B8;font-size:.85rem">{res['verdict']}</span>
+                                  &nbsp; <span style="color:#94A3B8;font-size:.85rem">
+                                  {_html.escape(str(res['verdict']))}</span>
                                 </div>""", unsafe_allow_html=True)
                                 if res["met"]:    st.success("Met: " + " · ".join(res["met"]))
                                 if res["missing"]:st.error("Missing: " + " · ".join(res["missing"]))
@@ -5033,15 +5086,15 @@ elif "Profile" in page or "Document Vault" in page:
                   f'{val_tag}{dl_tag}'
                   f'</div></div></div>'
               )
-              st.markdown(pcard_html, unsafe_allow_html=True)
+              _render_card_html(pcard_html)
       else:
-          st.markdown("""<div class="ocard" style="text-align:center;padding:32px">
+          _render_card_html("""<div class="ocard" style="text-align:center;padding:32px">
             <div style="font-size:2rem;margin-bottom:10px">📋</div>
             <div style="font-size:.86rem;color:#64748B">No saved tenders yet</div>
             <div style="font-size:.75rem;color:#566179;margin-top:6px">
               Use the Tenders portal to save tenders to your pipeline.
             </div>
-          </div>""", unsafe_allow_html=True)
+          </div>""")
 
     # ── Tab 2: Job Seeker Profile ──────────────────────────────────────────────
     with ptab2:
@@ -5115,7 +5168,7 @@ elif "Profile" in page or "Document Vault" in page:
                     _col = score_color(_pct)
                     _ttl = safe_str(_j.get("title"), 70)
                     _dept = _v(_j.get("department"))
-                    st.markdown(
+                    _render_card_html(
                         f'<div class="jcard" style="padding:10px 16px">'
                         f'<div class="jcard-row"><div class="jcard-body">'
                         f'<div class="jcard-title" style="font-size:.82rem">{_html.escape(_ttl)}</div>'
@@ -5123,8 +5176,8 @@ elif "Profile" in page or "Document Vault" in page:
                         f'<div style="text-align:center;flex-shrink:0;min-width:52px">'
                         f'<div style="font-size:1.1rem;font-weight:700;color:{_col}">{_pct}%</div>'
                         f'<div style="font-size:.62rem;color:#64748B">match</div>'
-                        f'</div></div></div>',
-                        unsafe_allow_html=True)
+                        f'</div></div></div>'
+                    )
         else:
             st.info("Fill in your qualification, degree type, skills and save above — the app will automatically score your eligibility for every job.")
 
@@ -5259,11 +5312,11 @@ elif "Profile" in page or "Document Vault" in page:
                     f'<div class="doc-meta" style="color:#38BDF8">Used for: {_usefulness}</div></div>'
                     f'{_badge}</div>', unsafe_allow_html=True)
         else:
-            st.markdown("""<div class="ocard" style="text-align:center;padding:30px">
+            _render_card_html("""<div class="ocard" style="text-align:center;padding:30px">
               <div style="font-size:1.8rem;margin-bottom:8px">📂</div>
               <div style="font-size:.86rem;color:#94A3B8;font-weight:600">Vault is empty</div>
               <div style="font-size:.76rem;color:#7C8AA0;margin-top:6px">Upload one document above to unlock personalized match scoring.</div>
-            </div>""", unsafe_allow_html=True)
+            </div>""")
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ── FOOTER ────────────────────────────────────────────────────────────────────

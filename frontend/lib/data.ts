@@ -172,6 +172,17 @@ export async function getTenderById(id: string): Promise<Tender | null> {
   return data ? mapTender(data) : null
 }
 
+/** Fetch full tenders for a set of source_ids (used by the Saved page). */
+export async function getTendersByIds(ids: string[]): Promise<Tender[]> {
+  if (!ids.length) return []
+  const { data, error } = await supabase.from('tenders').select('*').in('source_id', ids)
+  if (error) {
+    console.error('[data] getTendersByIds failed:', error.message)
+    return []
+  }
+  return (data ?? []).map(mapTender)
+}
+
 export async function getJobs(): Promise<Job[]> {
   const { data, error } = await supabase
     .from('jobs')

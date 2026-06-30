@@ -17,6 +17,7 @@ import {
   ChevronDown,
   LogOut,
   Settings,
+  Bookmark,
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
@@ -30,6 +31,7 @@ const navItems = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Jobs', href: '/jobs', icon: Briefcase },
   { label: 'Tenders', href: '/tenders', icon: FileText },
+  { label: 'Saved', href: '/saved', icon: Bookmark },
   { label: 'Analytics', href: '/analytics', icon: BarChart2 },
   { label: 'Our Website', href: '/', icon: ExternalLink, external: true },
 ]

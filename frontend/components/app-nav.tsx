@@ -18,10 +18,12 @@ import {
   LogOut,
   Settings,
 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import { OpportaLogo } from '@/components/opporta-logo'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { useToast } from '@/components/ui/toast'
+import { useAuth } from '@/lib/auth-context'
 
 const navItems = [
   { label: 'Profile', href: '/profile', icon: User },
@@ -42,9 +44,19 @@ interface AppNavProps {
 
 export function AppNav({ isAdmin = false }: AppNavProps) {
   const pathname = usePathname()
+  const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const { toast } = useToast()
+  const { user, displayName, email, signOut } = useAuth()
+
+  const handleSignOut = async () => {
+    setProfileOpen(false)
+    await signOut()
+    toast('Signed out', 'info')
+    router.push('/login')
+    router.refresh()
+  }
 
   return (
     <>
@@ -108,41 +120,45 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
         {/* Language + Auth */}
         <div className="px-4 py-3 border-t border-border-subtle flex items-center justify-between">
           <LanguageSwitcher />
-          <Link href="/login" className="text-xs font-semibold text-brand-blue hover:underline">Sign In</Link>
-        </div>
-
-        {/* Profile Section */}
-        <div className="px-3 py-3 border-t border-border-subtle">
-          <button
-            onClick={() => setProfileOpen(!profileOpen)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-elevated transition-all duration-150 text-left"
-          >
-            <div className="w-7 h-7 rounded-full bg-brand-blue/20 border border-brand-blue/30 flex items-center justify-center flex-shrink-0">
-              <User className="w-3.5 h-3.5 text-brand-blue" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-text-primary truncate">Rajesh Kumar</p>
-              <p className="text-xs text-text-muted truncate">Contractor · CG</p>
-            </div>
-            <ChevronDown className={cn('w-3.5 h-3.5 text-text-muted transition-transform', profileOpen && 'rotate-180')} />
-          </button>
-          {profileOpen && (
-            <div className="mt-1 rounded-lg border border-border-subtle bg-popover overflow-hidden">
-              <Link href="/profile" className="flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors">
-                <User className="w-3.5 h-3.5" /> Profile
-              </Link>
-              <button
-                onClick={() => { setProfileOpen(false); toast('Settings — coming soon', 'info', { description: 'Account settings connect after backend integration.' }) }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors"
-              >
-                <Settings className="w-3.5 h-3.5" /> Settings
-              </button>
-              <Link href="/" className="flex items-center gap-2.5 px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors">
-                <LogOut className="w-3.5 h-3.5" /> Sign Out
-              </Link>
-            </div>
+          {!user && (
+            <Link href="/login" className="text-xs font-semibold text-brand-blue hover:underline">Sign In</Link>
           )}
         </div>
+
+        {/* Profile Section — only when signed in */}
+        {user && (
+          <div className="px-3 py-3 border-t border-border-subtle">
+            <button
+              onClick={() => setProfileOpen(!profileOpen)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-surface-elevated transition-all duration-150 text-left"
+            >
+              <div className="w-7 h-7 rounded-full bg-brand-blue/20 border border-brand-blue/30 flex items-center justify-center flex-shrink-0">
+                <User className="w-3.5 h-3.5 text-brand-blue" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-text-primary truncate">{displayName ?? 'Account'}</p>
+                <p className="text-xs text-text-muted truncate">{email}</p>
+              </div>
+              <ChevronDown className={cn('w-3.5 h-3.5 text-text-muted transition-transform', profileOpen && 'rotate-180')} />
+            </button>
+            {profileOpen && (
+              <div className="mt-1 rounded-lg border border-border-subtle bg-popover overflow-hidden">
+                <Link href="/profile" className="flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors">
+                  <User className="w-3.5 h-3.5" /> Profile
+                </Link>
+                <button
+                  onClick={() => { setProfileOpen(false); toast('Settings — coming soon', 'info', { description: 'Account settings connect after backend integration.' }) }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors"
+                >
+                  <Settings className="w-3.5 h-3.5" /> Settings
+                </button>
+                <button onClick={handleSignOut} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors">
+                  <LogOut className="w-3.5 h-3.5" /> Sign Out
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </aside>
 
       {/* Mobile Topbar */}
@@ -154,12 +170,14 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
             <Bell className="w-4 h-4 text-text-secondary" />
             <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-brand-blue" />
           </button>
-          <Link
-            href="/login"
-            className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border-subtle text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors"
-          >
-            Sign In
-          </Link>
+          {!user && (
+            <Link
+              href="/login"
+              className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border-subtle text-xs font-semibold text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors"
+            >
+              Sign In
+            </Link>
+          )}
           <button
             onClick={() => setMobileOpen(true)}
             className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-elevated transition-colors"
@@ -183,10 +201,17 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
             {/* Language + auth in drawer */}
             <div className="px-5 py-3 border-b border-border-subtle flex items-center justify-between">
               <LanguageSwitcher />
-              <div className="flex items-center gap-2">
-                <Link href="/login" onClick={() => setMobileOpen(false)} className="text-xs font-semibold text-text-secondary border border-border-subtle px-2.5 py-1 rounded-lg hover:text-text-primary hover:bg-surface-elevated transition-colors">Sign In</Link>
-                <Link href="/signup" onClick={() => setMobileOpen(false)} className="text-xs font-semibold text-white bg-brand-blue px-2.5 py-1 rounded-lg hover:bg-brand-blue/90 transition-colors">Sign Up</Link>
-              </div>
+              {user ? (
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-xs text-text-muted truncate max-w-[110px]">{email}</span>
+                  <button onClick={() => { setMobileOpen(false); handleSignOut() }} className="text-xs font-semibold text-danger border border-danger/30 px-2.5 py-1 rounded-lg hover:bg-danger/10 transition-colors">Sign Out</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Link href="/login" onClick={() => setMobileOpen(false)} className="text-xs font-semibold text-text-secondary border border-border-subtle px-2.5 py-1 rounded-lg hover:text-text-primary hover:bg-surface-elevated transition-colors">Sign In</Link>
+                  <Link href="/signup" onClick={() => setMobileOpen(false)} className="text-xs font-semibold text-white bg-brand-blue px-2.5 py-1 rounded-lg hover:bg-brand-blue/90 transition-colors">Sign Up</Link>
+                </div>
+              )}
             </div>
             <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
               {navItems.map((item) => {

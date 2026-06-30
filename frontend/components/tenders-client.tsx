@@ -13,6 +13,7 @@ import { BadgeMode } from '@/components/ui/badge-mode'
 import { AiMatchBadge } from '@/components/ui/ai-match-badge'
 import { TenderAnalysisDialog } from '@/components/tender-analysis-dialog'
 import { useToast } from '@/components/ui/toast'
+import { useSaved } from '@/lib/saved-context'
 import { TENDER_CATEGORIES, getDistricts } from '@/lib/mock-data'
 import type { TenderMode, State, Tender } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
@@ -29,20 +30,14 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
   const [districtFilter, setDistrictFilter] = useState('All')
   const [catFilter, setCatFilter] = useState('All')
   const [showFilters, setShowFilters] = useState(false)
-  const [saved, setSaved] = useState<Set<string>>(new Set())
   const [analysisTender, setAnalysisTender] = useState<Tender | null>(null)
   const { toast } = useToast()
+  const { isSaved, toggleSaved } = useSaved()
 
-  const toggleSave = (t: Tender) => {
-    const isSaved = saved.has(t.id)
-    setSaved((prev) => {
-      const next = new Set(prev)
-      if (isSaved) next.delete(t.id)
-      else next.add(t.id)
-      return next
-    })
-    if (isSaved) toast('Removed from saved', 'info')
-    else toast('Saved', 'success', { description: t.title })
+  const toggleSave = async (t: Tender) => {
+    const nowSaved = await toggleSaved(t)
+    if (nowSaved) toast('Saved', 'success', { description: t.title })
+    else toast('Removed from saved', 'info')
   }
 
   const share = async (title: string, path: string) => {
@@ -274,13 +269,13 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
                       <FileEdit className="w-3.5 h-3.5" /><span className="hidden sm:inline">Bid Document</span>
                     </Button>
                   </Link>
-                  <Button size="sm" variant="outline" onClick={() => toggleSave(t)} aria-pressed={saved.has(t.id)}
-                    title={saved.has(t.id) ? 'Saved' : 'Save'} aria-label={saved.has(t.id) ? 'Saved' : 'Save'}
-                    className={cn('text-xs h-8 gap-1.5', saved.has(t.id)
+                  <Button size="sm" variant="outline" onClick={() => toggleSave(t)} aria-pressed={isSaved(t.id)}
+                    title={isSaved(t.id) ? 'Saved' : 'Save'} aria-label={isSaved(t.id) ? 'Saved' : 'Save'}
+                    className={cn('text-xs h-8 gap-1.5', isSaved(t.id)
                       ? 'border-brand-blue/40 text-brand-blue bg-brand-blue/10'
                       : 'border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
-                    {saved.has(t.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline">{saved.has(t.id) ? 'Saved' : 'Save'}</span>
+                    {isSaved(t.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">{isSaved(t.id) ? 'Saved' : 'Save'}</span>
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => share(t.title, `/tenders/${t.id}`)} title="Share" aria-label="Share"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">

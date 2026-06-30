@@ -4,9 +4,9 @@ import { useState } from 'react'
 import Link from 'next/link'
 import {
   ChevronLeft, MapPin, Clock, ExternalLink, FileEdit, Upload,
-  Sparkles, CheckCircle2, AlertTriangle, XCircle, ArrowUpRight,
+  Sparkles, CheckCircle2, AlertTriangle, ArrowUpRight,
   FileText, Calendar, Shield, ClipboardList, History, RefreshCw,
-  IndianRupee, Building2, Eye,
+  IndianRupee, Building2, Eye, Bookmark, BookmarkCheck,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { BadgeMode } from '@/components/ui/badge-mode'
@@ -15,6 +15,7 @@ import type { Tender } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { useSaved } from '@/lib/saved-context'
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: Eye },
@@ -36,7 +37,15 @@ const riskColors: Record<string, string> = {
 export function TenderDetailClient({ tender }: { tender: Tender }) {
   const [activeTab, setActiveTab] = useState('overview')
   const { toast } = useToast()
+  const { isSaved, toggleSaved } = useSaved()
   const hasDocuments = tender.documents.length > 0
+  const saved = isSaved(tender.id)
+
+  const handleSave = async () => {
+    const nowSaved = await toggleSaved(tender)
+    if (nowSaved) toast('Saved', 'success', { description: tender.title })
+    else toast('Removed from saved', 'info')
+  }
 
   return (
     <AppShell>
@@ -58,6 +67,10 @@ export function TenderDetailClient({ tender }: { tender: Tender }) {
           <div className="flex flex-wrap gap-2 flex-shrink-0">
             <Button size="sm" onClick={() => setActiveTab('checklist')} className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
               <FileEdit className="w-3.5 h-3.5" /> Prepare Bid
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleSave} aria-pressed={saved}
+              className={cn('gap-1.5', saved ? 'border-brand-blue/40 text-brand-blue bg-brand-blue/10' : 'border-border-subtle text-text-secondary hover:bg-surface-elevated')}>
+              {saved ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />} {saved ? 'Saved' : 'Save'}
             </Button>
             <Button size="sm" variant="outline" onClick={() => toast('Opening source', 'info', { description: tender.source })} className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
               <ExternalLink className="w-3.5 h-3.5" /> Open Source

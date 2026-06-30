@@ -3,12 +3,14 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import {
   Eye, EyeOff, Mail, Lock, User, Phone, ArrowRight,
-  Building2, BookOpen, ShieldCheck, CheckCircle2,
+  Building2, BookOpen, ShieldCheck, CheckCircle2, AlertCircle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { OpportaLogo } from '@/components/opporta-logo'
+import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 type Role = 'contractor' | 'jobseeker' | 'admin'
@@ -43,10 +45,13 @@ const roles: { value: Role; label: string; desc: string; icon: React.ElementType
 const states = ['Chhattisgarh', 'Uttar Pradesh', 'Both']
 
 export default function SignupPage() {
+  const router = useRouter()
   const [step, setStep] = useState<1 | 2>(1)
   const [role, setRole] = useState<Role>('contractor')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [form, setForm] = useState({
     name: '',
     email: '',
@@ -59,18 +64,40 @@ export default function SignupPage() {
     setForm((f) => ({ ...f, [e.target.name]: e.target.value }))
   }
 
-  function handleStep1(e: React.FormEvent) {
+  async function handleStep2(e: React.FormEvent) {
     e.preventDefault()
-    setStep(2)
-  }
-
-  function handleStep2(e: React.FormEvent) {
-    e.preventDefault()
+    setError(null)
     setLoading(true)
-    setTimeout(() => {
+    const statesOfInterest =
+      form.state === 'Both' ? ['Chhattisgarh', 'Uttar Pradesh'] : [form.state]
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: { data: { full_name: form.name, phone: form.phone, role } },
+      })
+      if (error) {
+        setError(error.message)
+        setLoading(false)
+        return
+      }
+      // Session exists only when email confirmation is disabled.
+      if (data.session) {
+        // Create the profile row now that we have an authenticated JWT.
+        await supabase
+          .from('profiles')
+          .upsert({ email: form.email, full_name: form.name, states: statesOfInterest })
+        router.push('/dashboard')
+        router.refresh()
+        return
+      }
+      setNotice('Account created! Please check your email to confirm, then sign in.')
       setLoading(false)
-      window.location.href = '/dashboard'
-    }, 1400)
+    } catch {
+      setError('Could not reach the server. Please try again.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -185,6 +212,18 @@ export default function SignupPage() {
                 </div>
 
                 <form onSubmit={handleStep2} className="space-y-4">
+                  {error && (
+                    <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2.5 text-xs text-danger">
+                      <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                  )}
+                  {notice && (
+                    <div className="flex items-start gap-2 rounded-lg border border-success/30 bg-success/10 px-3 py-2.5 text-xs text-success">
+                      <CheckCircle2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                      <span>{notice}</span>
+                    </div>
+                  )}
                   {/* Full name */}
                   <div>
                     <label htmlFor="name" className="block text-xs font-semibold text-text-secondary mb-1.5 uppercase tracking-wide">Full Name</label>

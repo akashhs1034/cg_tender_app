@@ -206,6 +206,185 @@ async function count(
   return c ?? 0
 }
 
+/** Fetches every value of one or more columns across a table, paginating past
+ *  PostgREST's 1000-row cap so aggregates are accurate, not sampled. */
+async function fetchAllRows<T = Record<string, unknown>>(
+  table: string,
+  columns: string
+): Promise<T[]> {
+  const PAGE = 1000
+  const all: T[] = []
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .range(from, from + PAGE - 1)
+    if (error) {
+      console.error(`[data] fetchAllRows(${table}) failed:`, error.message)
+      break
+    }
+    const rows = (data ?? []) as T[]
+    all.push(...rows)
+    if (rows.length < PAGE) break
+  }
+  return all
+}
+
+export interface CategorySlice {
+  label: string
+  count: number
+  pct: number
+}
+
+export interface Analytics {
+  totalTenders: number
+  totalJobs: number
+  totalOpportunities: number
+  expiringSoon: number
+  corrigendums: number
+  avgScore: number
+  totalVacancies: number
+  cgCount: number
+  upCount: number
+  tenderCategories: CategorySlice[]
+  jobCategories: CategorySlice[]
+  modes: { online: number; offline: number; newspaper: number }
+  sources: CategorySlice[]
+}
+
+function topSlices(counts: Map<string, number>, total: number, limit = 6): CategorySlice[] {
+  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1])
+  const top = sorted.slice(0, limit)
+  const rest = sorted.slice(limit).reduce((acc, [, c]) => acc + c, 0)
+  const slices = top.map(([label, count]) => ({
+    label,
+    count,
+    pct: total ? Math.round((count / total) * 100) : 0,
+  }))
+  if (rest > 0) slices.push({ label: 'Other', count: rest, pct: total ? Math.round((rest / total) * 100) : 0 })
+  return slices
+}
+
+export async function getAnalytics(): Promise<Analytics> {
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const todayMs = Date.now()
+  const weekMs = 7 * 24 * 60 * 60 * 1000
+
+  const [
+    totalTenders,
+    totalJobs,
+    corrigendums,
+    cgCount,
+    upCount,
+    tenderRows,
+    jobRows,
+  ] = await Promise.all([
+    count('tenders', (q) => q.or('status.is.null,status.neq.expired')),
+    count('jobs'),
+    count('corrigendums'),
+    count('tenders', (q) => q.eq('state', 'Chhattisgarh')),
+    count('tenders', (q) => q.eq('state', 'Uttar Pradesh')),
+    fetchAllRows<any>('tenders', 'category,online_or_offline,source_portal,ai_score,deadline'),
+    fetchAllRows<any>('jobs', 'category,vacancies,ai_score'),
+  ])
+
+  const tenderCats = new Map<string, number>()
+  const sourceCounts = new Map<string, number>()
+  const modes = { online: 0, offline: 0, newspaper: 0 }
+  let scoreSum = 0
+  let scoreN = 0
+  let expiringSoon = 0
+
+  for (const r of tenderRows) {
+    const cat = (r.category as string) || 'Uncategorized'
+    tenderCats.set(cat, (tenderCats.get(cat) ?? 0) + 1)
+    const portal = (r.source_portal as string) || 'Other'
+    sourceCounts.set(portal, (sourceCounts.get(portal) ?? 0) + 1)
+    const m = normMode(r.online_or_offline, r.source_portal)
+    if (m === 'Offline') modes.offline++
+    else if (m === 'Newspaper') modes.newspaper++
+    else modes.online++
+    if (typeof r.ai_score === 'number') {
+      scoreSum += r.ai_score
+      scoreN++
+    }
+    if (typeof r.deadline === 'string') {
+      const t = Date.parse(r.deadline)
+      if (!Number.isNaN(t) && t >= todayMs && t <= todayMs + weekMs) expiringSoon++
+    }
+  }
+
+  const jobCats = new Map<string, number>()
+  let totalVacancies = 0
+  for (const r of jobRows) {
+    const cat = (r.category as string) || 'Uncategorized'
+    jobCats.set(cat, (jobCats.get(cat) ?? 0) + 1)
+    if (typeof r.vacancies === 'number') totalVacancies += r.vacancies
+    if (typeof r.ai_score === 'number') {
+      scoreSum += r.ai_score
+      scoreN++
+    }
+  }
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+
+  return {
+    totalTenders,
+    totalJobs,
+    totalOpportunities: totalTenders + totalJobs,
+    expiringSoon,
+    corrigendums,
+    avgScore: scoreN ? Math.round(scoreSum / scoreN) : 0,
+    totalVacancies,
+    cgCount,
+    upCount,
+    tenderCategories: topSlices(tenderCats, tenderRows.length),
+    jobCategories: topSlices(jobCats, jobRows.length),
+    modes,
+    sources: topSlices(sourceCounts, tenderRows.length),
+  }
+}
+
+export interface DiscoveredSource {
+  id: number
+  url: string
+  title: string
+  domain: string
+  state: string
+  sourceType: string
+  category: string
+  confidenceScore: number
+  status: string
+  reason: string
+  requiresCaptcha: boolean
+}
+
+export async function getDiscoveredSources(): Promise<DiscoveredSource[]> {
+  const { data, error } = await supabase
+    .from('discovered_sources')
+    .select('id,url,title,domain,state,source_type,category,confidence_score,status,reason,requires_captcha')
+    .order('confidence_score', { ascending: false, nullsFirst: false })
+    .limit(500)
+  if (error) {
+    console.error('[data] getDiscoveredSources failed:', error.message)
+    return []
+  }
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  return (data ?? []).map((r: any) => ({
+    id: r.id,
+    url: r.url,
+    title: r.title ?? r.domain ?? r.url,
+    domain: r.domain ?? '',
+    state: r.state ?? '—',
+    sourceType: r.source_type ?? 'unknown',
+    category: r.category ?? 'unknown',
+    confidenceScore: typeof r.confidence_score === 'number' ? r.confidence_score : 0,
+    status: r.status ?? 'pending_review',
+    reason: r.reason ?? '',
+    requiresCaptcha: !!r.requires_captcha,
+  }))
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   const todayIso = new Date().toISOString().slice(0, 10)
   const [

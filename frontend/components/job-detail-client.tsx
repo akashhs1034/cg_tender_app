@@ -6,7 +6,7 @@ import {
   ChevronLeft, MapPin, Clock, Users, ExternalLink, BookOpen,
   CheckCircle2, XCircle, Sparkles, Calendar,
   Shield, FileText, History, TrendingUp, Target, Brain,
-  ClipboardList, CalendarDays, GraduationCap, Star,
+  ClipboardList, CalendarDays, GraduationCap, Star, Download,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { BadgeMode } from '@/components/ui/badge-mode'
@@ -34,9 +34,10 @@ export function JobDetailClient({ job }: { job: Job }) {
   const { toast } = useToast()
   const hasVacancies = job.vacancies > 0
   const hasSelection = job.selectionProcess.length > 0
+  const applyHref = job.applyUrl ?? job.documentUrl
 
   const applyExternal = () =>
-    toast('Application portal', 'info', { description: 'Demo only — opens the official board website after backend integration.' })
+    toast('Application link unavailable', 'info', { description: 'No official link was found for this posting yet.' })
 
   return (
     <AppShell>
@@ -56,9 +57,24 @@ export function JobDetailClient({ job }: { job: Job }) {
             <p className="text-sm text-text-muted mt-1">{job.advNumber}</p>
           </div>
           <div className="flex flex-wrap gap-2 flex-shrink-0">
-            <Button size="sm" onClick={applyExternal} className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
-              <ExternalLink className="w-3.5 h-3.5" /> Apply Now
-            </Button>
+            {applyHref ? (
+              <a href={applyHref} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5" /> Apply Now
+                </Button>
+              </a>
+            ) : (
+              <Button size="sm" onClick={applyExternal} className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
+                <ExternalLink className="w-3.5 h-3.5" /> Apply Now
+              </Button>
+            )}
+            {job.documentUrl && (
+              <a href={job.documentUrl} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> Notification
+                </Button>
+              </a>
+            )}
             <Button size="sm" variant="outline" onClick={() => setActiveTab('match')} className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
               <Target className="w-3.5 h-3.5" /> Check My Match
             </Button>
@@ -282,9 +298,17 @@ export function JobDetailClient({ job }: { job: Job }) {
                 ))}
               </ol>
               <div className="mt-5">
-                <Button onClick={applyExternal} className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
-                  <ExternalLink className="w-4 h-4" /> Apply on Official Website
-                </Button>
+                {applyHref ? (
+                  <a href={applyHref} target="_blank" rel="noopener noreferrer">
+                    <Button className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
+                      <ExternalLink className="w-4 h-4" /> Apply on Official Website
+                    </Button>
+                  </a>
+                ) : (
+                  <Button onClick={applyExternal} className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold gap-1.5">
+                    <ExternalLink className="w-4 h-4" /> Apply on Official Website
+                  </Button>
+                )}
               </div>
             </div>
           </div>

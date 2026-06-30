@@ -100,6 +100,14 @@ function mapTender(r: any): Tender {
     riskLevel: riskFromScore(score),
     missingDocuments: [],
     bidReadiness: score,
+    documentUrl: r.document_url ?? r.document_link ?? undefined,
+    sourceUrl: r.source_url ?? undefined,
+    publishedDate: r.published_date ? fmtDate(r.published_date) : undefined,
+    organization: r.organization ?? undefined,
+    location: r.location ?? undefined,
+    sourceCount: typeof r.source_count === 'number' ? r.source_count : undefined,
+    contractorClass: r.contractor_class ?? undefined,
+    experience: r.experience ?? r.experience_required ?? undefined,
   }
 }
 
@@ -126,6 +134,11 @@ function mapJob(r: any): Job {
     ageLimit: r.age_limit ?? 'As per norms',
     examDate: r.exam_date ? fmtDate(r.exam_date) : undefined,
     selectionProcess: toList(r.selection_process),
+    applyUrl: r.apply_url ?? r.apply_link ?? undefined,
+    documentUrl: r.document_url ?? undefined,
+    publishedDate: r.published_date ? fmtDate(r.published_date) : (r.post_date ? fmtDate(r.post_date) : undefined),
+    applicationFee: r.application_fee ?? undefined,
+    reservationInfo: r.reservation_info ?? undefined,
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */

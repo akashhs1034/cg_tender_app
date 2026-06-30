@@ -6,7 +6,7 @@ import {
   ChevronLeft, MapPin, Clock, ExternalLink, FileEdit, Upload,
   Sparkles, CheckCircle2, AlertTriangle, ArrowUpRight,
   FileText, Calendar, Shield, ClipboardList, History, RefreshCw,
-  IndianRupee, Building2, Eye, Bookmark, BookmarkCheck,
+  IndianRupee, Building2, Eye, Bookmark, BookmarkCheck, Download, Layers,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { BadgeMode } from '@/components/ui/badge-mode'
@@ -65,16 +65,28 @@ export function TenderDetailClient({ tender }: { tender: Tender }) {
             <p className="text-sm text-text-muted mt-1">{tender.nitNumber}</p>
           </div>
           <div className="flex flex-wrap gap-2 flex-shrink-0">
-            <Button size="sm" onClick={() => setActiveTab('checklist')} className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
-              <FileEdit className="w-3.5 h-3.5" /> Prepare Bid
-            </Button>
+            {tender.documentUrl ? (
+              <a href={tender.documentUrl} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
+                  <Download className="w-3.5 h-3.5" /> View Document
+                </Button>
+              </a>
+            ) : (
+              <Button size="sm" onClick={() => setActiveTab('checklist')} className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
+                <FileEdit className="w-3.5 h-3.5" /> Prepare Bid
+              </Button>
+            )}
             <Button size="sm" variant="outline" onClick={handleSave} aria-pressed={saved}
               className={cn('gap-1.5', saved ? 'border-brand-blue/40 text-brand-blue bg-brand-blue/10' : 'border-border-subtle text-text-secondary hover:bg-surface-elevated')}>
               {saved ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />} {saved ? 'Saved' : 'Save'}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => toast('Opening source', 'info', { description: tender.source })} className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
-              <ExternalLink className="w-3.5 h-3.5" /> Open Source
-            </Button>
+            {tender.sourceUrl && (
+              <a href={tender.sourceUrl} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5" /> Open Portal
+                </Button>
+              </a>
+            )}
           </div>
         </div>
 
@@ -84,6 +96,11 @@ export function TenderDetailClient({ tender }: { tender: Tender }) {
           <span className="flex items-center gap-1.5 text-text-secondary"><MapPin className="w-3.5 h-3.5 text-text-muted" />{tender.district}, {tender.state}</span>
           <span className="flex items-center gap-1.5 text-text-primary font-semibold"><IndianRupee className="w-3.5 h-3.5 text-brand-blue" />{tender.estimatedValue.replace('₹', '')} Est. Value</span>
           <span className="flex items-center gap-1.5 text-danger font-medium"><Clock className="w-3.5 h-3.5" />Deadline: {tender.deadline}</span>
+          {typeof tender.sourceCount === 'number' && tender.sourceCount > 1 && (
+            <span className="flex items-center gap-1.5 text-success font-medium" title="Cross-verified across multiple sources">
+              <Layers className="w-3.5 h-3.5" />Seen across {tender.sourceCount} sources
+            </span>
+          )}
         </div>
       </div>
 
@@ -119,21 +136,27 @@ export function TenderDetailClient({ tender }: { tender: Tender }) {
               <div className="rounded-xl border border-border-subtle bg-surface p-5">
                 <h3 className="font-heading font-semibold text-sm text-text-primary mb-3">Quick Details</h3>
                 <dl className="grid grid-cols-2 gap-4">
-                  {[
-                    { label: 'NIT Number', value: tender.nitNumber },
+                  {([
+                    { label: 'NIT / Tender No.', value: tender.nitNumber },
+                    { label: 'Organization', value: tender.organization },
                     { label: 'State', value: tender.state },
                     { label: 'District', value: tender.district },
                     { label: 'Category', value: tender.category },
                     { label: 'Mode', value: tender.mode },
-                    { label: 'Source', value: tender.source },
                     { label: 'Estimated Value', value: tender.estimatedValue },
                     { label: 'EMD', value: tender.emd },
-                  ].map((item) => (
-                    <div key={item.label}>
-                      <dt className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-0.5">{item.label}</dt>
-                      <dd className="text-xs text-text-secondary">{item.value}</dd>
-                    </div>
-                  ))}
+                    { label: 'Contractor Class', value: tender.contractorClass },
+                    { label: 'Experience', value: tender.experience },
+                    { label: 'Published', value: tender.publishedDate },
+                    { label: 'Source', value: tender.source },
+                  ] as { label: string; value?: string }[])
+                    .filter((item) => item.value && item.value !== 'Not specified' && item.value !== '—')
+                    .map((item) => (
+                      <div key={item.label}>
+                        <dt className="text-[10px] font-semibold text-text-muted uppercase tracking-wide mb-0.5">{item.label}</dt>
+                        <dd className="text-xs text-text-secondary break-words">{item.value}</dd>
+                      </div>
+                    ))}
                 </dl>
               </div>
             </div>
@@ -190,17 +213,20 @@ export function TenderDetailClient({ tender }: { tender: Tender }) {
         {activeTab === 'dates' && (
           <div className="max-w-lg">
             <div className="rounded-xl border border-border-subtle bg-surface p-6 space-y-4">
-              {[
+              {([
+                { label: 'Published', date: tender.publishedDate, highlight: false },
                 { label: 'Bid Submission Deadline', date: tender.deadline, highlight: true },
-              ].map((item) => (
-                <div key={item.label} className={cn('flex items-center justify-between py-3 border-b border-border-subtle last:border-0', item.highlight && 'text-danger')}>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-text-muted" />
-                    <span className="text-sm text-text-secondary">{item.label}</span>
+              ] as { label: string; date?: string; highlight: boolean }[])
+                .filter((item) => item.date && item.date !== 'Not specified')
+                .map((item) => (
+                  <div key={item.label} className={cn('flex items-center justify-between py-3 border-b border-border-subtle last:border-0', item.highlight && 'text-danger')}>
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-text-muted" />
+                      <span className="text-sm text-text-secondary">{item.label}</span>
+                    </div>
+                    <span className={cn('text-sm font-semibold', item.highlight ? 'text-danger' : 'text-text-primary')}>{item.date}</span>
                   </div>
-                  <span className={cn('text-sm font-semibold', item.highlight ? 'text-danger' : 'text-text-primary')}>{item.date}</span>
-                </div>
-              ))}
+                ))}
               <p className="text-xs text-text-muted">Pre-bid meeting, query, and opening dates are listed in the official tender document.</p>
             </div>
           </div>
@@ -209,6 +235,21 @@ export function TenderDetailClient({ tender }: { tender: Tender }) {
         {/* Documents Required */}
         {activeTab === 'documents' && (
           <div className="max-w-2xl space-y-4">
+            {tender.documentUrl && (
+              <a href={tender.documentUrl} target="_blank" rel="noopener noreferrer"
+                className="flex items-center justify-between gap-3 rounded-xl border border-brand-blue/30 bg-brand-blue/5 px-5 py-4 hover:bg-brand-blue/10 transition-colors group">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-brand-blue/15 flex items-center justify-center flex-shrink-0">
+                    <FileText className="w-5 h-5 text-brand-blue" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">Official Tender Document</p>
+                    <p className="text-xs text-text-muted">Open the full notice / NIT from the source portal</p>
+                  </div>
+                </div>
+                <Download className="w-4 h-4 text-brand-blue group-hover:translate-y-0.5 transition-transform flex-shrink-0" />
+              </a>
+            )}
             <div className="rounded-xl border border-border-subtle bg-surface p-6">
               <h3 className="font-heading font-semibold text-base text-text-primary mb-4">Required Documents</h3>
               {hasDocuments ? (

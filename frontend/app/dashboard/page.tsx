@@ -9,15 +9,23 @@ import { StatCard } from '@/components/stat-card'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { AiMatchBadge } from '@/components/ui/ai-match-badge'
 import { getTenders, getJobs, getDashboardStats } from '@/lib/data'
+import { getCurrentUser } from '@/lib/supabase/server'
 
 export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
-  const [dashboardStats, tenders, jobs] = await Promise.all([
+  const [dashboardStats, tenders, jobs, user] = await Promise.all([
     getDashboardStats(),
     getTenders(),
     getJobs(),
+    getCurrentUser(),
   ])
+
+  const meta = (user?.user_metadata ?? {}) as Record<string, unknown>
+  const firstName =
+    (typeof meta.full_name === 'string' && meta.full_name.split(' ')[0]) ||
+    user?.email?.split('@')[0] ||
+    null
 
   const statCards = [
     { label: 'Active Tenders', value: dashboardStats.activeTenders, icon: FileText, iconColor: 'text-brand-blue', iconBg: 'bg-brand-blue/10', trend: dashboardStats.newToday > 0 ? `+${dashboardStats.newToday} today` : undefined, trendUp: true },
@@ -44,7 +52,7 @@ export default async function DashboardPage() {
         variant="dashboard"
         eyebrow="OPPORTA Intelligence"
         icon={<Sparkles className="h-3.5 w-3.5" />}
-        title="Welcome back"
+        title={firstName ? `Welcome back, ${firstName}` : 'Welcome back'}
         subtitle="Your live overview of tenders, jobs, and opportunities across Chhattisgarh & Uttar Pradesh."
       >
         <Link href="/tenders" className="inline-flex items-center gap-1.5 rounded-lg bg-brand-blue px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-blue/90">

@@ -4,6 +4,7 @@ import {
   MapPin, ArrowRight, Sparkles, TrendingUp, AlertTriangle,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { PageHero } from '@/components/page-hero'
 import { StatCard } from '@/components/stat-card'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { AiMatchBadge } from '@/components/ui/ai-match-badge'
@@ -24,6 +25,22 @@ const recommendedJobs = jobs.filter((j) => j.isRecommended).slice(0, 3)
 export default function DashboardPage() {
   return (
     <AppShell pageTitle="Dashboard" pageSubtitle="Your opportunity overview">
+      {/* 3D brand hero */}
+      <PageHero
+        variant="dashboard"
+        eyebrow="OPPORTA Intelligence"
+        icon={<Sparkles className="h-3.5 w-3.5" />}
+        title="Welcome back, Rajesh"
+        subtitle="Your live overview of tenders, jobs, and opportunities across Chhattisgarh & Uttar Pradesh."
+      >
+        <Link href="/tenders" className="inline-flex items-center gap-1.5 rounded-lg bg-brand-blue px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-blue/90">
+          <FileText className="h-3.5 w-3.5" /> Browse Tenders
+        </Link>
+        <Link href="/jobs" className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface/60 px-3.5 py-2 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary hover:bg-surface-elevated">
+          <Briefcase className="h-3.5 w-3.5" /> Explore Jobs
+        </Link>
+      </PageHero>
+
       {/* Stat grid */}
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         {statCards.map((s) => (

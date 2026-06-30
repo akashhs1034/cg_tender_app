@@ -18,11 +18,13 @@ export function BackgroundShell({ variant = 'global' }: { variant?: BackgroundVa
     // text crisp on top. Never mounted on the standalone login / signup pages.
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.30] sm:opacity-[0.12]"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.34] sm:opacity-[0.22]"
         style={{ backgroundImage: `url(${BACKGROUNDS[variant]})` }}
       />
+      {/* Accent glow to give the backdrop depth without brightening the page */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(59,124,244,0.10),transparent_60%)]" />
       {/* Soft scrim so cards and text stay readable while the 3D art shows through */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background/5 via-background/20 to-background/65" />
+      <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/30 to-background/70" />
     </div>
   )
 }

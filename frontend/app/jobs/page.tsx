@@ -4,14 +4,17 @@ import { useState } from 'react'
 import Link from 'next/link'
 import {
   Search, Filter, MapPin, Clock, Users, Eye, SlidersHorizontal, X, CheckCircle,
-  GraduationCap, Bookmark, BookmarkCheck, Share2,
+  GraduationCap, Bookmark, BookmarkCheck, Share2, Briefcase, RotateCcw,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { AiMatchBadge } from '@/components/ui/ai-match-badge'
+import { JobEligibilityDialog } from '@/components/job-eligibility-dialog'
+import { useToast } from '@/components/ui/toast'
 import { jobs, JOB_CATEGORIES, getDistricts } from '@/lib/mock-data'
-import type { TenderMode, State } from '@/lib/mock-data'
+import type { TenderMode, State, Job } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -27,23 +30,44 @@ export default function JobsPage() {
   const [catFilter, setCatFilter] = useState('All')
   const [showFilters, setShowFilters] = useState(false)
   const [saved, setSaved] = useState<Set<string>>(new Set())
+  const [eligibilityJob, setEligibilityJob] = useState<Job | null>(null)
+  const { toast } = useToast()
 
-  const toggleSave = (id: string) =>
+  const toggleSave = (j: Job) => {
+    const isSaved = saved.has(j.id)
     setSaved((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (isSaved) next.delete(j.id)
+      else next.add(j.id)
       return next
     })
+    if (isSaved) toast('Removed from saved', 'info')
+    else toast('Saved', 'success', { description: j.title })
+  }
 
   const share = async (title: string, path: string) => {
     const url = window.location.origin + path
     try {
-      if (navigator.share) await navigator.share({ title, url })
-      else await navigator.clipboard?.writeText(url)
+      if (navigator.share) {
+        await navigator.share({ title, url })
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url)
+        toast('Link copied', 'success', { description: url })
+      }
     } catch {
       /* share sheet dismissed — ignore */
     }
+  }
+
+  const hasActiveFilters =
+    search !== '' || modeFilter !== 'All' || stateFilter !== 'All' || districtFilter !== 'All' || catFilter !== 'All'
+
+  const resetFilters = () => {
+    setSearch('')
+    setModeFilter('All')
+    setStateFilter('All')
+    setDistrictFilter('All')
+    setCatFilter('All')
   }
 
   const filtered = jobs.filter((j) => {
@@ -57,6 +81,13 @@ export default function JobsPage() {
 
   return (
     <AppShell pageTitle="Jobs" pageSubtitle={`${jobs.length} active jobs across CG & UP`} bg="jobs">
+      <PageHero
+        variant="jobs"
+        eyebrow="Government Jobs"
+        icon={<Briefcase className="h-3.5 w-3.5" />}
+        title="Government Jobs"
+        subtitle={`${jobs.length} active recruitments across Chhattisgarh & Uttar Pradesh — filter by state, district, mode and category.`}
+      />
       <PageTabs
         accent="purple"
         tabs={[
@@ -151,6 +182,15 @@ export default function JobsPage() {
               ))}
             </div>
           </div>
+          <div className="flex items-end">
+            <button
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Reset filters
+            </button>
+          </div>
         </div>
       )}
 
@@ -218,19 +258,17 @@ export default function JobsPage() {
                       <Eye className="w-3.5 h-3.5" /> View Details
                     </Button>
                   </Link>
-                  <Link href={`/jobs/${j.id}`}>
-                    <Button size="sm" variant="outline" title="Check Eligibility" aria-label="Check Eligibility"
-                      className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <CheckCircle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Check Eligibility</span>
-                    </Button>
-                  </Link>
-                  <Link href="/exam-planner">
+                  <Button size="sm" variant="outline" onClick={() => setEligibilityJob(j)} title="Check Eligibility" aria-label="Check Eligibility"
+                    className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
+                    <CheckCircle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Check Eligibility</span>
+                  </Button>
+                  <Link href={`/exam-planner?jobId=${j.id}`}>
                     <Button size="sm" variant="outline" title="Exam Planner" aria-label="Exam Planner"
                       className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
                       <GraduationCap className="w-3.5 h-3.5" /><span className="hidden sm:inline">Exam Planner</span>
                     </Button>
                   </Link>
-                  <Button size="sm" variant="outline" onClick={() => toggleSave(j.id)} aria-pressed={saved.has(j.id)}
+                  <Button size="sm" variant="outline" onClick={() => toggleSave(j)} aria-pressed={saved.has(j.id)}
                     title={saved.has(j.id) ? 'Saved' : 'Save'} aria-label={saved.has(j.id) ? 'Saved' : 'Save'}
                     className={cn('text-xs h-8 gap-1.5', saved.has(j.id)
                       ? 'border-[#6C3EF4]/40 text-[#6C3EF4] bg-[#6C3EF4]/10'
@@ -248,6 +286,12 @@ export default function JobsPage() {
           ))
         )}
       </div>
+
+      <JobEligibilityDialog
+        job={eligibilityJob}
+        open={eligibilityJob !== null}
+        onClose={() => setEligibilityJob(null)}
+      />
     </AppShell>
   )
 }

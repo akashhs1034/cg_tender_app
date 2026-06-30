@@ -1,14 +1,16 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Search, X, MapPin, Clock, FileEdit, FileText, ClipboardCheck,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { Button } from '@/components/ui/button'
+import { useToast } from '@/components/ui/toast'
 import { tenders, TENDER_CATEGORIES, getDistricts } from '@/lib/mock-data'
 import type { State } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
@@ -22,9 +24,21 @@ export default function BidDocumentsPage() {
   const [stateFilter, setStateFilter] = useState<State | 'All'>('All')
   const [districtFilter, setDistrictFilter] = useState('All')
   const [catFilter, setCatFilter] = useState('All')
+  // Deep-link focus from a tender card ("Bid Document" → /bid-documents?tenderId=…).
+  // Read from the URL on the client so the page stays statically rendered.
+  const [focusId, setFocusId] = useState<string | null>(null)
+  const { toast } = useToast()
+
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('tenderId')
+    if (id && tenders.some((t) => t.id === id)) setFocusId(id)
+  }, [])
+
+  const focusedTender = focusId ? tenders.find((t) => t.id === focusId) ?? null : null
 
   const q = search.trim().toLowerCase()
   const filtered = tenders.filter((t) => {
+    if (focusId) return t.id === focusId
     if (q && !t.nitNumber.toLowerCase().includes(q) && !t.title.toLowerCase().includes(q)) return false
     if (stateFilter !== 'All' && t.state !== stateFilter) return false
     if (districtFilter !== 'All' && t.district !== districtFilter) return false
@@ -34,6 +48,13 @@ export default function BidDocumentsPage() {
 
   return (
     <AppShell pageTitle="Bid Documents" pageSubtitle="Prepare and track bid paperwork for any tender" bg="tenders">
+      <PageHero
+        variant="tenders"
+        eyebrow="Bid Documents"
+        icon={<FileEdit className="h-3.5 w-3.5" />}
+        title="Bid Documents"
+        subtitle="Prepare and track bid paperwork for any tender — filter by state, district, category or NIT number."
+      />
       <PageTabs
         accent="blue"
         tabs={[
@@ -42,7 +63,24 @@ export default function BidDocumentsPage() {
         ]}
       />
 
+      {focusedTender && (
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-blue/25 bg-brand-blue/5 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-brand-blue">Bid workspace</p>
+            <p className="truncate text-sm font-semibold text-text-primary">{focusedTender.title}</p>
+            <p className="text-xs text-text-muted">{focusedTender.nitNumber}</p>
+          </div>
+          <button
+            onClick={() => setFocusId(null)}
+            className="flex items-center gap-1.5 rounded-md border border-border-subtle px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:bg-surface-elevated hover:text-text-primary"
+          >
+            <X className="h-3.5 w-3.5" /> Show all tenders
+          </button>
+        </div>
+      )}
+
       {/* Tender selector / filter area */}
+      {!focusId && (
       <div className="mb-5 p-4 rounded-xl border border-border-subtle bg-surface">
         <div className="relative mb-4">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
@@ -103,6 +141,7 @@ export default function BidDocumentsPage() {
           </div>
         </div>
       </div>
+      )}
 
       <p className="text-xs text-text-muted mb-4">Showing {filtered.length} of {tenders.length} tenders</p>
 
@@ -151,10 +190,19 @@ export default function BidDocumentsPage() {
                     <FileText className="w-3.5 h-3.5" /> View Tender
                   </Button>
                 </Link>
-                <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold text-xs h-8 gap-1.5">
+                <Button
+                  size="sm"
+                  onClick={() => toast('Bid draft queued', 'info', { description: `Demo for ${t.nitNumber} — bid drafting connects after backend integration.` })}
+                  className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold text-xs h-8 gap-1.5"
+                >
                   <FileEdit className="w-3.5 h-3.5" /> Generate Draft Bid
                 </Button>
-                <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => toast('Checklist ready', 'success', { description: 'Open the tender to view its full bid checklist.' })}
+                  className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5"
+                >
                   <ClipboardCheck className="w-3.5 h-3.5" /> Bid Checklist
                 </Button>
               </div>

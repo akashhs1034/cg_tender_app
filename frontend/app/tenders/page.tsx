@@ -4,14 +4,17 @@ import { useState } from 'react'
 import Link from 'next/link'
 import {
   Search, Filter, MapPin, Clock, FileEdit, Eye, SlidersHorizontal, X,
-  Sparkles, Bookmark, BookmarkCheck, Share2,
+  Sparkles, Bookmark, BookmarkCheck, Share2, FileText, RotateCcw,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { AiMatchBadge } from '@/components/ui/ai-match-badge'
+import { TenderAnalysisDialog } from '@/components/tender-analysis-dialog'
+import { useToast } from '@/components/ui/toast'
 import { tenders, TENDER_CATEGORIES, getDistricts } from '@/lib/mock-data'
-import type { TenderMode, State } from '@/lib/mock-data'
+import type { TenderMode, State, Tender } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
@@ -27,23 +30,44 @@ export default function TendersPage() {
   const [catFilter, setCatFilter] = useState('All')
   const [showFilters, setShowFilters] = useState(false)
   const [saved, setSaved] = useState<Set<string>>(new Set())
+  const [analysisTender, setAnalysisTender] = useState<Tender | null>(null)
+  const { toast } = useToast()
 
-  const toggleSave = (id: string) =>
+  const toggleSave = (t: Tender) => {
+    const isSaved = saved.has(t.id)
     setSaved((prev) => {
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
+      if (isSaved) next.delete(t.id)
+      else next.add(t.id)
       return next
     })
+    if (isSaved) toast('Removed from saved', 'info')
+    else toast('Saved', 'success', { description: t.title })
+  }
 
   const share = async (title: string, path: string) => {
     const url = window.location.origin + path
     try {
-      if (navigator.share) await navigator.share({ title, url })
-      else await navigator.clipboard?.writeText(url)
+      if (navigator.share) {
+        await navigator.share({ title, url })
+      } else if (navigator.clipboard) {
+        await navigator.clipboard.writeText(url)
+        toast('Link copied', 'success', { description: url })
+      }
     } catch {
       /* share sheet dismissed — ignore */
     }
+  }
+
+  const hasActiveFilters =
+    search !== '' || modeFilter !== 'All' || stateFilter !== 'All' || districtFilter !== 'All' || catFilter !== 'All'
+
+  const resetFilters = () => {
+    setSearch('')
+    setModeFilter('All')
+    setStateFilter('All')
+    setDistrictFilter('All')
+    setCatFilter('All')
   }
 
   const filtered = tenders.filter((t) => {
@@ -57,6 +81,13 @@ export default function TendersPage() {
 
   return (
     <AppShell pageTitle="Tenders" pageSubtitle={`${tenders.length} active tenders across CG & UP`} bg="tenders">
+      <PageHero
+        variant="tenders"
+        eyebrow="Tender Portal"
+        icon={<FileText className="h-3.5 w-3.5" />}
+        title="Government Tenders"
+        subtitle={`${tenders.length} active tenders across Chhattisgarh & Uttar Pradesh — filter by state, district, mode and category.`}
+      />
       <PageTabs
         accent="blue"
         tabs={[
@@ -151,6 +182,15 @@ export default function TendersPage() {
               ))}
             </div>
           </div>
+          <div className="flex items-end">
+            <button
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Reset filters
+            </button>
+          </div>
         </div>
       )}
 
@@ -218,19 +258,17 @@ export default function TendersPage() {
                       <Eye className="w-3.5 h-3.5" /> View Details
                     </Button>
                   </Link>
-                  <Link href={`/tenders/${t.id}`}>
-                    <Button size="sm" variant="outline" title="Analyze" aria-label="Analyze"
-                      className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">Analyze</span>
-                    </Button>
-                  </Link>
-                  <Link href="/bid-documents">
+                  <Button size="sm" variant="outline" onClick={() => setAnalysisTender(t)} title="Analyze" aria-label="Analyze"
+                    className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">Analyze</span>
+                  </Button>
+                  <Link href={`/bid-documents?tenderId=${t.id}`}>
                     <Button size="sm" variant="outline" title="Bid Document" aria-label="Bid Document"
                       className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
                       <FileEdit className="w-3.5 h-3.5" /><span className="hidden sm:inline">Bid Document</span>
                     </Button>
                   </Link>
-                  <Button size="sm" variant="outline" onClick={() => toggleSave(t.id)} aria-pressed={saved.has(t.id)}
+                  <Button size="sm" variant="outline" onClick={() => toggleSave(t)} aria-pressed={saved.has(t.id)}
                     title={saved.has(t.id) ? 'Saved' : 'Save'} aria-label={saved.has(t.id) ? 'Saved' : 'Save'}
                     className={cn('text-xs h-8 gap-1.5', saved.has(t.id)
                       ? 'border-brand-blue/40 text-brand-blue bg-brand-blue/10'
@@ -248,6 +286,12 @@ export default function TendersPage() {
           ))
         )}
       </div>
+
+      <TenderAnalysisDialog
+        tender={analysisTender}
+        open={analysisTender !== null}
+        onClose={() => setAnalysisTender(null)}
+      />
     </AppShell>
   )
 }

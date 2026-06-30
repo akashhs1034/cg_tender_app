@@ -18,3 +18,9 @@ probe_*.png
 probe_*.html
 *_probe.html
 portal_*.html
+
+# Frontend design source artifacts — not part of the committed app
+*.zip
+frontend_assets/
+frontend/node_modules/
+frontend/.next/

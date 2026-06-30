@@ -1,0 +1,214 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: var(--font-inter), 'Inter Fallback', system-ui, sans-serif;
+  --font-heading: var(--font-plus-jakarta), 'Plus Jakarta Sans Fallback', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), 'Geist Mono Fallback';
+  --font-brand: var(--font-orbitron), 'Orbitron Fallback', system-ui, sans-serif;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* OPPORTA brand colors */
+  --color-navy: var(--navy);
+  --color-indigo-deep: var(--indigo-deep);
+  --color-brand-blue: var(--brand-blue);
+  --color-brand-cyan: var(--brand-cyan);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-border-subtle: var(--border-subtle);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-ai-badge: var(--ai-badge);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Core palette */
+  --navy: #080E1D;
+  --indigo-deep: #111829;
+  --brand-blue: #3B7CF4;
+  --brand-cyan: #22D3EE;
+  --surface: #141C2E;
+  --surface-elevated: #1C2640;
+  --border-subtle: rgba(255,255,255,0.08);
+  --text-primary: #F0F4FF;
+  --text-secondary: #A8B4CC;
+  --text-muted: #5A6A84;
+  --ai-badge: #6C3EF4;
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+
+  /* Shadcn tokens mapped to dark navy theme */
+  --background: #080E1D;
+  --foreground: #F0F4FF;
+  --card: #141C2E;
+  --card-foreground: #F0F4FF;
+  --popover: #1C2640;
+  --popover-foreground: #F0F4FF;
+  --primary: #3B7CF4;
+  --primary-foreground: #ffffff;
+  --secondary: #1C2640;
+  --secondary-foreground: #F0F4FF;
+  --muted: #1C2640;
+  --muted-foreground: #5A6A84;
+  --accent: #22D3EE;
+  --accent-foreground: #080E1D;
+  --destructive: #EF4444;
+  --border: rgba(255,255,255,0.08);
+  --input: rgba(255,255,255,0.06);
+  --ring: #3B7CF4;
+  --chart-1: #3B7CF4;
+  --chart-2: #22D3EE;
+  --chart-3: #10B981;
+  --chart-4: #F59E0B;
+  --chart-5: #6C3EF4;
+  --radius: 0.75rem;
+
+  --sidebar: #111829;
+  --sidebar-foreground: #A8B4CC;
+  --sidebar-primary: #3B7CF4;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #1C2640;
+  --sidebar-accent-foreground: #F0F4FF;
+  --sidebar-border: rgba(255,255,255,0.06);
+  --sidebar-ring: #3B7CF4;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* Glassmorphism utilities */
+.glass-card {
+  background: rgba(20, 28, 46, 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card-light {
+  background: rgba(28, 38, 64, 0.5);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Gradient mesh backgrounds */
+.bg-mesh-tender {
+  background:
+    radial-gradient(ellipse 60% 50% at 80% 20%, rgba(59, 124, 244, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 10% 80%, rgba(34, 211, 238, 0.08) 0%, transparent 60%),
+    #080E1D;
+}
+
+.bg-mesh-job {
+  background:
+    radial-gradient(ellipse 60% 50% at 20% 20%, rgba(108, 62, 244, 0.12) 0%, transparent 70%),
+    radial-gradient(ellipse 40% 40% at 90% 80%, rgba(16, 185, 129, 0.08) 0%, transparent 60%),
+    #080E1D;
+}
+
+.bg-mesh-hero {
+  background:
+    radial-gradient(ellipse 80% 60% at 50% -10%, rgba(59, 124, 244, 0.18) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 40% at 90% 60%, rgba(34, 211, 238, 0.10) 0%, transparent 50%),
+    radial-gradient(ellipse 30% 30% at 5% 80%, rgba(108, 62, 244, 0.08) 0%, transparent 50%),
+    #080E1D;
+}
+
+/* OPPORTA wordmark */
+.opporta-wordmark {
+  font-family: var(--font-orbitron), 'Orbitron', system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  background: linear-gradient(90deg, #3B7CF4 0%, #22D3EE 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.opporta-wordmark-white {
+  font-family: var(--font-orbitron), 'Orbitron', system-ui, sans-serif;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #F0F4FF;
+}
+
+/* Hero 3D background */
+.bg-hero-3d {
+  background:
+    radial-gradient(ellipse 90% 70% at 50% 0%, rgba(59, 124, 244, 0.22) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 90% 55%, rgba(34, 211, 238, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse 35% 35% at 5% 75%, rgba(108, 62, 244, 0.10) 0%, transparent 50%),
+    #080E1D;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111829;
+}
+::-webkit-scrollbar-thumb {
+  background: #1C2640;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3B7CF4;
+}

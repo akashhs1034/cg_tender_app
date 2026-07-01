@@ -147,7 +147,7 @@ function mapJob(r: any): Job {
 // Order by ai_score (best matches first), nulls last. We cap listings so the
 // client stays snappy while still surfacing the most relevant opportunities.
 
-const LIST_LIMIT = 300
+const LIST_LIMIT = 120
 
 export async function getTenders(): Promise<Tender[]> {
   const { data, error } = await supabase

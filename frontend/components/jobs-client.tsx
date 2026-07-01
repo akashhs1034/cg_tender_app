@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Search, Filter, MapPin, Clock, Users, Eye, SlidersHorizontal, X, CheckCircle,
@@ -75,6 +75,14 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
     if (catFilter !== 'All' && j.category !== catFilter) return false
     return true
   })
+
+  // Paginate rendering so we don't mount hundreds of heavy cards at once.
+  const PAGE = 24
+  const [visible, setVisible] = useState(PAGE)
+  useEffect(() => {
+    setVisible(PAGE)
+  }, [search, modeFilter, stateFilter, districtFilter, catFilter])
+  const shown = filtered.slice(0, visible)
 
   return (
     <AppShell pageTitle="Jobs" pageSubtitle={`${jobs.length} active jobs across CG & UP`} bg="jobs">
@@ -208,7 +216,7 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
             <p className="text-sm text-text-muted mt-1">{t('try_adjusting')}</p>
           </div>
         ) : (
-          filtered.map((j) => (
+          shown.map((j) => (
             <div key={j.id} className="rounded-2xl card-premium hover-lift-violet overflow-hidden group">
               <div className="p-5">
                 {/* Header */}
@@ -289,6 +297,15 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
           ))
         )}
       </div>
+
+      {filtered.length > visible && (
+        <div className="flex justify-center mt-6">
+          <Button variant="outline" onClick={() => setVisible((v) => v + PAGE)}
+            className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated gap-1.5">
+            Load more ({filtered.length - visible} more)
+          </Button>
+        </div>
+      )}
 
       <JobEligibilityDialog
         job={eligibilityJob}

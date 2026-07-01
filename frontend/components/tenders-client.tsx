@@ -80,16 +80,16 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
     <AppShell pageTitle="Tenders" pageSubtitle={`${tenders.length} active tenders across CG & UP`} bg="tenders">
       <PageHero
         variant="tenders"
-        eyebrow="Tender Portal"
+        eyebrow={t('tender_portal')}
         icon={<FileText className="h-3.5 w-3.5" />}
-        title="Government Tenders"
+        title={t('government_tenders')}
         subtitle={`${tenders.length} active tenders across Chhattisgarh & Uttar Pradesh — filter by state, district, mode and category.`}
       />
       <PageTabs
         accent="blue"
         tabs={[
-          { label: 'Tender Portal', href: '/tenders' },
-          { label: 'Bid Documents', href: '/bid-documents' },
+          { label: t('tender_portal'), href: '/tenders' },
+          { label: t('bid_documents'), href: '/bid-documents' },
         ]}
       />
       {/* Search + Filter bar */}
@@ -263,12 +263,12 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => setAnalysisTender(t)} title="Analyze" aria-label="Analyze"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">Analyze</span>
+                    <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('analyze')}</span>
                   </Button>
                   <Link href={`/bid-documents?tenderId=${t.id}`}>
                     <Button size="sm" variant="outline" title="Bid Document" aria-label="Bid Document"
                       className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <FileEdit className="w-3.5 h-3.5" /><span className="hidden sm:inline">Bid Document</span>
+                      <FileEdit className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('bid_document')}</span>
                     </Button>
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => toggleSave(t)} aria-pressed={isSaved(t.id)}
@@ -277,11 +277,11 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
                       ? 'border-brand-blue/40 text-brand-blue bg-brand-blue/10'
                       : 'border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
                     {isSaved(t.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline">{isSaved(t.id) ? 'Saved' : 'Save'}</span>
+                    <span className="hidden sm:inline">{isSaved(t.id) ? t('saved') : t('save')}</span>
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => share(t.title, `/tenders/${t.id}`)} title="Share" aria-label="Share"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Share</span>
+                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('share')}</span>
                   </Button>
                 </div>
               </div>

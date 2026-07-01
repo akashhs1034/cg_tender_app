@@ -80,16 +80,16 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
     <AppShell pageTitle="Jobs" pageSubtitle={`${jobs.length} active jobs across CG & UP`} bg="jobs">
       <PageHero
         variant="jobs"
-        eyebrow="Government Jobs"
+        eyebrow={t('government_jobs')}
         icon={<Briefcase className="h-3.5 w-3.5" />}
-        title="Government Jobs"
+        title={t('government_jobs')}
         subtitle={`${jobs.length} active recruitments across Chhattisgarh & Uttar Pradesh — filter by state, district, mode and category.`}
       />
       <PageTabs
         accent="purple"
         tabs={[
-          { label: 'Government Jobs', href: '/jobs' },
-          { label: 'Exam Planner', href: '/exam-planner' },
+          { label: t('government_jobs'), href: '/jobs' },
+          { label: t('exam_planner'), href: '/exam-planner' },
         ]}
       />
       {/* Search + Filter bar */}
@@ -263,12 +263,12 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => setEligibilityJob(j)} title="Check Eligibility" aria-label="Check Eligibility"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <CheckCircle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Check Eligibility</span>
+                    <CheckCircle className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('check_eligibility')}</span>
                   </Button>
                   <Link href={`/exam-planner?jobId=${j.id}`}>
                     <Button size="sm" variant="outline" title="Exam Planner" aria-label="Exam Planner"
                       className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <GraduationCap className="w-3.5 h-3.5" /><span className="hidden sm:inline">Exam Planner</span>
+                      <GraduationCap className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('exam_planner')}</span>
                     </Button>
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => toggleSave(j)} aria-pressed={isSaved(j.id)}
@@ -277,11 +277,11 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
                       ? 'border-[#6C3EF4]/40 text-[#6C3EF4] bg-[#6C3EF4]/10'
                       : 'border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
                     {isSaved(j.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline">{isSaved(j.id) ? 'Saved' : 'Save'}</span>
+                    <span className="hidden sm:inline">{isSaved(j.id) ? t('saved') : t('save')}</span>
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => share(j.title, `/jobs/${j.id}`)} title="Share" aria-label="Share"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Share</span>
+                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('share')}</span>
                   </Button>
                 </div>
               </div>

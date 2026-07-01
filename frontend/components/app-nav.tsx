@@ -25,19 +25,20 @@ import { OpportaLogo } from '@/components/opporta-logo'
 import { LanguageSwitcher } from '@/components/language-switcher'
 import { useToast } from '@/components/ui/toast'
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/lib/language-context'
 
 const navItems = [
-  { label: 'Profile', href: '/profile', icon: User },
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Jobs', href: '/jobs', icon: Briefcase },
-  { label: 'Tenders', href: '/tenders', icon: FileText },
-  { label: 'Saved', href: '/saved', icon: Bookmark },
-  { label: 'Analytics', href: '/analytics', icon: BarChart2 },
-  { label: 'Our Website', href: '/', icon: ExternalLink, external: true },
+  { tKey: 'profile', href: '/profile', icon: User },
+  { tKey: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { tKey: 'jobs', href: '/jobs', icon: Briefcase },
+  { tKey: 'tenders', href: '/tenders', icon: FileText },
+  { tKey: 'saved', href: '/saved', icon: Bookmark },
+  { tKey: 'analytics', href: '/analytics', icon: BarChart2 },
+  { tKey: 'our_website', href: '/', icon: ExternalLink, external: true },
 ]
 
 const adminNavItems = [
-  { label: 'Admin Discovery Queue', href: '/admin/discovery', icon: ShieldAlert },
+  { tKey: 'admin_queue', href: '/admin/discovery', icon: ShieldAlert },
 ]
 
 interface AppNavProps {
@@ -51,6 +52,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
   const [profileOpen, setProfileOpen] = useState(false)
   const { toast } = useToast()
   const { user, displayName, email, signOut } = useAuth()
+  const { t } = useLanguage()
 
   const handleSignOut = async () => {
     setProfileOpen(false)
@@ -86,7 +88,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
                 )}
               >
                 <item.icon className={cn('w-4 h-4 flex-shrink-0', isActive ? 'text-brand-blue' : 'text-text-muted group-hover:text-text-secondary')} />
-                {item.label}
+                {t(item.tKey)}
                 {item.external && <ExternalLink className="w-3 h-3 ml-auto opacity-40" />}
               </Link>
             )
@@ -111,7 +113,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
                     )}
                   >
                     <item.icon className="w-4 h-4 flex-shrink-0" />
-                    {item.label}
+                    {t(item.tKey)}
                   </Link>
                 )
               })}
@@ -123,7 +125,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
         <div className="px-4 py-3 border-t border-border-subtle flex items-center justify-between">
           <LanguageSwitcher />
           {!user && (
-            <Link href="/login" className="text-xs font-semibold text-brand-blue hover:underline">Sign In</Link>
+            <Link href="/login" className="text-xs font-semibold text-brand-blue hover:underline">{t('sign_in')}</Link>
           )}
         </div>
 
@@ -146,16 +148,16 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
             {profileOpen && (
               <div className="mt-1 rounded-lg border border-border-subtle bg-popover overflow-hidden">
                 <Link href="/profile" className="flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors">
-                  <User className="w-3.5 h-3.5" /> Profile
+                  <User className="w-3.5 h-3.5" /> {t('profile')}
                 </Link>
                 <button
                   onClick={() => { setProfileOpen(false); toast('Settings — coming soon', 'info', { description: 'Account settings connect after backend integration.' }) }}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-colors"
                 >
-                  <Settings className="w-3.5 h-3.5" /> Settings
+                  <Settings className="w-3.5 h-3.5" /> {t('settings')}
                 </button>
                 <button onClick={handleSignOut} className="w-full flex items-center gap-2.5 px-3 py-2 text-sm text-danger hover:bg-danger/10 transition-colors">
-                  <LogOut className="w-3.5 h-3.5" /> Sign Out
+                  <LogOut className="w-3.5 h-3.5" /> {t('sign_out')}
                 </button>
               </div>
             )}
@@ -206,11 +208,11 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
               {user ? (
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="text-xs text-text-muted truncate max-w-[110px]">{email}</span>
-                  <button onClick={() => { setMobileOpen(false); handleSignOut() }} className="text-xs font-semibold text-danger border border-danger/30 px-2.5 py-1 rounded-lg hover:bg-danger/10 transition-colors">Sign Out</button>
+                  <button onClick={() => { setMobileOpen(false); handleSignOut() }} className="text-xs font-semibold text-danger border border-danger/30 px-2.5 py-1 rounded-lg hover:bg-danger/10 transition-colors">{t('sign_out')}</button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
-                  <Link href="/login" onClick={() => setMobileOpen(false)} className="text-xs font-semibold text-text-secondary border border-border-subtle px-2.5 py-1 rounded-lg hover:text-text-primary hover:bg-surface-elevated transition-colors">Sign In</Link>
+                  <Link href="/login" onClick={() => setMobileOpen(false)} className="text-xs font-semibold text-text-secondary border border-border-subtle px-2.5 py-1 rounded-lg hover:text-text-primary hover:bg-surface-elevated transition-colors">{t('sign_in')}</Link>
                   <Link href="/signup" onClick={() => setMobileOpen(false)} className="text-xs font-semibold text-white bg-brand-blue px-2.5 py-1 rounded-lg hover:bg-brand-blue/90 transition-colors">Sign Up</Link>
                 </div>
               )}
@@ -229,7 +231,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
                     )}
                   >
                     <item.icon className="w-4 h-4 flex-shrink-0" />
-                    {item.label}
+                    {t(item.tKey)}
                   </Link>
                 )
               })}
@@ -241,7 +243,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-surface-elevated transition-all"
                 >
                   <item.icon className="w-4 h-4 flex-shrink-0" />
-                  {item.label}
+                  {t(item.tKey)}
                 </Link>
               ))}
             </nav>

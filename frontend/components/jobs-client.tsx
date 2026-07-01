@@ -13,6 +13,7 @@ import { BadgeMode } from '@/components/ui/badge-mode'
 import { AiMatchBadge } from '@/components/ui/ai-match-badge'
 import { JobEligibilityDialog } from '@/components/job-eligibility-dialog'
 import { useToast } from '@/components/ui/toast'
+import { useLanguage } from '@/lib/language-context'
 import { JOB_CATEGORIES, getDistricts } from '@/lib/mock-data'
 import type { TenderMode, State, Job } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
@@ -32,6 +33,7 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
   const [saved, setSaved] = useState<Set<string>>(new Set())
   const [eligibilityJob, setEligibilityJob] = useState<Job | null>(null)
   const { toast } = useToast()
+  const { t } = useLanguage()
 
   const toggleSave = (j: Job) => {
     const isSaved = saved.has(j.id)
@@ -101,7 +103,7 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <input
             type="text"
-            placeholder="Search jobs, departments..."
+            placeholder={t('search_jobs')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-border-subtle bg-surface text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[#6C3EF4] transition-colors"
@@ -121,7 +123,7 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
               : 'border-border-subtle text-text-secondary bg-surface hover:bg-surface-elevated'
           )}
         >
-          <SlidersHorizontal className="w-4 h-4" /> Filters
+          <SlidersHorizontal className="w-4 h-4" /> {t('filters')}
         </button>
       </div>
 
@@ -194,21 +196,21 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
         </div>
       )}
 
-      <p className="text-xs text-text-muted mb-4">Showing {filtered.length} of {jobs.length} jobs</p>
+      <p className="text-xs text-text-muted mb-4">{t('showing')} {filtered.length} {t('of')} {jobs.length} {t('jobs').toLowerCase()}</p>
 
       {/* Job cards */}
       <div className="grid gap-4">
         {jobs.length === 0 ? (
           <div className="text-center py-16 rounded-2xl border border-border-subtle bg-surface">
             <Briefcase className="w-8 h-8 text-text-muted mx-auto mb-3" />
-            <p className="text-text-secondary font-medium">No jobs available right now</p>
+            <p className="text-text-secondary font-medium">{t('no_jobs_available')}</p>
             <p className="text-sm text-text-muted mt-1">We couldn&apos;t load any jobs. Please refresh in a moment.</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 rounded-2xl border border-border-subtle bg-surface">
             <Filter className="w-8 h-8 text-text-muted mx-auto mb-3" />
-            <p className="text-text-secondary font-medium">No jobs match your filters</p>
-            <p className="text-sm text-text-muted mt-1">Try adjusting your search or filters</p>
+            <p className="text-text-secondary font-medium">{t('no_jobs_match')}</p>
+            <p className="text-sm text-text-muted mt-1">{t('try_adjusting')}</p>
           </div>
         ) : (
           filtered.map((j) => (
@@ -261,7 +263,7 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
                 <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border-subtle">
                   <Link href={`/jobs/${j.id}`}>
                     <Button size="sm" className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold text-xs h-8 gap-1.5">
-                      <Eye className="w-3.5 h-3.5" /> View Details
+                      <Eye className="w-3.5 h-3.5" /> {t('view_details')}
                     </Button>
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => setEligibilityJob(j)} title="Check Eligibility" aria-label="Check Eligibility"

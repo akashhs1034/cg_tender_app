@@ -6,7 +6,7 @@ import {
   Search, X, MapPin, Clock, FileEdit, FileText, ClipboardCheck,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
-import { DemoBanner } from '@/components/demo-banner'
+import { BidDrafter } from '@/components/bid-drafter'
 import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
@@ -49,7 +49,6 @@ export default function BidDocumentsPage() {
 
   return (
     <AppShell pageTitle="Bid Documents" pageSubtitle="Prepare and track bid paperwork for any tender" bg="tenders">
-      <DemoBanner>Bid drafting is an interactive preview. It connects to your document vault and AI bid engine once those are wired up.</DemoBanner>
       <PageHero
         variant="tenders"
         eyebrow="Bid Documents"
@@ -64,6 +63,9 @@ export default function BidDocumentsPage() {
           { label: 'Bid Documents', href: '/bid-documents' },
         ]}
       />
+
+      {/* Manual bid drafter — works for any tender, in or out of the system */}
+      <BidDrafter />
 
       {focusedTender && (
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand-blue/25 bg-brand-blue/5 px-4 py-3">

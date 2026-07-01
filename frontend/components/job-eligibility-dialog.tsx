@@ -1,13 +1,44 @@
 'use client'
 
 import Link from 'next/link'
-import { CheckCircle2, ShieldCheck, ArrowUpRight, GraduationCap } from 'lucide-react'
+import { useState } from 'react'
+import { CheckCircle2, ShieldCheck, ArrowUpRight, GraduationCap, Sparkles, Loader2 } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import type { Job } from '@/lib/mock-data'
 
-/** Mock eligibility panel for a job — derived entirely from local mock data. */
 export function JobEligibilityDialog({ job, open, onClose }: { job: Job | null; open: boolean; onClose: () => void }) {
+  const [ai, setAi] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const runCheck = async () => {
+    if (!job) return
+    setLoading(true)
+    try {
+      const res = await fetch('/api/ai/eligibility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: job.title, department: job.department, category: job.category,
+          qualification: job.qualification, ageLimit: job.ageLimit,
+          eligibility: job.eligibility, selectionProcess: job.selectionProcess, description: job.description,
+        }),
+      })
+      const data = await res.json()
+      setAi(
+        data?.ok && data.text
+          ? data.text
+          : data?.reason === 'no_key'
+            ? 'AI eligibility check needs GEMINI_API_KEY to be configured on the server.'
+            : 'AI check is unavailable right now.'
+      )
+    } catch {
+      setAi('AI check is unavailable right now.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (!job) return null
   const verdict = job.matchScore >= 70 ? 'You likely qualify' : 'Review criteria carefully'
 
@@ -80,7 +111,24 @@ export function JobEligibilityDialog({ job, open, onClose }: { job: Job | null; 
             ))}
           </div>
         </div>
-        <p className="text-[10px] text-text-muted">Demo eligibility check from sample data — personalised matching connects after backend integration.</p>
+        {/* AI eligibility (Gemini) */}
+        <div className="rounded-xl border border-[#6C3EF4]/20 bg-[#6C3EF4]/5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-[#6C3EF4]">
+              <Sparkles className="h-4 w-4" /> AI Eligibility Check
+            </p>
+            <Button size="sm" onClick={runCheck} disabled={loading}
+              className="btn-glow bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white text-xs h-8 gap-1.5">
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {loading ? 'Checking…' : ai ? 'Regenerate' : 'Generate'}
+            </Button>
+          </div>
+          {ai ? (
+            <pre className="mt-3 whitespace-pre-wrap font-sans text-xs leading-relaxed text-text-secondary">{ai}</pre>
+          ) : (
+            <p className="mt-2 text-xs text-text-muted">Generate a live AI assessment of whether you should apply, and how to prepare.</p>
+          )}
+        </div>
       </div>
     </Modal>
   )

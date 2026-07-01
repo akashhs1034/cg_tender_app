@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { Sparkles, Shield, CheckCircle2, AlertTriangle, ArrowUpRight } from 'lucide-react'
+import { useState } from 'react'
+import { Sparkles, Shield, CheckCircle2, AlertTriangle, ArrowUpRight, Loader2 } from 'lucide-react'
 import { Modal } from '@/components/ui/modal'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -15,6 +16,37 @@ const riskColors: Record<string, string> = {
 
 /** Mock AI analysis panel for a tender — derived entirely from local mock data. */
 export function TenderAnalysisDialog({ tender, open, onClose }: { tender: Tender | null; open: boolean; onClose: () => void }) {
+  const [ai, setAi] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  const runAnalysis = async () => {
+    if (!tender) return
+    setLoading(true)
+    try {
+      const res = await fetch('/api/ai/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: tender.title, department: tender.department, category: tender.category,
+          state: tender.state, estimatedValue: tender.estimatedValue, emd: tender.emd,
+          deadline: tender.deadline, eligibility: tender.eligibility, description: tender.description,
+        }),
+      })
+      const data = await res.json()
+      setAi(
+        data?.ok && data.text
+          ? data.text
+          : data?.reason === 'no_key'
+            ? 'AI analysis needs GEMINI_API_KEY to be configured on the server.'
+            : 'AI analysis is unavailable right now.'
+      )
+    } catch {
+      setAi('AI analysis is unavailable right now.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (!tender) return null
   const matchLabel = tender.aiMatchScore >= 85 ? 'Strong match' : tender.aiMatchScore >= 70 ? 'Good match' : 'Fair match'
 
@@ -96,7 +128,24 @@ export function TenderAnalysisDialog({ tender, open, onClose }: { tender: Tender
             </div>
           )}
         </div>
-        <p className="text-[10px] text-text-muted">Demo analysis generated from sample data — live AI scoring connects after backend integration.</p>
+        {/* AI analysis (Gemini) */}
+        <div className="rounded-xl border border-brand-blue/20 bg-brand-blue/5 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-sm font-semibold text-brand-blue">
+              <Sparkles className="h-4 w-4" /> AI Analysis
+            </p>
+            <Button size="sm" onClick={runAnalysis} disabled={loading}
+              className="btn-glow bg-brand-blue hover:bg-brand-blue/90 text-white text-xs h-8 gap-1.5">
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {loading ? 'Analyzing…' : ai ? 'Regenerate' : 'Generate'}
+            </Button>
+          </div>
+          {ai ? (
+            <pre className="mt-3 whitespace-pre-wrap font-sans text-xs leading-relaxed text-text-secondary">{ai}</pre>
+          ) : (
+            <p className="mt-2 text-xs text-text-muted">Generate a live AI assessment of eligibility, risk, and recommended action for this tender.</p>
+          )}
+        </div>
       </div>
     </Modal>
   )

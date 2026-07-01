@@ -17,14 +17,17 @@ export function BackgroundShell({ variant = 'global' }: { variant?: BackgroundVa
     // instead of getting stretched far down a tall mobile page. Opaque cards keep
     // text crisp on top. Never mounted on the standalone login / signup pages.
     <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+      {/* Full-bleed 3D artwork covering the whole page. Cards sit on opaque
+          bg-surface, so text stays crisp even with the art shown prominently. */}
       <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-[0.34] sm:opacity-[0.22]"
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat opacity-90 sm:opacity-80"
         style={{ backgroundImage: `url(${BACKGROUNDS[variant]})` }}
       />
-      {/* Accent glow to give the backdrop depth without brightening the page */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(59,124,244,0.10),transparent_60%)]" />
-      {/* Soft scrim so cards and text stay readable while the 3D art shows through */}
-      <div className="absolute inset-0 bg-gradient-to-b from-background/10 via-background/30 to-background/70" />
+      {/* Accent glow for depth */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_0%,rgba(76,141,255,0.12),transparent_60%)]" />
+      {/* Light scrim only at the very bottom so long pages fade into the base
+          background while the artwork stays clearly visible up top. */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-background/15 to-background/60" />
     </div>
   )
 }

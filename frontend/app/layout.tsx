@@ -4,6 +4,7 @@ import { Inter, Plus_Jakarta_Sans, Geist_Mono, Orbitron } from 'next/font/google
 import { LanguageProvider } from '@/lib/language-context'
 import { AuthProvider } from '@/lib/auth-context'
 import { SavedProvider } from '@/lib/saved-context'
+import { SavedJobsProvider } from '@/lib/saved-jobs-context'
 import { ToastProvider } from '@/components/ui/toast'
 import './globals.css'
 
@@ -47,7 +48,9 @@ export default function RootLayout({
           <LanguageProvider>
             <ToastProvider>
               <SavedProvider>
-                {children}
+                <SavedJobsProvider>
+                  {children}
+                </SavedJobsProvider>
               </SavedProvider>
             </ToastProvider>
           </LanguageProvider>

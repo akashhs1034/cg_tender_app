@@ -196,6 +196,17 @@ export async function getJobs(): Promise<Job[]> {
   return (data ?? []).map(mapJob)
 }
 
+/** Fetch full jobs for a set of source_ids (used by the Saved page). */
+export async function getJobsByIds(ids: string[]): Promise<Job[]> {
+  if (!ids.length) return []
+  const { data, error } = await supabase.from('jobs').select('*').in('source_id', ids)
+  if (error) {
+    console.error('[data] getJobsByIds failed:', error.message)
+    return []
+  }
+  return (data ?? []).map(mapJob)
+}
+
 export async function getJobById(id: string): Promise<Job | null> {
   const { data, error } = await supabase.from('jobs').select('*').eq('source_id', id).maybeSingle()
   if (error) {

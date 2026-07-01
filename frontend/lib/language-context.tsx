@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 
 export type Language = 'en' | 'hi'
 
@@ -49,6 +49,27 @@ const translations: Record<Language, Record<string, string>> = {
     browse_as_guest: 'Browse as Guest',
     welcome_back: 'Welcome back',
     create_account: 'Create your account',
+    saved: 'Saved',
+    district: 'District',
+    all_districts: 'All Districts',
+    select_state_first: 'Select a state first',
+    reset_filters: 'Reset filters',
+    no_tenders_match: 'No tenders match your filters',
+    no_jobs_match: 'No jobs match your filters',
+    try_adjusting: 'Try adjusting your search or filters',
+    no_tenders_available: 'No tenders available right now',
+    no_jobs_available: 'No jobs available right now',
+    analyze: 'Analyze',
+    bid_document: 'Bid Document',
+    save: 'Save',
+    share: 'Share',
+    exam_planner: 'Exam Planner',
+    check_eligibility: 'Check Eligibility',
+    government_tenders: 'Government Tenders',
+    government_jobs: 'Government Jobs',
+    tender_portal: 'Tender Portal',
+    bid_documents: 'Bid Documents',
+    qualification: 'Qualification',
   },
   hi: {
     dashboard: 'डैशबोर्ड',
@@ -87,6 +108,27 @@ const translations: Record<Language, Record<string, string>> = {
     browse_as_guest: 'अतिथि के रूप में देखें',
     welcome_back: 'वापसी पर स्वागत है',
     create_account: 'खाता बनाएँ',
+    saved: 'सहेजे गए',
+    district: 'ज़िला',
+    all_districts: 'सभी ज़िले',
+    select_state_first: 'पहले राज्य चुनें',
+    reset_filters: 'फ़िल्टर रीसेट करें',
+    no_tenders_match: 'आपके फ़िल्टर से कोई टेंडर मेल नहीं खाता',
+    no_jobs_match: 'आपके फ़िल्टर से कोई नौकरी मेल नहीं खाती',
+    try_adjusting: 'अपनी खोज या फ़िल्टर बदलकर देखें',
+    no_tenders_available: 'अभी कोई टेंडर उपलब्ध नहीं है',
+    no_jobs_available: 'अभी कोई नौकरी उपलब्ध नहीं है',
+    analyze: 'विश्लेषण',
+    bid_document: 'बोली दस्तावेज़',
+    save: 'सहेजें',
+    share: 'साझा करें',
+    exam_planner: 'परीक्षा योजनाकार',
+    check_eligibility: 'पात्रता जाँचें',
+    government_tenders: 'सरकारी टेंडर',
+    government_jobs: 'सरकारी नौकरियाँ',
+    tender_portal: 'टेंडर पोर्टल',
+    bid_documents: 'बोली दस्तावेज़',
+    qualification: 'योग्यता',
   },
 }
 
@@ -99,10 +141,20 @@ const LanguageContext = createContext<LanguageContextValue>({
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [lang, setLangState] = useState<Language>('en')
 
+  // Restore the saved language choice on mount.
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? window.localStorage.getItem('opporta:lang') : null
+    if (saved === 'hi' || saved === 'en') {
+      setLangState(saved)
+      document.documentElement.lang = saved
+    }
+  }, [])
+
   const setLang = useCallback((l: Language) => {
     setLangState(l)
     if (typeof document !== 'undefined') {
       document.documentElement.lang = l === 'hi' ? 'hi' : 'en'
+      window.localStorage.setItem('opporta:lang', l)
     }
   }, [])
 

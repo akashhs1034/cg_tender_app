@@ -13,6 +13,8 @@ import { BadgeMode } from '@/components/ui/badge-mode'
 import { AiMatchBadge } from '@/components/ui/ai-match-badge'
 import { JobEligibilityDialog } from '@/components/job-eligibility-dialog'
 import { useToast } from '@/components/ui/toast'
+import { useLanguage } from '@/lib/language-context'
+import { useSavedJobs } from '@/lib/saved-jobs-context'
 import { JOB_CATEGORIES, getDistricts } from '@/lib/mock-data'
 import type { TenderMode, State, Job } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
@@ -29,20 +31,15 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
   const [districtFilter, setDistrictFilter] = useState('All')
   const [catFilter, setCatFilter] = useState('All')
   const [showFilters, setShowFilters] = useState(false)
-  const [saved, setSaved] = useState<Set<string>>(new Set())
   const [eligibilityJob, setEligibilityJob] = useState<Job | null>(null)
   const { toast } = useToast()
+  const { t } = useLanguage()
+  const { isSaved, toggleSaved } = useSavedJobs()
 
-  const toggleSave = (j: Job) => {
-    const isSaved = saved.has(j.id)
-    setSaved((prev) => {
-      const next = new Set(prev)
-      if (isSaved) next.delete(j.id)
-      else next.add(j.id)
-      return next
-    })
-    if (isSaved) toast('Removed from saved', 'info')
-    else toast('Saved', 'success', { description: j.title })
+  const toggleSave = async (j: Job) => {
+    const nowSaved = await toggleSaved(j)
+    if (nowSaved) toast('Saved', 'success', { description: j.title })
+    else toast('Removed from saved', 'info')
   }
 
   const share = async (title: string, path: string) => {
@@ -83,16 +80,16 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
     <AppShell pageTitle="Jobs" pageSubtitle={`${jobs.length} active jobs across CG & UP`} bg="jobs">
       <PageHero
         variant="jobs"
-        eyebrow="Government Jobs"
+        eyebrow={t('government_jobs')}
         icon={<Briefcase className="h-3.5 w-3.5" />}
-        title="Government Jobs"
+        title={t('government_jobs')}
         subtitle={`${jobs.length} active recruitments across Chhattisgarh & Uttar Pradesh — filter by state, district, mode and category.`}
       />
       <PageTabs
         accent="purple"
         tabs={[
-          { label: 'Government Jobs', href: '/jobs' },
-          { label: 'Exam Planner', href: '/exam-planner' },
+          { label: t('government_jobs'), href: '/jobs' },
+          { label: t('exam_planner'), href: '/exam-planner' },
         ]}
       />
       {/* Search + Filter bar */}
@@ -101,7 +98,7 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <input
             type="text"
-            placeholder="Search jobs, departments..."
+            placeholder={t('search_jobs')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-border-subtle bg-surface text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-[#6C3EF4] transition-colors"
@@ -121,7 +118,7 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
               : 'border-border-subtle text-text-secondary bg-surface hover:bg-surface-elevated'
           )}
         >
-          <SlidersHorizontal className="w-4 h-4" /> Filters
+          <SlidersHorizontal className="w-4 h-4" /> {t('filters')}
         </button>
       </div>
 
@@ -194,21 +191,21 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
         </div>
       )}
 
-      <p className="text-xs text-text-muted mb-4">Showing {filtered.length} of {jobs.length} jobs</p>
+      <p className="text-xs text-text-muted mb-4">{t('showing')} {filtered.length} {t('of')} {jobs.length} {t('jobs').toLowerCase()}</p>
 
       {/* Job cards */}
       <div className="grid gap-4">
         {jobs.length === 0 ? (
           <div className="text-center py-16 rounded-2xl border border-border-subtle bg-surface">
             <Briefcase className="w-8 h-8 text-text-muted mx-auto mb-3" />
-            <p className="text-text-secondary font-medium">No jobs available right now</p>
+            <p className="text-text-secondary font-medium">{t('no_jobs_available')}</p>
             <p className="text-sm text-text-muted mt-1">We couldn&apos;t load any jobs. Please refresh in a moment.</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 rounded-2xl border border-border-subtle bg-surface">
             <Filter className="w-8 h-8 text-text-muted mx-auto mb-3" />
-            <p className="text-text-secondary font-medium">No jobs match your filters</p>
-            <p className="text-sm text-text-muted mt-1">Try adjusting your search or filters</p>
+            <p className="text-text-secondary font-medium">{t('no_jobs_match')}</p>
+            <p className="text-sm text-text-muted mt-1">{t('try_adjusting')}</p>
           </div>
         ) : (
           filtered.map((j) => (
@@ -261,30 +258,30 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
                 <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border-subtle">
                   <Link href={`/jobs/${j.id}`}>
                     <Button size="sm" className="bg-[#6C3EF4] hover:bg-[#6C3EF4]/90 text-white font-semibold text-xs h-8 gap-1.5">
-                      <Eye className="w-3.5 h-3.5" /> View Details
+                      <Eye className="w-3.5 h-3.5" /> {t('view_details')}
                     </Button>
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => setEligibilityJob(j)} title="Check Eligibility" aria-label="Check Eligibility"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <CheckCircle className="w-3.5 h-3.5" /><span className="hidden sm:inline">Check Eligibility</span>
+                    <CheckCircle className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('check_eligibility')}</span>
                   </Button>
                   <Link href={`/exam-planner?jobId=${j.id}`}>
                     <Button size="sm" variant="outline" title="Exam Planner" aria-label="Exam Planner"
                       className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <GraduationCap className="w-3.5 h-3.5" /><span className="hidden sm:inline">Exam Planner</span>
+                      <GraduationCap className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('exam_planner')}</span>
                     </Button>
                   </Link>
-                  <Button size="sm" variant="outline" onClick={() => toggleSave(j)} aria-pressed={saved.has(j.id)}
-                    title={saved.has(j.id) ? 'Saved' : 'Save'} aria-label={saved.has(j.id) ? 'Saved' : 'Save'}
-                    className={cn('text-xs h-8 gap-1.5', saved.has(j.id)
+                  <Button size="sm" variant="outline" onClick={() => toggleSave(j)} aria-pressed={isSaved(j.id)}
+                    title={isSaved(j.id) ? 'Saved' : 'Save'} aria-label={isSaved(j.id) ? 'Saved' : 'Save'}
+                    className={cn('text-xs h-8 gap-1.5', isSaved(j.id)
                       ? 'border-[#6C3EF4]/40 text-[#6C3EF4] bg-[#6C3EF4]/10'
                       : 'border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
-                    {saved.has(j.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline">{saved.has(j.id) ? 'Saved' : 'Save'}</span>
+                    {isSaved(j.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">{isSaved(j.id) ? t('saved') : t('save')}</span>
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => share(j.title, `/jobs/${j.id}`)} title="Share" aria-label="Share"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">Share</span>
+                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('share')}</span>
                   </Button>
                 </div>
               </div>

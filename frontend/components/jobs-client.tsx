@@ -14,6 +14,7 @@ import { AiMatchBadge } from '@/components/ui/ai-match-badge'
 import { JobEligibilityDialog } from '@/components/job-eligibility-dialog'
 import { useToast } from '@/components/ui/toast'
 import { useLanguage } from '@/lib/language-context'
+import { useSavedJobs } from '@/lib/saved-jobs-context'
 import { JOB_CATEGORIES, getDistricts } from '@/lib/mock-data'
 import type { TenderMode, State, Job } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
@@ -30,21 +31,15 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
   const [districtFilter, setDistrictFilter] = useState('All')
   const [catFilter, setCatFilter] = useState('All')
   const [showFilters, setShowFilters] = useState(false)
-  const [saved, setSaved] = useState<Set<string>>(new Set())
   const [eligibilityJob, setEligibilityJob] = useState<Job | null>(null)
   const { toast } = useToast()
   const { t } = useLanguage()
+  const { isSaved, toggleSaved } = useSavedJobs()
 
-  const toggleSave = (j: Job) => {
-    const isSaved = saved.has(j.id)
-    setSaved((prev) => {
-      const next = new Set(prev)
-      if (isSaved) next.delete(j.id)
-      else next.add(j.id)
-      return next
-    })
-    if (isSaved) toast('Removed from saved', 'info')
-    else toast('Saved', 'success', { description: j.title })
+  const toggleSave = async (j: Job) => {
+    const nowSaved = await toggleSaved(j)
+    if (nowSaved) toast('Saved', 'success', { description: j.title })
+    else toast('Removed from saved', 'info')
   }
 
   const share = async (title: string, path: string) => {
@@ -276,13 +271,13 @@ export function JobsClient({ jobs }: { jobs: Job[] }) {
                       <GraduationCap className="w-3.5 h-3.5" /><span className="hidden sm:inline">Exam Planner</span>
                     </Button>
                   </Link>
-                  <Button size="sm" variant="outline" onClick={() => toggleSave(j)} aria-pressed={saved.has(j.id)}
-                    title={saved.has(j.id) ? 'Saved' : 'Save'} aria-label={saved.has(j.id) ? 'Saved' : 'Save'}
-                    className={cn('text-xs h-8 gap-1.5', saved.has(j.id)
+                  <Button size="sm" variant="outline" onClick={() => toggleSave(j)} aria-pressed={isSaved(j.id)}
+                    title={isSaved(j.id) ? 'Saved' : 'Save'} aria-label={isSaved(j.id) ? 'Saved' : 'Save'}
+                    className={cn('text-xs h-8 gap-1.5', isSaved(j.id)
                       ? 'border-[#6C3EF4]/40 text-[#6C3EF4] bg-[#6C3EF4]/10'
                       : 'border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
-                    {saved.has(j.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline">{saved.has(j.id) ? 'Saved' : 'Save'}</span>
+                    {isSaved(j.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">{isSaved(j.id) ? 'Saved' : 'Save'}</span>
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => share(j.title, `/jobs/${j.id}`)} title="Share" aria-label="Share"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">

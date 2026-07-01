@@ -6,7 +6,7 @@ import {
   ChevronLeft, MapPin, Clock, Users, ExternalLink, BookOpen,
   CheckCircle2, XCircle, Sparkles, Calendar,
   Shield, FileText, History, TrendingUp, Target, Brain,
-  ClipboardList, CalendarDays, GraduationCap, Star, Download,
+  ClipboardList, CalendarDays, GraduationCap, Star, Download, Bookmark, BookmarkCheck,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { BadgeMode } from '@/components/ui/badge-mode'
@@ -15,6 +15,7 @@ import type { Job } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
+import { useSavedJobs } from '@/lib/saved-jobs-context'
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: BookOpen },
@@ -32,9 +33,17 @@ const tabs = [
 export function JobDetailClient({ job }: { job: Job }) {
   const [activeTab, setActiveTab] = useState('overview')
   const { toast } = useToast()
+  const { isSaved, toggleSaved } = useSavedJobs()
   const hasVacancies = job.vacancies > 0
   const hasSelection = job.selectionProcess.length > 0
   const applyHref = job.applyUrl ?? job.documentUrl
+  const saved = isSaved(job.id)
+
+  const handleSave = async () => {
+    const nowSaved = await toggleSaved(job)
+    if (nowSaved) toast('Saved', 'success', { description: job.title })
+    else toast('Removed from saved', 'info')
+  }
 
   const applyExternal = () =>
     toast('Application link unavailable', 'info', { description: 'No official link was found for this posting yet.' })
@@ -75,6 +84,10 @@ export function JobDetailClient({ job }: { job: Job }) {
                 </Button>
               </a>
             )}
+            <Button size="sm" variant="outline" onClick={handleSave} aria-pressed={saved}
+              className={cn('gap-1.5', saved ? 'border-[#6C3EF4]/40 text-[#6C3EF4] bg-[#6C3EF4]/10' : 'border-border-subtle text-text-secondary hover:bg-surface-elevated')}>
+              {saved ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />} {saved ? 'Saved' : 'Save'}
+            </Button>
             <Button size="sm" variant="outline" onClick={() => setActiveTab('match')} className="border-border-subtle text-text-secondary hover:bg-surface-elevated gap-1.5">
               <Target className="w-3.5 h-3.5" /> Check My Match
             </Button>

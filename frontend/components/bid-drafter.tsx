@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
-import { Upload, X, FileText, Sparkles, Download, Copy, Building2, ClipboardList } from 'lucide-react'
+import { Upload, X, FileText, Sparkles, Download, Copy, Building2, ClipboardList, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { cn } from '@/lib/utils'
@@ -93,6 +93,8 @@ export function BidDrafter() {
   const [firmDocs, setFirmDocs] = useState<File[]>([])
   const [tenderDoc, setTenderDoc] = useState<File | null>(null)
   const [draft, setDraft] = useState<string | null>(null)
+  const [generating, setGenerating] = useState(false)
+  const [source, setSource] = useState<'ai' | 'template' | null>(null)
   const firmInput = useRef<HTMLInputElement>(null)
   const tenderInput = useRef<HTMLInputElement>(null)
 
@@ -103,13 +105,39 @@ export function BidDrafter() {
     setFirmDocs((prev) => [...prev, ...Array.from(list)])
   }
 
-  const generate = () => {
+  const generate = async () => {
     if (!f.tenderTitle && !tenderDoc) {
       toast('Add tender details', 'info', { description: 'Enter a tender title or upload the tender document first.' })
       return
     }
-    setDraft(buildDraft(f, firmDocs, tenderDoc))
-    toast('Draft generated', 'success', { description: 'Review and edit it below, then download.' })
+    setGenerating(true)
+    try {
+      const res = await fetch('/api/ai/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...f, firmDocs: firmDocs.map((d) => d.name), tenderDocName: tenderDoc?.name }),
+      })
+      const data = await res.json()
+      if (data?.ok && data.text) {
+        setDraft(data.text)
+        setSource('ai')
+        toast('AI draft generated', 'success', { description: 'Review and edit it below.' })
+      } else {
+        setDraft(buildDraft(f, firmDocs, tenderDoc))
+        setSource('template')
+        toast('Draft generated', 'success', {
+          description: data?.reason === 'no_key'
+            ? 'Template draft — add GEMINI_API_KEY for AI-written bids.'
+            : 'Template draft — AI unavailable right now.',
+        })
+      }
+    } catch {
+      setDraft(buildDraft(f, firmDocs, tenderDoc))
+      setSource('template')
+      toast('Draft generated', 'info', { description: 'Template draft — AI unavailable right now.' })
+    } finally {
+      setGenerating(false)
+    }
   }
 
   const download = () => {
@@ -205,8 +233,9 @@ export function BidDrafter() {
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        <Button size="sm" onClick={generate} className="btn-glow bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
-          <Sparkles className="w-3.5 h-3.5" /> Generate Draft Bid
+        <Button size="sm" onClick={generate} disabled={generating} className="btn-glow bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold gap-1.5">
+          {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          {generating ? 'Generating…' : 'Generate Draft Bid'}
         </Button>
         {draft && (
           <>
@@ -221,11 +250,17 @@ export function BidDrafter() {
       </div>
 
       {draft && (
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          className="mt-4 w-full min-h-80 rounded-xl border border-border-subtle bg-background/60 px-4 py-3 font-mono text-xs leading-relaxed text-text-secondary focus:border-brand-blue focus:outline-none"
-        />
+        <>
+          <p className="mt-4 mb-1.5 flex items-center gap-1.5 text-[11px] font-medium text-text-muted">
+            <Sparkles className="w-3 h-3" />
+            {source === 'ai' ? 'AI-written draft (Gemini) — editable' : 'Template draft — editable'}
+          </p>
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            className="w-full min-h-80 rounded-xl border border-border-subtle bg-background/60 px-4 py-3 font-mono text-xs leading-relaxed text-text-secondary focus:border-brand-blue focus:outline-none"
+          />
+        </>
       )}
     </div>
   )

@@ -15,7 +15,14 @@ if (!supabaseUrl || !supabaseKey) {
 /**
  * Shared Supabase client. Uses the public (anon/publishable) key, so it is safe
  * for both server components and the browser — all access is gated by RLS.
+ *
+ * Falls back to a harmless placeholder URL/key when env vars are absent so the
+ * client never throws at import time (which would break the build). Queries then
+ * fail at request time and are caught by the data layer, degrading to empty
+ * results instead of crashing.
  */
-export const supabase = createClient(supabaseUrl ?? '', supabaseKey ?? '', {
-  auth: { persistSession: false },
-})
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseKey || 'placeholder-anon-key',
+  { auth: { persistSession: false } }
+)

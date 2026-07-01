@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   Search, Filter, MapPin, Clock, FileEdit, Eye, SlidersHorizontal, X,
@@ -75,6 +75,15 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
     if (catFilter !== 'All' && t.category !== catFilter) return false
     return true
   })
+
+  // Render in pages so we never mount hundreds of heavy cards at once (kept the
+  // whole list in one DOM was the cause of the page freezing / "not responding").
+  const PAGE = 24
+  const [visible, setVisible] = useState(PAGE)
+  useEffect(() => {
+    setVisible(PAGE)
+  }, [search, modeFilter, stateFilter, districtFilter, catFilter])
+  const shown = filtered.slice(0, visible)
 
   return (
     <AppShell pageTitle="Tenders" pageSubtitle={`${tenders.length} active tenders across CG & UP`} bg="tenders">
@@ -209,7 +218,7 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
             <p className="text-sm text-text-muted mt-1">{t('try_adjusting')}</p>
           </div>
         ) : (
-          filtered.map((t) => (
+          shown.map((t) => (
             <div key={t.id} className="rounded-2xl card-premium hover-lift overflow-hidden group">
               <div className="p-5">
                 {/* Header */}
@@ -289,6 +298,15 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
           ))
         )}
       </div>
+
+      {filtered.length > visible && (
+        <div className="flex justify-center mt-6">
+          <Button variant="outline" onClick={() => setVisible((v) => v + PAGE)}
+            className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated gap-1.5">
+            Load more ({filtered.length - visible} more)
+          </Button>
+        </div>
+      )}
 
       <TenderAnalysisDialog
         tender={analysisTender}

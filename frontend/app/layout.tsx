@@ -2,6 +2,8 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter, Plus_Jakarta_Sans, Geist_Mono, Orbitron } from 'next/font/google'
 import { LanguageProvider } from '@/lib/language-context'
+import { AuthProvider } from '@/lib/auth-context'
+import { SavedProvider } from '@/lib/saved-context'
 import { ToastProvider } from '@/components/ui/toast'
 import './globals.css'
 
@@ -41,11 +43,15 @@ export default function RootLayout({
       className={`${inter.variable} ${plusJakarta.variable} ${geistMono.variable} ${orbitron.variable} bg-background`}
     >
       <body className="font-sans antialiased min-h-screen">
-        <LanguageProvider>
-          <ToastProvider>
-            {children}
-          </ToastProvider>
-        </LanguageProvider>
+        <AuthProvider>
+          <LanguageProvider>
+            <ToastProvider>
+              <SavedProvider>
+                {children}
+              </SavedProvider>
+            </ToastProvider>
+          </LanguageProvider>
+        </AuthProvider>
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>

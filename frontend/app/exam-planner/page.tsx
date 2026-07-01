@@ -6,6 +6,7 @@ import {
   Search, X, MapPin, CalendarClock, Users, GraduationCap, BookOpen,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
+import { DemoBanner } from '@/components/demo-banner'
 import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
@@ -47,6 +48,7 @@ export default function ExamPlannerPage() {
 
   return (
     <AppShell pageTitle="Exam Planner" pageSubtitle="Plan your preparation for upcoming government exams" bg="jobs">
+      <DemoBanner>This planner is an interactive preview. Personalized timelines go live once exam dates are ingested into the data pipeline.</DemoBanner>
       <PageHero
         variant="jobs"
         eyebrow="Exam Planner"

@@ -22,6 +22,15 @@ export interface Tender {
   riskLevel: 'Low' | 'Medium' | 'High'
   missingDocuments: string[]
   bidReadiness: number
+  // ── Rich fields from live data (optional; absent in mock rows) ──
+  documentUrl?: string
+  sourceUrl?: string
+  publishedDate?: string
+  organization?: string
+  location?: string
+  sourceCount?: number
+  contractorClass?: string
+  experience?: string
 }
 
 export interface Job {
@@ -44,6 +53,12 @@ export interface Job {
   ageLimit: string
   examDate?: string
   selectionProcess: string[]
+  // ── Rich fields from live data (optional; absent in mock rows) ──
+  applyUrl?: string
+  documentUrl?: string
+  publishedDate?: string
+  applicationFee?: string
+  reservationInfo?: string
 }
 
 export const TENDER_CATEGORIES = [

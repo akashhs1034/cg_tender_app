@@ -8,21 +8,43 @@ import { PageHero } from '@/components/page-hero'
 import { StatCard } from '@/components/stat-card'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { AiMatchBadge } from '@/components/ui/ai-match-badge'
-import { tenders, jobs, dashboardStats } from '@/lib/mock-data'
+import { getTenders, getJobs, getDashboardStats } from '@/lib/data'
+import { getCurrentUser } from '@/lib/supabase/server'
 
-const statCards = [
-  { label: 'Active Tenders', value: dashboardStats.activeTenders, icon: FileText, iconColor: 'text-brand-blue', iconBg: 'bg-brand-blue/10', trend: '+12 today', trendUp: true },
-  { label: 'Active Jobs', value: dashboardStats.activeJobs, icon: Briefcase, iconColor: 'text-[#6C3EF4]', iconBg: 'bg-[#6C3EF4]/10', trend: '+8 today', trendUp: true },
-  { label: 'Offline / Newspaper', value: dashboardStats.offlineNewspaper, icon: Newspaper, iconColor: 'text-success', iconBg: 'bg-success/10', trend: '+3 today', trendUp: true },
-  { label: 'Corrigendums', value: dashboardStats.corrigendums, icon: RefreshCw, iconColor: 'text-warning', iconBg: 'bg-warning/10' },
-  { label: 'Closing Soon', value: dashboardStats.closingSoon, icon: Clock, iconColor: 'text-danger', iconBg: 'bg-danger/10' },
-  { label: 'New Today', value: dashboardStats.newToday, icon: PlusCircle, iconColor: 'text-brand-cyan', iconBg: 'bg-brand-cyan/10' },
-]
+export const dynamic = 'force-dynamic'
 
-const recommendedTenders = tenders.filter((t) => t.isRecommended).slice(0, 3)
-const recommendedJobs = jobs.filter((j) => j.isRecommended).slice(0, 3)
+export default async function DashboardPage() {
+  const [dashboardStats, tenders, jobs, user] = await Promise.all([
+    getDashboardStats(),
+    getTenders(),
+    getJobs(),
+    getCurrentUser(),
+  ])
 
-export default function DashboardPage() {
+  const meta = (user?.user_metadata ?? {}) as Record<string, unknown>
+  const firstName =
+    (typeof meta.full_name === 'string' && meta.full_name.split(' ')[0]) ||
+    user?.email?.split('@')[0] ||
+    null
+
+  const statCards = [
+    { label: 'Active Tenders', value: dashboardStats.activeTenders, icon: FileText, iconColor: 'text-brand-blue', iconBg: 'bg-brand-blue/10', trend: dashboardStats.newToday > 0 ? `+${dashboardStats.newToday} today` : undefined, trendUp: true },
+    { label: 'Active Jobs', value: dashboardStats.activeJobs, icon: Briefcase, iconColor: 'text-[#6C3EF4]', iconBg: 'bg-[#6C3EF4]/10' },
+    { label: 'Offline / Newspaper', value: dashboardStats.offlineNewspaper, icon: Newspaper, iconColor: 'text-success', iconBg: 'bg-success/10' },
+    { label: 'Corrigendums', value: dashboardStats.corrigendums, icon: RefreshCw, iconColor: 'text-warning', iconBg: 'bg-warning/10' },
+    { label: 'Closing Soon', value: dashboardStats.closingSoon, icon: Clock, iconColor: 'text-danger', iconBg: 'bg-danger/10' },
+    { label: 'New Today', value: dashboardStats.newToday, icon: PlusCircle, iconColor: 'text-brand-cyan', iconBg: 'bg-brand-cyan/10' },
+  ]
+
+  // Top AI-scored opportunities (data already arrives ordered by ai_score desc).
+  // Fall back to the highest-scored items when nothing crosses the "recommended"
+  // threshold, so these sections are never empty when data exists.
+  const recTenders = tenders.filter((t) => t.isRecommended)
+  const recJobs = jobs.filter((j) => j.isRecommended)
+  const recommendedTenders = (recTenders.length ? recTenders : tenders).slice(0, 3)
+  const recommendedJobs = (recJobs.length ? recJobs : jobs).slice(0, 3)
+  const totalRegions = dashboardStats.cgCount + dashboardStats.upCount || 1
+
   return (
     <AppShell pageTitle="Dashboard" pageSubtitle="Your opportunity overview">
       {/* 3D brand hero */}
@@ -30,10 +52,10 @@ export default function DashboardPage() {
         variant="dashboard"
         eyebrow="OPPORTA Intelligence"
         icon={<Sparkles className="h-3.5 w-3.5" />}
-        title="Welcome back, Rajesh"
+        title={firstName ? `Welcome back, ${firstName}` : 'Welcome back'}
         subtitle="Your live overview of tenders, jobs, and opportunities across Chhattisgarh & Uttar Pradesh."
       >
-        <Link href="/tenders" className="inline-flex items-center gap-1.5 rounded-lg bg-brand-blue px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-blue/90">
+        <Link href="/tenders" className="btn-glow inline-flex items-center gap-1.5 rounded-lg bg-brand-blue px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-brand-blue/90">
           <FileText className="h-3.5 w-3.5" /> Browse Tenders
         </Link>
         <Link href="/jobs" className="inline-flex items-center gap-1.5 rounded-lg border border-border-subtle bg-surface/60 px-3.5 py-2 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary hover:bg-surface-elevated">
@@ -59,9 +81,9 @@ export default function DashboardPage() {
           <p className="text-3xl font-heading font-bold text-text-primary">{dashboardStats.cgCount.toLocaleString()}</p>
           <p className="text-xs text-text-muted mt-1">Total active opportunities</p>
           <div className="mt-3 h-1.5 rounded-full bg-surface-elevated overflow-hidden">
-            <div className="h-full bg-brand-blue rounded-full" style={{ width: `${(dashboardStats.cgCount / (dashboardStats.cgCount + dashboardStats.upCount) * 100).toFixed(0)}%` }} />
+            <div className="h-full bg-brand-blue rounded-full" style={{ width: `${(dashboardStats.cgCount / totalRegions * 100).toFixed(0)}%` }} />
           </div>
-          <p className="text-xs text-text-muted mt-1">{((dashboardStats.cgCount / (dashboardStats.cgCount + dashboardStats.upCount)) * 100).toFixed(0)}% of total</p>
+          <p className="text-xs text-text-muted mt-1">{((dashboardStats.cgCount / totalRegions) * 100).toFixed(0)}% of total</p>
         </div>
         <div className="rounded-xl border border-border-subtle bg-surface p-5">
           <div className="flex items-center gap-2 mb-3">
@@ -71,9 +93,9 @@ export default function DashboardPage() {
           <p className="text-3xl font-heading font-bold text-text-primary">{dashboardStats.upCount.toLocaleString()}</p>
           <p className="text-xs text-text-muted mt-1">Total active opportunities</p>
           <div className="mt-3 h-1.5 rounded-full bg-surface-elevated overflow-hidden">
-            <div className="h-full bg-[#6C3EF4] rounded-full" style={{ width: `${(dashboardStats.upCount / (dashboardStats.cgCount + dashboardStats.upCount) * 100).toFixed(0)}%` }} />
+            <div className="h-full bg-[#6C3EF4] rounded-full" style={{ width: `${(dashboardStats.upCount / totalRegions * 100).toFixed(0)}%` }} />
           </div>
-          <p className="text-xs text-text-muted mt-1">{((dashboardStats.upCount / (dashboardStats.cgCount + dashboardStats.upCount)) * 100).toFixed(0)}% of total</p>
+          <p className="text-xs text-text-muted mt-1">{((dashboardStats.upCount / totalRegions) * 100).toFixed(0)}% of total</p>
         </div>
       </div>
 
@@ -153,7 +175,7 @@ export default function DashboardPage() {
             {dashboardStats.closingSoon} opportunities closing within 7 days
           </p>
           <p className="text-xs text-text-muted mt-0.5">
-            Including {tenders.filter((t) => t.deadline.includes('Jul')).length} tenders and {jobs.filter((j) => j.deadline.includes('Jul')).length} jobs — review and act before deadlines pass.
+            Review and act before deadlines pass — saved opportunities are tracked in your pipeline.
           </p>
           <div className="flex gap-3 mt-2">
             <Link href="/tenders" className="text-xs font-semibold text-danger hover:underline">View urgent tenders</Link>

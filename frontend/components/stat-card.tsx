@@ -23,7 +23,7 @@ export function StatCard({
   className,
 }: StatCardProps) {
   return (
-    <div className={cn('rounded-xl border border-border-subtle bg-surface p-5 flex items-start gap-4', className)}>
+    <div className={cn('rounded-xl card-premium hover-lift p-5 flex items-start gap-4', className)}>
       <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', iconBg)}>
         <Icon className={cn('w-5 h-5', iconColor)} />
       </div>

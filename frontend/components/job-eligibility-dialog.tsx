@@ -19,6 +19,7 @@ export function JobEligibilityDialog({ job, open, onClose }: { job: Job | null; 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: job.id,
           title: job.title, department: job.department, category: job.category,
           qualification: job.qualification, ageLimit: job.ageLimit,
           eligibility: job.eligibility, selectionProcess: job.selectionProcess, description: job.description,

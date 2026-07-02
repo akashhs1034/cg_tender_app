@@ -50,4 +50,11 @@ jobs:
           RESEND_API_KEY:       ${{ secrets.RESEND_API_KEY }}
           FROM_EMAIL:           ${{ secrets.FROM_EMAIL }}
           APP_URL:              ${{ secrets.APP_URL }}
+          # Optional: route scrapers through an India-based proxy so NIC/gov.in
+          # portals that geo-block GitHub's Azure IPs (pwd_cg, dprcg, samvad,
+          # psc.cg.gov.in, gem, …) become reachable. `requests` honors these
+          # automatically; leave the secrets unset to run direct as before.
+          HTTPS_PROXY:          ${{ secrets.SCRAPER_HTTPS_PROXY }}
+          HTTP_PROXY:           ${{ secrets.SCRAPER_HTTPS_PROXY }}
+          NO_PROXY:             ${{ secrets.SCRAPER_NO_PROXY }}
         run: python ingest.py

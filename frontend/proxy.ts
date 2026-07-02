@@ -2,11 +2,11 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 /**
- * Refreshes the Supabase auth session on every request so server components
- * always see a valid user. No-ops cleanly when env vars are absent or the
- * auth host is unreachable, so public pages never break.
+ * Next.js "proxy" (formerly middleware). Refreshes the Supabase auth session so
+ * server components always see a valid user. No-ops cleanly when env vars are
+ * absent or the auth host is unreachable, so public pages never break.
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request })
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -38,6 +38,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Run on all routes except static assets and image files.
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // Skip static assets, image files, and API routes (those handle their own auth).
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }

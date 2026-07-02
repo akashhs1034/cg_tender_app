@@ -102,15 +102,15 @@ def _infer_district(text: str, state: str) -> str | None:
 _DATA_EP = f"{_BASE}/all-bids-data"
 
 # Location search terms (GeM bids are national; we pull CG/UP-relevant ones by
-# searching state + major district names, which match buyer/location text).
-_SEARCH_TERMS = [
-    ("Chhattisgarh", "Chhattisgarh"), ("Raipur", "Chhattisgarh"),
-    ("Bilaspur", "Chhattisgarh"),     ("Durg", "Chhattisgarh"),
-    ("Korba", "Chhattisgarh"),        ("Bastar", "Chhattisgarh"),
-    ("Uttar Pradesh", "Uttar Pradesh"), ("Lucknow", "Uttar Pradesh"),
-    ("Kanpur", "Uttar Pradesh"),      ("Varanasi", "Uttar Pradesh"),
-    ("Prayagraj", "Uttar Pradesh"),   ("Gorakhpur", "Uttar Pradesh"),
-]
+# searching state + district names, which match buyer/location text). To
+# approximate the full CG/UP firehose we sweep the state names plus EVERY
+# district (defined above), so bids tagged only to a district are still caught.
+_SEARCH_TERMS = (
+    [("Chhattisgarh", "Chhattisgarh"), ("Chattisgarh", "Chhattisgarh")]
+    + [(d.title(), "Chhattisgarh") for d in _DISTRICT_CG]
+    + [("Uttar Pradesh", "Uttar Pradesh")]
+    + [(d.title(), "Uttar Pradesh") for d in _DISTRICT_UP]
+)
 
 
 def _make_session() -> requests.Session:
@@ -119,20 +119,64 @@ def _make_session() -> requests.Session:
     return s
 
 
+def _token_from_html(html: str) -> str | None:
+    for pat in (r'name="csrf-token"\s+content="([^"]+)"',
+                r'csrf_bd_gem_nk["\']?\s*[:=]\s*["\']([^"\']+)',
+                r'"csrf_token"\s*:\s*"([^"]+)"'):
+        m = re.search(pat, html)
+        if m:
+            return m.group(1)
+    return None
+
+
 def _csrf_token(sess: requests.Session) -> str | None:
-    """Load /all-bids to obtain the CSRF token + session cookies."""
+    """Load /all-bids to obtain the CSRF token + session cookies (plain HTTP)."""
     try:
         r = sess.get(f"{_BASE}/all-bids", timeout=30)
     except Exception as e:
         print(f"   gem: could not load all-bids — {e}")
         return None
-    for pat in (r'name="csrf-token"\s+content="([^"]+)"',
-                r'csrf_bd_gem_nk["\']?\s*[:=]\s*["\']([^"\']+)',
-                r'"csrf_token"\s*:\s*"([^"]+)"'):
-        m = re.search(pat, r.text)
-        if m:
-            return m.group(1)
-    return None
+    return _token_from_html(r.text)
+
+
+def _browser_bootstrap(sess: requests.Session) -> str | None:
+    """Open /all-bids in a real Chromium (Playwright) to clear anti-bot, then
+    copy its cookies into the requests session and return the CSRF token.
+
+    GeM increasingly serves a JS/anti-bot challenge to plain HTTP clients; a
+    real browser from an Indian residential IP passes it. Set GEM_USE_BROWSER=0
+    to disable. Silently returns None if Playwright isn't available."""
+    if os.getenv("GEM_USE_BROWSER", "1") in ("0", "false", "False"):
+        return None
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return None
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            ctx = browser.new_context(user_agent=_HEADERS["User-Agent"],
+                                      locale="en-IN")
+            page = ctx.new_page()
+            page.goto(f"{_BASE}/all-bids", timeout=60000,
+                      wait_until="domcontentloaded")
+            page.wait_for_timeout(3500)   # let any JS challenge settle
+            html = page.content()
+            token = _token_from_html(html)
+            # carry the browser's cleared cookies into the requests session
+            for c in ctx.cookies():
+                try:
+                    sess.cookies.set(c["name"], c["value"],
+                                     domain=c.get("domain"), path=c.get("path", "/"))
+                except Exception:
+                    pass
+            browser.close()
+            if token:
+                print("   gem: browser bootstrap OK (anti-bot cleared)")
+            return token
+    except Exception as e:
+        print(f"   gem: browser bootstrap failed — {e}")
+        return None
 
 
 def _first(v):
@@ -169,17 +213,23 @@ def scrape() -> list[dict]:
     records: list[dict] = []
     seen: set[str] = set()
 
-    token = None
-    for _ in range(3):
-        token = _csrf_token(sess)
-        if token:
-            break
-        time.sleep(1)
+    # Prefer a real browser session (clears anti-bot on residential IPs); fall
+    # back to plain HTTP token fetch.
+    token = _browser_bootstrap(sess)
     if not token:
-        print("   gem: WARNING — could not obtain CSRF token; GeM unavailable")
+        for _ in range(3):
+            token = _csrf_token(sess)
+            if token:
+                break
+            time.sleep(1)
+    if not token:
+        print("   gem: WARNING — could not obtain CSRF token; GeM unavailable "
+              "(blocked IP or anti-bot — run from an Indian residential IP)")
         return []
 
-    max_pages = max(1, min(_MAX_PG // len(_SEARCH_TERMS) + 1, 5))
+    # Per-term page depth. GEM_MAX_PAGES caps total effort; with the full
+    # district sweep, default to a few pages each.
+    max_pages = max(1, min(_MAX_PG, int(os.getenv("GEM_PAGES_PER_TERM", "3"))))
     for term, state in _SEARCH_TERMS:
         for page in range(1, max_pages + 1):
             docs = _fetch_bids(sess, token, term, page)

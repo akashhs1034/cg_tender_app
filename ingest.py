@@ -638,6 +638,13 @@ def main():
     scraper_counts["newspapers   (public PDF/image OCR)        "] = (
         len(newspaper_tenders) + len(newspaper_jobs))
 
+    if not args.skip_live:
+        try:
+            from scrapers import discovery
+            discovery.discover()   # weekly-guarded; appends new URLs to ai_sources.json
+        except Exception as exc:
+            print(f"   discovery failed safely: {exc}")
+
     print("2e. AI-extracting from config-driven sources (data/ai_sources.json)...")
     ai_tenders, ai_jobs = [], []
     if not args.skip_live:

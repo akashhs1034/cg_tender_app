@@ -24,3 +24,7 @@ portal_*.html
 frontend_assets/
 frontend/node_modules/
 frontend/.next/
+
+# discovery runtime artifacts (written on the scraper host)
+data/.last_discovery
+data/discovered_queue.json

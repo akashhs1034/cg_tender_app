@@ -172,6 +172,85 @@ export async function getTenderById(id: string): Promise<Tender | null> {
   return data ? mapTender(data) : null
 }
 
+export interface PageResult<T> {
+  rows: T[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface ListQuery {
+  q?: string
+  state?: string
+  category?: string
+  mode?: string
+  district?: string
+  page?: number
+  pageSize?: number
+}
+
+function sanitize(s: string): string {
+  // Strip characters that break PostgREST's or()/ilike filter syntax.
+  return s.replace(/[%,()]/g, ' ').trim()
+}
+
+/** Server-side paginated + filtered tenders — lets users browse & search ALL
+ *  active tenders, not just a fixed slice. */
+export async function getTendersPage(query: ListQuery = {}): Promise<PageResult<Tender>> {
+  const page = Math.max(1, query.page ?? 1)
+  const pageSize = query.pageSize ?? 24
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q: any = supabase.from('tenders').select('*', { count: 'exact' }).or('status.is.null,status.neq.expired')
+  if (query.q) {
+    const s = sanitize(query.q)
+    if (s) q = q.or(`title.ilike.%${s}%,organization.ilike.%${s}%,department.ilike.%${s}%`)
+  }
+  if (query.state && query.state !== 'All') q = q.eq('state', query.state)
+  if (query.category && query.category !== 'All') q = q.eq('category', query.category)
+  if (query.district && query.district !== 'All') q = q.eq('district', query.district)
+  if (query.mode === 'Offline') q = q.eq('online_or_offline', 'offline')
+  else if (query.mode === 'Newspaper') q = q.ilike('source_portal', '%newspaper%')
+  else if (query.mode === 'Online') q = q.or('online_or_offline.is.null,online_or_offline.eq.online')
+
+  const { data, count, error } = await q.order('ai_score', { ascending: false, nullsFirst: false }).range(from, to)
+  if (error) {
+    console.error('[data] getTendersPage failed:', error.message)
+    return { rows: [], total: 0, page, pageSize }
+  }
+  return { rows: (data ?? []).map(mapTender), total: count ?? 0, page, pageSize }
+}
+
+/** Server-side paginated + filtered jobs. */
+export async function getJobsPage(query: ListQuery = {}): Promise<PageResult<Job>> {
+  const page = Math.max(1, query.page ?? 1)
+  const pageSize = query.pageSize ?? 24
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let q: any = supabase.from('jobs').select('*', { count: 'exact' }).or('status.is.null,status.neq.expired')
+  if (query.q) {
+    const s = sanitize(query.q)
+    if (s) q = q.or(`title.ilike.%${s}%,department.ilike.%${s}%`)
+  }
+  if (query.state && query.state !== 'All') q = q.eq('state', query.state)
+  if (query.category && query.category !== 'All') q = q.eq('category', query.category)
+  if (query.district && query.district !== 'All') q = q.eq('district', query.district)
+  if (query.mode === 'Offline') q = q.eq('online_or_offline', 'offline')
+  else if (query.mode === 'Newspaper') q = q.ilike('source_portal', '%newspaper%')
+  else if (query.mode === 'Online') q = q.or('online_or_offline.is.null,online_or_offline.eq.online')
+
+  const { data, count, error } = await q.order('ai_score', { ascending: false, nullsFirst: false }).range(from, to)
+  if (error) {
+    console.error('[data] getJobsPage failed:', error.message)
+    return { rows: [], total: 0, page, pageSize }
+  }
+  return { rows: (data ?? []).map(mapJob), total: count ?? 0, page, pageSize }
+}
+
 /** Fetch full tenders for a set of source_ids (used by the Saved page). */
 export async function getTendersByIds(ids: string[]): Promise<Tender[]> {
   if (!ids.length) return []

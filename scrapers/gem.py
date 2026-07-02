@@ -196,13 +196,22 @@ def _fetch_bids(sess: requests.Session, token: str, term: str, page: int) -> lis
         }),
         "csrf_bd_gem_nk": token,
     }
-    try:
-        r = sess.post(_DATA_EP, data=payload, timeout=30,
-                      headers={"X-Requested-With": "XMLHttpRequest",
-                               "Referer": f"{_BASE}/all-bids"})
-        r.raise_for_status()
-        return r.json().get("response", {}).get("response", {}).get("docs", []) or []
-    except Exception as e:
+    # The all-bids-data endpoint intermittently 404/timeouts on some requests
+    # even when the term is valid; a short retry recovers those.
+    last_exc = None
+    for attempt in range(3):
+        try:
+            r = sess.post(_DATA_EP, data=payload, timeout=30,
+                          headers={"X-Requested-With": "XMLHttpRequest",
+                                   "Referer": f"{_BASE}/all-bids"})
+            r.raise_for_status()
+            return r.json().get("response", {}).get("response", {}).get("docs", []) or []
+        except Exception as e:
+            last_exc = e
+            if attempt < 2:
+                time.sleep(1.2 * (attempt + 1))
+    e = last_exc
+    if True:
         print(f"   gem: search {term!r} p{page} failed — {e}")
         return []
 

@@ -34,7 +34,10 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
   const [analysisTender, setAnalysisTender] = useState<Tender | null>(null)
   const { toast } = useToast()
   const { isSaved, toggleSaved } = useSaved()
-  const { t } = useLanguage()
+  // NOTE: 'tr' (not 't') — the tender cards below use 't' as the .map loop
+  // variable, so binding the translation fn to 't' would shadow it and crash
+  // (tr('view_details') would call the tender object). Keep this named 'tr'.
+  const { t: tr } = useLanguage()
 
   const toggleSave = async (t: Tender) => {
     const nowSaved = await toggleSaved(t)
@@ -89,16 +92,16 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
     <AppShell pageTitle="Tenders" pageSubtitle={`${tenders.length} active tenders across CG & UP`} bg="tenders">
       <PageHero
         variant="tenders"
-        eyebrow={t('tender_portal')}
+        eyebrow={tr('tender_portal')}
         icon={<FileText className="h-3.5 w-3.5" />}
-        title={t('government_tenders')}
+        title={tr('government_tenders')}
         subtitle={`${tenders.length} active tenders across Chhattisgarh & Uttar Pradesh — filter by state, district, mode and category.`}
       />
       <PageTabs
         accent="blue"
         tabs={[
-          { label: t('tender_portal'), href: '/tenders' },
-          { label: t('bid_documents'), href: '/bid-documents' },
+          { label: tr('tender_portal'), href: '/tenders' },
+          { label: tr('bid_documents'), href: '/bid-documents' },
         ]}
       />
       {/* Search + Filter bar */}
@@ -107,7 +110,7 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <input
             type="text"
-            placeholder={t('search_tenders')}
+            placeholder={tr('search_tenders')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-2.5 rounded-lg border border-border-subtle bg-surface text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-brand-blue transition-colors"
@@ -127,7 +130,7 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
               : 'border-border-subtle text-text-secondary bg-surface hover:bg-surface-elevated'
           )}
         >
-          <SlidersHorizontal className="w-4 h-4" /> {t('filters')}
+          <SlidersHorizontal className="w-4 h-4" /> {tr('filters')}
         </button>
       </div>
 
@@ -201,21 +204,21 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
       )}
 
       {/* Results count */}
-      <p className="text-xs text-text-muted mb-4">{t('showing')} {filtered.length} {t('of')} {tenders.length} {t('tenders').toLowerCase()}</p>
+      <p className="text-xs text-text-muted mb-4">{tr('showing')} {filtered.length} {tr('of')} {tenders.length} {tr('tenders').toLowerCase()}</p>
 
       {/* Tender cards */}
       <div className="grid gap-4">
         {tenders.length === 0 ? (
           <div className="text-center py-16 rounded-2xl border border-border-subtle bg-surface">
             <FileText className="w-8 h-8 text-text-muted mx-auto mb-3" />
-            <p className="text-text-secondary font-medium">{t('no_tenders_available')}</p>
+            <p className="text-text-secondary font-medium">{tr('no_tenders_available')}</p>
             <p className="text-sm text-text-muted mt-1">We couldn&apos;t load any tenders. Please refresh in a moment.</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-16 rounded-2xl border border-border-subtle bg-surface">
             <Filter className="w-8 h-8 text-text-muted mx-auto mb-3" />
-            <p className="text-text-secondary font-medium">{t('no_tenders_match')}</p>
-            <p className="text-sm text-text-muted mt-1">{t('try_adjusting')}</p>
+            <p className="text-text-secondary font-medium">{tr('no_tenders_match')}</p>
+            <p className="text-sm text-text-muted mt-1">{tr('try_adjusting')}</p>
           </div>
         ) : (
           shown.map((t) => (
@@ -267,17 +270,17 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
                 <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-border-subtle">
                   <Link href={`/tenders/${t.id}`}>
                     <Button size="sm" className="bg-brand-blue hover:bg-brand-blue/90 text-white font-semibold text-xs h-8 gap-1.5">
-                      <Eye className="w-3.5 h-3.5" /> {t('view_details')}
+                      <Eye className="w-3.5 h-3.5" /> {tr('view_details')}
                     </Button>
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => setAnalysisTender(t)} title="Analyze" aria-label="Analyze"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('analyze')}</span>
+                    <Sparkles className="w-3.5 h-3.5" /><span className="hidden sm:inline">{tr('analyze')}</span>
                   </Button>
                   <Link href={`/bid-documents?tenderId=${t.id}`}>
                     <Button size="sm" variant="outline" title="Bid Document" aria-label="Bid Document"
                       className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                      <FileEdit className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('bid_document')}</span>
+                      <FileEdit className="w-3.5 h-3.5" /><span className="hidden sm:inline">{tr('bid_document')}</span>
                     </Button>
                   </Link>
                   <Button size="sm" variant="outline" onClick={() => toggleSave(t)} aria-pressed={isSaved(t.id)}
@@ -286,11 +289,11 @@ export function TendersClient({ tenders }: { tenders: Tender[] }) {
                       ? 'border-brand-blue/40 text-brand-blue bg-brand-blue/10'
                       : 'border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
                     {isSaved(t.id) ? <BookmarkCheck className="w-3.5 h-3.5" /> : <Bookmark className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline">{isSaved(t.id) ? t('saved') : t('save')}</span>
+                    <span className="hidden sm:inline">{isSaved(t.id) ? tr('saved') : tr('save')}</span>
                   </Button>
                   <Button size="sm" variant="outline" onClick={() => share(t.title, `/tenders/${t.id}`)} title="Share" aria-label="Share"
                     className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5">
-                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">{t('share')}</span>
+                    <Share2 className="w-3.5 h-3.5" /><span className="hidden sm:inline">{tr('share')}</span>
                   </Button>
                 </div>
               </div>

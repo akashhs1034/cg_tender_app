@@ -27,6 +27,7 @@ export function TenderAnalysisDialog({ tender, open, onClose }: { tender: Tender
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          id: tender.id,
           title: tender.title, department: tender.department, category: tender.category,
           state: tender.state, estimatedValue: tender.estimatedValue, emd: tender.emd,
           deadline: tender.deadline, eligibility: tender.eligibility, description: tender.description,

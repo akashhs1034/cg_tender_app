@@ -638,6 +638,20 @@ def main():
     scraper_counts["newspapers   (public PDF/image OCR)        "] = (
         len(newspaper_tenders) + len(newspaper_jobs))
 
+    print("2e. AI-extracting from config-driven sources (data/ai_sources.json)...")
+    ai_tenders, ai_jobs = [], []
+    if not args.skip_live:
+        try:
+            from scrapers import generic_ai
+            ai_result = generic_ai.collect()
+            ai_tenders = ai_result.get("tenders") or []
+            ai_jobs = ai_result.get("jobs") or []
+            source_report.update(ai_result.get("report") or {})
+        except Exception as exc:
+            print(f"   generic_ai collector failed safely: {exc}")
+    scraper_counts["generic_ai   (config AI extractor)         "] = (
+        len(ai_tenders) + len(ai_jobs))
+
     samvad_offline = []
     if not args.skip_live:
         try:
@@ -656,6 +670,8 @@ def main():
 
     online_tenders = _canonical_records(t1 + t2 + t3, "tender", "online")
     online_jobs = _canonical_records(j1 + j3, "job", "online")
+    ai_tenders = _canonical_records(ai_tenders, "tender", "ai")
+    ai_jobs = _canonical_records(ai_jobs, "job", "ai")
     district_tenders = _canonical_records(
         district_tenders, "tender", "district")
     district_jobs = _canonical_records(district_jobs, "job", "district")
@@ -669,8 +685,9 @@ def main():
     previous_tenders = _read_generated("tenders", "tender")
     previous_jobs = _read_generated("jobs", "job")
     all_new_tenders = (
-        online_tenders + district_tenders + newspaper_tenders + samvad_offline)
-    all_new_jobs = online_jobs + district_jobs + newspaper_jobs
+        online_tenders + district_tenders + newspaper_tenders
+        + samvad_offline + ai_tenders)
+    all_new_jobs = online_jobs + district_jobs + newspaper_jobs + ai_jobs
     tenders = dedup(previous_tenders + all_new_tenders, "tender")
     jobs = dedup(previous_jobs + all_new_jobs, "job")
     offline = dedup(

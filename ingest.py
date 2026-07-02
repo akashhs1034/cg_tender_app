@@ -374,6 +374,28 @@ def _upsert_with_schema_fallback(sb, table: str, rows: list[dict],
         sb.table(table).upsert(legacy, on_conflict="source_id").execute()
 
 
+def _upsert_resilient(sb, table: str, rows: list[dict], legacy_fields: set[str]) -> int:
+    """Upsert a table so a single bad row (e.g. a secondary unique-constraint
+    clash) never aborts the whole batch. Tries chunks, then falls back to
+    row-by-row, skipping only the offending rows. Returns rows successfully
+    written."""
+    ok = 0
+    chunk_size = 100
+    for i in range(0, len(rows), chunk_size):
+        chunk = rows[i:i + chunk_size]
+        try:
+            _upsert_with_schema_fallback(sb, table, chunk, legacy_fields)
+            ok += len(chunk)
+        except Exception:
+            for row in chunk:
+                try:
+                    _upsert_with_schema_fallback(sb, table, [row], legacy_fields)
+                    ok += 1
+                except Exception:
+                    pass  # duplicate / bad row — skip it, keep the rest
+    return ok
+
+
 def push_supabase(tenders, jobs):
     url = os.getenv("SUPABASE_URL")
     # Prefer service_role key for ingest (bypasses RLS); fall back to anon key
@@ -387,14 +409,16 @@ def push_supabase(tenders, jobs):
     try:
         from supabase import create_client
         sb = create_client(url, key)
-        for table, rows, legacy_fields in [
-            ("tenders", tenders, core.TENDER_DB_FIELDS),
-            ("jobs", jobs, core.JOB_DB_FIELDS),
-        ]:
-            if not rows:
-                continue
-            _upsert_with_schema_fallback(sb, table, rows, legacy_fields)
-            print(f"   upserted {len(rows)} rows -> {table}")
+        if tenders:
+            _upsert_with_schema_fallback(sb, "tenders", tenders, core.TENDER_DB_FIELDS)
+            print(f"   upserted {len(tenders)} rows -> tenders")
+        # Jobs have a second unique constraint (source_url, title) besides the
+        # source_id PK. A single pre-existing job used to raise and abort the
+        # WHOLE jobs batch (0 jobs written for days). Push resiliently so dups
+        # are skipped while all genuinely-new jobs still land.
+        if jobs:
+            ok = _upsert_resilient(sb, "jobs", jobs, core.JOB_DB_FIELDS)
+            print(f"   upserted {ok}/{len(jobs)} rows -> jobs")
         _cleanup_expired(sb)
     except Exception as e:
         print(f"   Supabase push failed: {e}")

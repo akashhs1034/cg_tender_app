@@ -33,14 +33,13 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
 
-      - name: Install Playwright browser
-        if: steps.pw-cache.outputs.cache-hit != 'true'
+      # Always run: 'playwright install chromium' also pulls the matching
+      # chrome-headless-shell build. Skipping it on a cache hit left an older
+      # cache without the current headless-shell binary, which made all
+      # Playwright job scrapers (up_jobs / upsssc) fail with "Executable
+      # doesn't exist". Idempotent + fast when already present.
+      - name: Install Playwright browser (chromium + headless shell)
         run: playwright install --with-deps chromium
-
-      # Install only the OS-level deps when the browser binary is already cached.
-      - name: Install Playwright OS dependencies (cached browser)
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: playwright install-deps chromium
 
       - name: Run ingestion pipeline
         env:

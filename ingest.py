@@ -334,6 +334,14 @@ def _read_generated(name: str, kind: str) -> list[dict]:
         return []
 
 
+# Columns that are numeric/int in Postgres. CSV round-trips turn absent values
+# into "" which Postgres rejects for these types — coerce blank -> NULL here,
+# at the single serialization boundary every upsert passes through.
+_NUMERIC_DB_FIELDS = {"value_lakhs", "ai_score", "confidence_score",
+                      "source_count", "vacancies", "turnover_lakhs",
+                      "experience_years"}
+
+
 def _json_safe_row(row: dict) -> dict:
     out = {}
     for key, value in row.items():
@@ -341,6 +349,9 @@ def _json_safe_row(row: dict) -> dict:
             out[key] = None
         elif isinstance(value, (date, datetime)):
             out[key] = value.isoformat()
+        elif (key in _NUMERIC_DB_FIELDS and isinstance(value, str)
+              and value.strip() == ""):
+            out[key] = None
         else:
             out[key] = value
     return out

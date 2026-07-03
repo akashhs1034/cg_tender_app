@@ -407,6 +407,23 @@ def _upsert_resilient(sb, table: str, rows: list[dict], legacy_fields: set[str])
     return ok
 
 
+def _is_junk_row(row: dict) -> bool:
+    """Drop scraper artifacts that are not real records.
+
+    Seen in production: ASPX pager controls captured as tenders — title "1",
+    source_url "javascript:__doPostBack('...gvtender','Page$2')". These collide
+    on the (source_url, title) unique constraint and pollute the app.
+    """
+    title = str(row.get("title") or "").strip()
+    if not title or title.isdigit() or len(title) < 4:
+        return True
+    for field in ("source_url", "document_url", "apply_link"):
+        val = str(row.get(field) or "")
+        if val.lower().startswith("javascript:"):
+            return True
+    return False
+
+
 def push_supabase(tenders, jobs):
     url = os.getenv("SUPABASE_URL")
     # Prefer service_role key for ingest (bypasses RLS); fall back to anon key
@@ -417,16 +434,21 @@ def push_supabase(tenders, jobs):
     using_service = bool(os.getenv("SUPABASE_SERVICE_KEY"))
     if not using_service:
         print("   Note: using anon key — add SUPABASE_SERVICE_KEY to .env to bypass RLS.")
+
+    tenders = [r for r in tenders if not _is_junk_row(r)]
+    jobs = [r for r in jobs if not _is_junk_row(r)]
+
     try:
         from supabase import create_client
         sb = create_client(url, key)
+        # Both tables carry a second unique constraint (source_url, title)
+        # besides the source_id PK. A single pre-existing/dup row used to raise
+        # and abort the WHOLE batch (and a tenders abort also skipped jobs,
+        # since they shared this try block). Push both resiliently: dups are
+        # skipped row-by-row while all genuinely-new records still land.
         if tenders:
-            _upsert_with_schema_fallback(sb, "tenders", tenders, core.TENDER_DB_FIELDS)
-            print(f"   upserted {len(tenders)} rows -> tenders")
-        # Jobs have a second unique constraint (source_url, title) besides the
-        # source_id PK. A single pre-existing job used to raise and abort the
-        # WHOLE jobs batch (0 jobs written for days). Push resiliently so dups
-        # are skipped while all genuinely-new jobs still land.
+            ok = _upsert_resilient(sb, "tenders", tenders, core.TENDER_DB_FIELDS)
+            print(f"   upserted {ok}/{len(tenders)} rows -> tenders")
         if jobs:
             ok = _upsert_resilient(sb, "jobs", jobs, core.JOB_DB_FIELDS)
             print(f"   upserted {ok}/{len(jobs)} rows -> jobs")

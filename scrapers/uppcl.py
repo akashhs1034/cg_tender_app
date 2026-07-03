@@ -21,6 +21,7 @@ Standalone:  python -m scrapers.uppcl
 from __future__ import annotations
 
 import re
+import ssl
 import sys
 import warnings
 from pathlib import Path
@@ -28,9 +29,41 @@ from urllib.parse import urljoin
 
 import requests
 from bs4 import BeautifulSoup
+from requests.adapters import HTTPAdapter
+from urllib3.poolmanager import PoolManager
+from urllib3.util.ssl_ import create_urllib3_context
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import core  # noqa: E402
+
+
+class _LegacyTLSAdapter(HTTPAdapter):
+    """Allow handshakes with old ASP.NET/IIS servers that OpenSSL 3 rejects.
+
+    UPPCL's portals negotiate legacy TLS renegotiation and weak cipher
+    suites; modern OpenSSL refuses these with
+    ``SSLV3_ALERT_HANDSHAKE_FAILURE`` before certificate validation even
+    runs (so ``verify=False`` alone does not help). We build a context that
+    lowers the security level and re-enables legacy server connect.
+    """
+
+    def _ctx(self) -> ssl.SSLContext:
+        ctx = create_urllib3_context()
+        # SECLEVEL=1 permits the older ciphers/keys these servers offer.
+        try:
+            ctx.set_ciphers("DEFAULT@SECLEVEL=1")
+        except ssl.SSLError:
+            pass
+        # 0x4 == OP_LEGACY_SERVER_CONNECT (not always exposed as a constant).
+        ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+
+    def init_poolmanager(self, connections, maxsize, block=False, **kw):
+        kw["ssl_context"] = self._ctx()
+        self.poolmanager = PoolManager(
+            num_pools=connections, maxsize=maxsize, block=block, **kw)
 
 _PORTALS = [
     "https://www.uppclonline.com/uppcl/NIT/Default.aspx",
@@ -103,6 +136,12 @@ def _infer_district(text: str) -> str | None:
     return None
 
 
+def _legacy_session() -> requests.Session:
+    s = requests.Session()
+    s.mount("https://", _LegacyTLSAdapter())
+    return s
+
+
 def _fetch(url: str) -> str | None:
     try:
         r = requests.get(url, headers=_HEADERS, timeout=25, verify=True)
@@ -111,11 +150,16 @@ def _fetch(url: str) -> str | None:
             return None
         return r.text
     except requests.exceptions.SSLError:
+        # Legacy-TLS retry: many UPPCL/DISCOM servers need SECLEVEL=1 +
+        # legacy renegotiation, which a plain verify=False does not enable.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                r = requests.get(url, headers=_HEADERS, timeout=25, verify=False)
+                r = _legacy_session().get(
+                    url, headers=_HEADERS, timeout=25, verify=False)
                 r.raise_for_status()
+                if len(r.text) < 500:
+                    return None
                 return r.text
             except Exception as e:
                 print(f"   uppcl: SSL fetch failed {url} — {e}")

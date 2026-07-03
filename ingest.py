@@ -334,6 +334,14 @@ def _read_generated(name: str, kind: str) -> list[dict]:
         return []
 
 
+# Columns that are numeric/int in Postgres. CSV round-trips turn absent values
+# into "" which Postgres rejects for these types — coerce blank -> NULL here,
+# at the single serialization boundary every upsert passes through.
+_NUMERIC_DB_FIELDS = {"value_lakhs", "ai_score", "confidence_score",
+                      "source_count", "vacancies", "turnover_lakhs",
+                      "experience_years"}
+
+
 def _json_safe_row(row: dict) -> dict:
     out = {}
     for key, value in row.items():
@@ -341,6 +349,9 @@ def _json_safe_row(row: dict) -> dict:
             out[key] = None
         elif isinstance(value, (date, datetime)):
             out[key] = value.isoformat()
+        elif (key in _NUMERIC_DB_FIELDS and isinstance(value, str)
+              and value.strip() == ""):
+            out[key] = None
         else:
             out[key] = value
     return out
@@ -396,6 +407,23 @@ def _upsert_resilient(sb, table: str, rows: list[dict], legacy_fields: set[str])
     return ok
 
 
+def _is_junk_row(row: dict) -> bool:
+    """Drop scraper artifacts that are not real records.
+
+    Seen in production: ASPX pager controls captured as tenders — title "1",
+    source_url "javascript:__doPostBack('...gvtender','Page$2')". These collide
+    on the (source_url, title) unique constraint and pollute the app.
+    """
+    title = str(row.get("title") or "").strip()
+    if not title or title.isdigit() or len(title) < 4:
+        return True
+    for field in ("source_url", "document_url", "apply_link"):
+        val = str(row.get(field) or "")
+        if val.lower().startswith("javascript:"):
+            return True
+    return False
+
+
 def push_supabase(tenders, jobs):
     url = os.getenv("SUPABASE_URL")
     # Prefer service_role key for ingest (bypasses RLS); fall back to anon key
@@ -406,16 +434,21 @@ def push_supabase(tenders, jobs):
     using_service = bool(os.getenv("SUPABASE_SERVICE_KEY"))
     if not using_service:
         print("   Note: using anon key — add SUPABASE_SERVICE_KEY to .env to bypass RLS.")
+
+    tenders = [r for r in tenders if not _is_junk_row(r)]
+    jobs = [r for r in jobs if not _is_junk_row(r)]
+
     try:
         from supabase import create_client
         sb = create_client(url, key)
+        # Both tables carry a second unique constraint (source_url, title)
+        # besides the source_id PK. A single pre-existing/dup row used to raise
+        # and abort the WHOLE batch (and a tenders abort also skipped jobs,
+        # since they shared this try block). Push both resiliently: dups are
+        # skipped row-by-row while all genuinely-new records still land.
         if tenders:
-            _upsert_with_schema_fallback(sb, "tenders", tenders, core.TENDER_DB_FIELDS)
-            print(f"   upserted {len(tenders)} rows -> tenders")
-        # Jobs have a second unique constraint (source_url, title) besides the
-        # source_id PK. A single pre-existing job used to raise and abort the
-        # WHOLE jobs batch (0 jobs written for days). Push resiliently so dups
-        # are skipped while all genuinely-new jobs still land.
+            ok = _upsert_resilient(sb, "tenders", tenders, core.TENDER_DB_FIELDS)
+            print(f"   upserted {ok}/{len(tenders)} rows -> tenders")
         if jobs:
             ok = _upsert_resilient(sb, "jobs", jobs, core.JOB_DB_FIELDS)
             print(f"   upserted {ok}/{len(jobs)} rows -> jobs")
@@ -638,6 +671,27 @@ def main():
     scraper_counts["newspapers   (public PDF/image OCR)        "] = (
         len(newspaper_tenders) + len(newspaper_jobs))
 
+    if not args.skip_live:
+        try:
+            from scrapers import discovery
+            discovery.discover()   # weekly-guarded; appends new URLs to ai_sources.json
+        except Exception as exc:
+            print(f"   discovery failed safely: {exc}")
+
+    print("2e. AI-extracting from config-driven sources (data/ai_sources.json)...")
+    ai_tenders, ai_jobs = [], []
+    if not args.skip_live:
+        try:
+            from scrapers import generic_ai
+            ai_result = generic_ai.collect()
+            ai_tenders = ai_result.get("tenders") or []
+            ai_jobs = ai_result.get("jobs") or []
+            source_report.update(ai_result.get("report") or {})
+        except Exception as exc:
+            print(f"   generic_ai collector failed safely: {exc}")
+    scraper_counts["generic_ai   (config AI extractor)         "] = (
+        len(ai_tenders) + len(ai_jobs))
+
     samvad_offline = []
     if not args.skip_live:
         try:
@@ -656,6 +710,8 @@ def main():
 
     online_tenders = _canonical_records(t1 + t2 + t3, "tender", "online")
     online_jobs = _canonical_records(j1 + j3, "job", "online")
+    ai_tenders = _canonical_records(ai_tenders, "tender", "ai")
+    ai_jobs = _canonical_records(ai_jobs, "job", "ai")
     district_tenders = _canonical_records(
         district_tenders, "tender", "district")
     district_jobs = _canonical_records(district_jobs, "job", "district")
@@ -669,8 +725,9 @@ def main():
     previous_tenders = _read_generated("tenders", "tender")
     previous_jobs = _read_generated("jobs", "job")
     all_new_tenders = (
-        online_tenders + district_tenders + newspaper_tenders + samvad_offline)
-    all_new_jobs = online_jobs + district_jobs + newspaper_jobs
+        online_tenders + district_tenders + newspaper_tenders
+        + samvad_offline + ai_tenders)
+    all_new_jobs = online_jobs + district_jobs + newspaper_jobs + ai_jobs
     tenders = dedup(previous_tenders + all_new_tenders, "tender")
     jobs = dedup(previous_jobs + all_new_jobs, "job")
     offline = dedup(

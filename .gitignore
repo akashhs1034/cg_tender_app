@@ -1,5 +1,6 @@
 # Secrets — NEVER commit these
 .env
+opporta.env
 .streamlit/secrets.toml
 client_secret.json
 *.key

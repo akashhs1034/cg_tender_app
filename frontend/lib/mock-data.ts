@@ -83,28 +83,54 @@ export const TENDER_CATEGORIES = [
   'Miscellaneous',
 ] as const
 
+// Display job categories. Each maps to substring patterns over the raw
+// scraped `category` values (see JOB_CATEGORY_MATCHERS below) so filters
+// match production data ("PSC", "District Contract Jobs", …).
 export const JOB_CATEGORIES = [
   'All',
-  'Engineering',
-  'Administrative',
-  'Police & Defence',
-  'Education',
-  'Revenue & Administration',
+  'PSC & Civil Services',
+  'District & Contract Jobs',
   'Medical & Health',
-  'Agriculture',
-  'Forest & Wildlife',
-  'Banking & Finance',
-  'Law & Judiciary',
-  'Transport',
-  'IT & Technical',
-  'Social Welfare',
-  'Panchayati Raj',
-  'Electricity & Power',
-  'PWD & Infrastructure',
-  'Clerical & Steno',
-  'Sports & NCC',
+  'Teaching & Education',
+  'Administration & Clerical',
+  'Engineering & Technical',
+  'Revenue & Patwari',
+  'IT & Computer',
+  'CA, Audit & Finance',
+  'Police & Defence',
+  'Banking',
+  'Railway',
   'Miscellaneous',
 ] as const
+
+/** Substring patterns (lowercase) each display job category matches against
+ *  the raw DB `category`. Shared by the server-side filter (ilike) and any
+ *  client-side filtering. */
+export const JOB_CATEGORY_MATCHERS: Record<string, string[]> = {
+  'PSC & Civil Services': ['psc', 'upsssc', 'commission', 'civil service'],
+  'District & Contract Jobs': ['district', 'contract'],
+  'Medical & Health': ['health', 'nursing', 'medical', 'anm', 'pharma', 'doctor'],
+  'Teaching & Education': ['teach', 'education', 'shikshak', 'lecturer', 'professor', 'tet'],
+  'Administration & Clerical': ['admin', 'clerk', 'assistant', 'steno', 'office'],
+  'Engineering & Technical': ['engineer', 'technical', 'technician'],
+  'Revenue & Patwari': ['patwari', 'revenue', 'lekhpal'],
+  'IT & Computer': ['computer', 'data entry', 'operator', 'it/'],
+  'CA, Audit & Finance': ['account', 'audit', 'financ', 'ca/'],
+  'Police & Defence': ['police', 'constable', 'defence', 'guard', 'jail'],
+  'Banking': ['bank'],
+  'Railway': ['railway', 'rrb'],
+  'Miscellaneous': ['misc', 'other', 'general'],
+}
+
+/** Client-side check: does a raw job category belong to a display category? */
+export function matchesJobCategory(raw: string | null | undefined, display: string): boolean {
+  if (display === 'All') return true
+  const subs = JOB_CATEGORY_MATCHERS[display]
+  if (!subs) return raw === display
+  const low = (raw ?? '').toLowerCase()
+  if (!low) return display === 'Miscellaneous'
+  return subs.some((s) => low.includes(s))
+}
 
 export type TenderCategory = typeof TENDER_CATEGORIES[number]
 export type JobCategory = typeof JOB_CATEGORIES[number]

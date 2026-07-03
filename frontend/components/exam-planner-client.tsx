@@ -12,7 +12,7 @@ import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { Button } from '@/components/ui/button'
-import { JOB_CATEGORIES, getDistricts } from '@/lib/mock-data'
+import { JOB_CATEGORIES, getDistricts, matchesJobCategory } from '@/lib/mock-data'
 import type { State, Job } from '@/lib/mock-data'
 import { matchExamResources } from '@/lib/study-resources'
 import type { StudyLink } from '@/lib/study-resources'
@@ -48,7 +48,7 @@ export function ExamPlannerClient({ jobs }: { jobs: Job[] }) {
     if (q && !j.advNumber.toLowerCase().includes(q) && !j.title.toLowerCase().includes(q)) return false
     if (stateFilter !== 'All' && j.state !== stateFilter) return false
     if (districtFilter !== 'All' && j.district !== districtFilter) return false
-    if (catFilter !== 'All' && j.category !== catFilter) return false
+    if (!matchesJobCategory(j.category, catFilter)) return false
     return true
   })
 

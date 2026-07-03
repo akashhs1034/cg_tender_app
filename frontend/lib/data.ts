@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase'
 import type { Tender, Job, State, TenderMode } from '@/lib/mock-data'
+import { JOB_CATEGORY_MATCHERS } from '@/lib/mock-data'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 // The scraped data is messy: many nulls, mixed-language state names, free-text
@@ -203,23 +204,25 @@ function sanitize(s: string): string {
  */
 const CATEGORY_MATCHERS: Record<string, { category?: string[]; title?: string[] }> = {
   'Civil & Construction': { category: ['%civil%', '%construction%', '%road%', '%bridge%', '%building%', '%marine%', '%structure%'] },
-  'Supply & Procurement': { category: ['%supply%', '%procure%', '%goods%', '%material%', '%abrasive%', '%stationery%', '%furniture%', '%equipment%'] },
+  'Supply & Procurement': { category: ['%supply%', '%procure%', '%goods%', '%material%', '%abrasive%', '%stationery%', '%furniture%', '%equipment%', '%manufactur%', '%dairy%', '%medal%', '%memento%'] },
   'Electricity & Power': { category: ['%electric%', '%energy%', '%power%', '%solar%', '%light%', '%transformer%'] },
   'CA, Audit & Finance': {
     category: ['%audit%', '%account%', '%financ%', '%chartered%', '%tax%'],
     title: ['%chartered account%', '%internal audit%', '%statutory audit%', '%ca firm%', '%gst%', '%taxation%', '%book keeping%', '%bookkeeping%', '%balance sheet%', '%audit%'],
   },
   'Coal & Mining': { category: ['%coal%', '%mining%', '%mineral%'] },
+  // (straggler values folded in: crane → Transport, architect → Consultancy,
+  //  dairy/medals/manufacturing → Supply, auction/e-tender/other → Misc)
   'Water & Irrigation': { category: ['%water%', '%irrigation%', '%pipe%', '%sewer%', '%drain%', '%borewell%', '%boring%', '%canal%'] },
   'Medical & Health': { category: ['%medical%', '%health%', '%hospital%', '%pharma%', '%surgical%', '%drug%', '%medicine%'] },
   'IT & Technology': { category: ['%it service%', '%software%', '%computer%', '%network%', '%cctv%', '%digital%', '%electronic%', '%technolog%'] },
-  'Transport & Logistics': { category: ['%transport%', '%logistic%', '%vehicle%', '%shipping%', '%freight%', '%warehous%'] },
+  'Transport & Logistics': { category: ['%transport%', '%logistic%', '%vehicle%', '%shipping%', '%freight%', '%warehous%', '%crane%'] },
   'Manpower & Services': { category: ['%manpower%', '%security%', '%housekeep%', '%cleaning%', '%outsourc%', '%labour%'] },
   'Municipal & Urban': { category: ['%municipal%', '%urban%', '%nagar%', '%sanitation%', '%waste%'] },
   'Printing & Advertising': { category: ['%print%', '%advertis%', '%publicity%'] },
-  'Consultancy & Survey': { category: ['%consult%', '%survey%', '%investigation%', '%dpr%', '%design%'] },
+  'Consultancy & Survey': { category: ['%consult%', '%survey%', '%investigation%', '%dpr%', '%design%', '%architect%'] },
   'Newspaper / Offline': { category: ['%newspaper%', '%offline%'] },
-  'Miscellaneous': { category: ['%misc%'] },
+  'Miscellaneous': { category: ['%misc%', '%other%', '%auction%', '%e-tender%'] },
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -230,6 +233,15 @@ function applyCategoryFilter(q: any, category: string): any {
     ...(m.category ?? []).map((p) => `category.ilike.${p}`),
     ...(m.title ?? []).map((p) => `title.ilike.${p}`),
   ]
+  if (category === 'Miscellaneous') clauses.push('category.is.null')
+  return q.or(clauses.join(','))
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyJobCategoryFilter(q: any, category: string): any {
+  const subs = JOB_CATEGORY_MATCHERS[category]
+  if (!subs) return q.eq('category', category) // unknown label — legacy exact match
+  const clauses = subs.map((p) => `category.ilike.%${p}%`)
   if (category === 'Miscellaneous') clauses.push('category.is.null')
   return q.or(clauses.join(','))
 }
@@ -277,7 +289,7 @@ export async function getJobsPage(query: ListQuery = {}): Promise<PageResult<Job
     if (s) q = q.or(`title.ilike.%${s}%,department.ilike.%${s}%`)
   }
   if (query.state && query.state !== 'All') q = q.eq('state', query.state)
-  if (query.category && query.category !== 'All') q = q.eq('category', query.category)
+  if (query.category && query.category !== 'All') q = applyJobCategoryFilter(q, query.category)
   if (query.district && query.district !== 'All') q = q.eq('district', query.district)
   if (query.mode === 'Offline') q = q.eq('online_or_offline', 'offline')
   else if (query.mode === 'Newspaper') q = q.ilike('source_portal', '%newspaper%')

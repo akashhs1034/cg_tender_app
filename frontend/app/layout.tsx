@@ -22,10 +22,31 @@ const orbitron = Orbitron({
 })
 
 export const metadata: Metadata = {
-  title: 'OPPORTA — Opportunity Intelligence Platform',
+  metadataBase: new URL('https://opporta.vercel.app'),
+  title: {
+    default: 'Opporta — Government Tenders & Jobs for Chhattisgarh & UP',
+    template: '%s | Opporta',
+  },
   description:
-    'Track tenders, jobs, notices, contracts, corrigendums, and upcoming opportunities across your target markets.',
-  generator: 'v0.app',
+    'Live government tenders, jobs, and recruitment notices for Chhattisgarh and Uttar Pradesh — e-Procurement, GeM, PSU, PSC/Vyapam/UPSSSC and more, with AI eligibility and bid help.',
+  keywords: [
+    'Chhattisgarh tenders', 'Uttar Pradesh tenders', 'government tenders',
+    'GeM bids', 'CG e-procurement', 'sarkari naukri', 'CGPSC', 'UPPSC', 'Vyapam',
+    'government jobs', 'e-tender', 'CSPDCL tender',
+  ],
+  openGraph: {
+    title: 'Opporta — Government Tenders & Jobs (CG & UP)',
+    description:
+      'Live government tenders and jobs for Chhattisgarh & Uttar Pradesh, with AI eligibility and bid drafting.',
+    url: 'https://opporta.vercel.app',
+    siteName: 'Opporta',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Opporta — Government Tenders & Jobs (CG & UP)',
+    description: 'Live CG & UP government tenders and jobs, with AI eligibility and bid help.',
+  },
 }
 
 export const viewport: Viewport = {

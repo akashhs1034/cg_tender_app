@@ -11,6 +11,7 @@ import {
   User,
   ExternalLink,
   ShieldAlert,
+  Activity,
   Menu,
   X,
   Bell,
@@ -38,6 +39,7 @@ const navItems = [
 ]
 
 const adminNavItems = [
+  { tKey: 'admin_health', href: '/admin', icon: Activity },
   { tKey: 'admin_queue', href: '/admin/discovery', icon: ShieldAlert },
 ]
 
@@ -68,7 +70,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
       <aside className="hidden lg:flex flex-col w-60 min-h-screen border-r border-border-subtle bg-[#0D1525] sticky top-0 h-screen">
         {/* Logo */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
-          <OpportaLogo iconSize="sm" />
+          <OpportaLogo iconSize="md" />
           <p className="text-[10px] text-text-muted leading-none">CG &amp; UP</p>
         </div>
 
@@ -167,7 +169,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
 
       {/* Mobile Topbar */}
       <header className="lg:hidden sticky top-0 z-50 flex items-center justify-between px-4 py-3 bg-[#0D1525]/95 backdrop-blur-md border-b border-border-subtle">
-        <OpportaLogo iconSize="sm" />
+        <OpportaLogo iconSize="md" />
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
           <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-elevated transition-colors relative">
@@ -197,7 +199,7 @@ export function AppNav({ isAdmin = false }: AppNavProps) {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="relative w-72 bg-[#0D1525] h-full flex flex-col border-r border-border-subtle">
             <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
-              <OpportaLogo iconSize="sm" />
+              <OpportaLogo iconSize="md" />
               <button onClick={() => setMobileOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-surface-elevated">
                 <X className="w-4 h-4 text-text-muted" />
               </button>

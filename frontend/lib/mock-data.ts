@@ -61,27 +61,26 @@ export interface Job {
   reservationInfo?: string
 }
 
+// Display categories. Each maps to ilike patterns over the raw scraped
+// `category` values (see CATEGORY_MATCHERS in lib/data.ts) so the filter
+// actually matches production data.
 export const TENDER_CATEGORIES = [
   'All',
-  'Road & Highway',
-  'Bridge & Flyover',
-  'Building Construction',
-  'Water & Sanitation',
-  'Irrigation & Dam',
-  'Electrical & Solar',
-  'IT & Electronics',
-  'Railway & Metro',
-  'Urban Development',
-  'Forest & Environment',
-  'Agriculture & Horticulture',
-  'Health & Medical',
-  'Education & Schools',
-  'Mining & Minerals',
+  'Civil & Construction',
+  'Supply & Procurement',
+  'Electricity & Power',
+  'CA, Audit & Finance',
+  'Coal & Mining',
+  'Water & Irrigation',
+  'Medical & Health',
+  'IT & Technology',
   'Transport & Logistics',
-  'Printing & Stationery',
-  'Security Services',
+  'Manpower & Services',
+  'Municipal & Urban',
+  'Printing & Advertising',
   'Consultancy & Survey',
-  'Miscellaneous Works',
+  'Newspaper / Offline',
+  'Miscellaneous',
 ] as const
 
 export const JOB_CATEGORIES = [

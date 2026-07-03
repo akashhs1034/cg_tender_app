@@ -50,7 +50,7 @@ export default function LandingPage() {
       {/* Navbar */}
       <header className="sticky top-0 z-50 border-b border-border-subtle bg-[#080E1D]/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between">
-          <OpportaLogo iconSize="sm" />
+          <OpportaLogo iconSize="md" />
           <nav className="hidden md:flex items-center gap-6">
             <Link href="/dashboard" className="text-sm text-text-secondary hover:text-text-primary transition-colors">Dashboard</Link>
             <Link href="/tenders" className="text-sm text-text-secondary hover:text-text-primary transition-colors">Tenders</Link>

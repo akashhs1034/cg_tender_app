@@ -13,10 +13,10 @@ interface OpportaLogoProps {
 }
 
 const sizeMap = {
-  sm: { img: 28, text: 'text-base' },
-  md: { img: 36, text: 'text-lg' },
-  lg: { img: 48, text: 'text-2xl' },
-  xl: { img: 64, text: 'text-3xl' },
+  sm: { img: 32, text: 'text-lg' },
+  md: { img: 42, text: 'text-xl' },
+  lg: { img: 52, text: 'text-2xl' },
+  xl: { img: 72, text: 'text-4xl' },
 }
 
 export function OpportaLogo({
@@ -34,7 +34,7 @@ export function OpportaLogo({
         alt="OPPORTA logo mark"
         width={img}
         height={img}
-        className="flex-shrink-0 object-contain"
+        className="flex-shrink-0 object-contain drop-shadow-[0_0_10px_rgba(59,124,244,0.45)]"
         priority
       />
       {showWordmark && (

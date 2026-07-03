@@ -296,6 +296,36 @@ def write_source_health(counts: dict, *, report: dict | None = None,
     path = DATA / "source_health.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"   wrote data/source_health.json ({len(sources)} sources)")
+    return sources
+
+
+def push_source_health(sources: list[dict]) -> None:
+    """Upsert per-source run health to Supabase so the admin UI can show
+    what's working, what's failing, and when data last arrived."""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
+    if not (url and key and sources):
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    rows = [{
+        "source_id": s["source"],
+        "display_name": s.get("display_name"),
+        "kind": s.get("kind"),
+        "state": s.get("state"),
+        "record_count": int(s.get("record_count") or 0),
+        "status": s.get("status"),
+        "error": s.get("error"),
+        "run_at": now,
+    } for s in sources if s.get("source")]
+    try:
+        from supabase import create_client
+        sb = create_client(url, key)
+        for i in range(0, len(rows), 200):
+            sb.table("source_health").upsert(
+                rows[i:i + 200], on_conflict="source_id").execute()
+        print(f"   upserted {len(rows)} rows -> source_health")
+    except Exception as e:
+        print(f"   source_health push skipped: {e}")
 
 
 def write_manual_review_queue(items: list[dict]) -> None:
@@ -744,10 +774,11 @@ def main():
         write_manual_review_queue(manual_review)
         registry = source_registry.apply_health(registry, source_report)
         source_registry.write_registry(registry)
-        write_source_health(
+        health_rows = write_source_health(
             scraper_counts, report=source_report, registry=registry)
         print("4. Pushing to cloud...")
         push_supabase(tenders, jobs)
+        push_source_health(health_rows)
         push_corrigendums(corrigs)
         push_offline_tenders(offline)
 

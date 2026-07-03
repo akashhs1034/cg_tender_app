@@ -194,6 +194,46 @@ function sanitize(s: string): string {
   return s.replace(/[%,()]/g, ' ').trim()
 }
 
+/**
+ * The DB `category` column holds raw scraper strings ("Civil Works",
+ * "Government Supply", "Electrical & Energy", …), so each display category
+ * maps to ilike patterns instead of an exact match. Entries may also match
+ * on title (e.g. CA tenders are usually titled "Appointment of Chartered
+ * Accountant" under a generic category).
+ */
+const CATEGORY_MATCHERS: Record<string, { category?: string[]; title?: string[] }> = {
+  'Civil & Construction': { category: ['%civil%', '%construction%', '%road%', '%bridge%', '%building%', '%marine%', '%structure%'] },
+  'Supply & Procurement': { category: ['%supply%', '%procure%', '%goods%', '%material%', '%abrasive%', '%stationery%', '%furniture%', '%equipment%'] },
+  'Electricity & Power': { category: ['%electric%', '%energy%', '%power%', '%solar%', '%light%', '%transformer%'] },
+  'CA, Audit & Finance': {
+    category: ['%audit%', '%account%', '%financ%', '%chartered%', '%tax%'],
+    title: ['%chartered account%', '%internal audit%', '%statutory audit%', '%ca firm%', '%gst%', '%taxation%', '%book keeping%', '%bookkeeping%', '%balance sheet%', '%audit%'],
+  },
+  'Coal & Mining': { category: ['%coal%', '%mining%', '%mineral%'] },
+  'Water & Irrigation': { category: ['%water%', '%irrigation%', '%pipe%', '%sewer%', '%drain%', '%borewell%', '%boring%', '%canal%'] },
+  'Medical & Health': { category: ['%medical%', '%health%', '%hospital%', '%pharma%', '%surgical%', '%drug%', '%medicine%'] },
+  'IT & Technology': { category: ['%it service%', '%software%', '%computer%', '%network%', '%cctv%', '%digital%', '%electronic%', '%technolog%'] },
+  'Transport & Logistics': { category: ['%transport%', '%logistic%', '%vehicle%', '%shipping%', '%freight%', '%warehous%'] },
+  'Manpower & Services': { category: ['%manpower%', '%security%', '%housekeep%', '%cleaning%', '%outsourc%', '%labour%'] },
+  'Municipal & Urban': { category: ['%municipal%', '%urban%', '%nagar%', '%sanitation%', '%waste%'] },
+  'Printing & Advertising': { category: ['%print%', '%advertis%', '%publicity%'] },
+  'Consultancy & Survey': { category: ['%consult%', '%survey%', '%investigation%', '%dpr%', '%design%'] },
+  'Newspaper / Offline': { category: ['%newspaper%', '%offline%'] },
+  'Miscellaneous': { category: ['%misc%'] },
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyCategoryFilter(q: any, category: string): any {
+  const m = CATEGORY_MATCHERS[category]
+  if (!m) return q.eq('category', category) // unknown label — legacy exact match
+  const clauses = [
+    ...(m.category ?? []).map((p) => `category.ilike.${p}`),
+    ...(m.title ?? []).map((p) => `title.ilike.${p}`),
+  ]
+  if (category === 'Miscellaneous') clauses.push('category.is.null')
+  return q.or(clauses.join(','))
+}
+
 /** Server-side paginated + filtered tenders — lets users browse & search ALL
  *  active tenders, not just a fixed slice. */
 export async function getTendersPage(query: ListQuery = {}): Promise<PageResult<Tender>> {
@@ -209,7 +249,7 @@ export async function getTendersPage(query: ListQuery = {}): Promise<PageResult<
     if (s) q = q.or(`title.ilike.%${s}%,organization.ilike.%${s}%,department.ilike.%${s}%`)
   }
   if (query.state && query.state !== 'All') q = q.eq('state', query.state)
-  if (query.category && query.category !== 'All') q = q.eq('category', query.category)
+  if (query.category && query.category !== 'All') q = applyCategoryFilter(q, query.category)
   if (query.district && query.district !== 'All') q = q.eq('district', query.district)
   if (query.mode === 'Offline') q = q.eq('online_or_offline', 'offline')
   else if (query.mode === 'Newspaper') q = q.ilike('source_portal', '%newspaper%')
@@ -497,6 +537,80 @@ export async function getDiscoveredSources(): Promise<DiscoveredSource[]> {
     requiresCaptcha: !!r.requires_captcha,
   }))
   /* eslint-enable @typescript-eslint/no-explicit-any */
+}
+
+export interface SourceHealth {
+  sourceId: string
+  displayName: string
+  kind: string
+  state: string | null
+  recordCount: number
+  status: string
+  error: string | null
+  runAt: string | null
+}
+
+export async function getSourceHealth(): Promise<SourceHealth[]> {
+  const { data, error } = await supabase
+    .from('source_health')
+    .select('source_id,display_name,kind,state,record_count,status,error,run_at')
+    .order('record_count', { ascending: false })
+    .limit(300)
+  if (error) {
+    console.error('[data] getSourceHealth failed:', error.message)
+    return []
+  }
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  return (data ?? []).map((r: any) => ({
+    sourceId: r.source_id,
+    displayName: r.display_name ?? r.source_id,
+    kind: r.kind ?? 'both',
+    state: r.state ?? null,
+    recordCount: typeof r.record_count === 'number' ? r.record_count : 0,
+    status: r.status ?? 'not_run',
+    error: r.error ?? null,
+    runAt: r.run_at ?? null,
+  }))
+  /* eslint-enable @typescript-eslint/no-explicit-any */
+}
+
+export interface AdminOverview {
+  totalTenders: number
+  activeTenders: number
+  expiredTenders: number
+  pastDeadline: number
+  totalJobs: number
+  pastDeadlineJobs: number
+  newToday: number
+  lastIngestAt: string | null
+}
+
+export async function getAdminOverview(): Promise<AdminOverview> {
+  const todayIso = new Date().toISOString().slice(0, 10)
+  const [total, active, expired, pastDeadline, jobs, pastJobs, newToday] =
+    await Promise.all([
+      count('tenders'),
+      count('tenders', (q) => q.or('status.is.null,status.neq.expired')),
+      count('tenders', (q) => q.eq('status', 'expired')),
+      count('tenders', (q) => q.lt('deadline', todayIso)),
+      count('jobs'),
+      count('jobs', (q) => q.lt('deadline', todayIso)),
+      count('tenders', (q) => q.gte('first_seen_at', `${todayIso}T00:00:00Z`)),
+    ])
+  let lastIngestAt: string | null = null
+  try {
+    const { data } = await supabase
+      .from('source_health')
+      .select('run_at')
+      .order('run_at', { ascending: false })
+      .limit(1)
+    lastIngestAt = data?.[0]?.run_at ?? null
+  } catch { /* table may not exist yet */ }
+  return {
+    totalTenders: total, activeTenders: active, expiredTenders: expired,
+    pastDeadline, totalJobs: jobs, pastDeadlineJobs: pastJobs,
+    newToday, lastIngestAt,
+  }
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

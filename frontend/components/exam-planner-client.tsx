@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   Search, X, MapPin, CalendarClock, Users, GraduationCap, BookOpen,
+  PlayCircle, ExternalLink, Lightbulb, ChevronDown,
 } from 'lucide-react'
 import { AppShell } from '@/components/app-shell'
 import { DemoBanner } from '@/components/demo-banner'
@@ -11,10 +12,17 @@ import { PageHero } from '@/components/page-hero'
 import { PageTabs } from '@/components/page-tabs'
 import { BadgeMode } from '@/components/ui/badge-mode'
 import { Button } from '@/components/ui/button'
-import { useToast } from '@/components/ui/toast'
 import { JOB_CATEGORIES, getDistricts } from '@/lib/mock-data'
 import type { State, Job } from '@/lib/mock-data'
+import { matchExamResources } from '@/lib/study-resources'
+import type { StudyLink } from '@/lib/study-resources'
 import { cn } from '@/lib/utils'
+
+function linkIcon(kind: StudyLink['kind']) {
+  if (kind === 'youtube') return <PlayCircle className="w-3.5 h-3.5 text-[#FF0000]" />
+  if (kind === 'practice') return <BookOpen className="w-3.5 h-3.5 text-[#6C3EF4]" />
+  return <ExternalLink className="w-3.5 h-3.5 text-text-muted" />
+}
 
 const states: Array<State | 'All'> = ['All', 'Chhattisgarh', 'Uttar Pradesh']
 const categories = [...JOB_CATEGORIES]
@@ -25,7 +33,7 @@ export function ExamPlannerClient({ jobs }: { jobs: Job[] }) {
   const [districtFilter, setDistrictFilter] = useState('All')
   const [catFilter, setCatFilter] = useState('All')
   const [focusId, setFocusId] = useState<string | null>(null)
-  const { toast } = useToast()
+  const [openPlan, setOpenPlan] = useState<string | null>(null)
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('jobId')
@@ -46,7 +54,7 @@ export function ExamPlannerClient({ jobs }: { jobs: Job[] }) {
 
   return (
     <AppShell pageTitle="Exam Planner" pageSubtitle="Plan your preparation for upcoming government exams" bg="jobs">
-      <DemoBanner>Job listings are live. Personalized study timelines are a preview until exam-date data is fully ingested.</DemoBanner>
+      <DemoBanner>Job listings are live. Open “Study Plan &amp; Resources” on any notification for curated prep material and YouTube channels for that exam.</DemoBanner>
       <PageHero
         variant="jobs"
         eyebrow="Exam Planner"
@@ -204,12 +212,43 @@ export function ExamPlannerClient({ jobs }: { jobs: Job[] }) {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => toast('Open the job', 'info', { description: 'View the job to see its full exam planner and study checklist.' })}
+                  onClick={() => setOpenPlan(openPlan === j.id ? null : j.id)}
                   className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated text-xs h-8 gap-1.5"
                 >
-                  <GraduationCap className="w-3.5 h-3.5" /> Study Plan
+                  <GraduationCap className="w-3.5 h-3.5" /> Study Plan & Resources
+                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', openPlan === j.id && 'rotate-180')} />
                 </Button>
               </div>
+
+              {/* Study resources panel */}
+              {openPlan === j.id && (() => {
+                const kit = matchExamResources(j.title, j.department)
+                return (
+                  <div className="mt-4 rounded-xl border border-[#6C3EF4]/25 bg-[#6C3EF4]/5 p-4">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#6C3EF4] mb-1">
+                      {kit.name}
+                    </p>
+                    <p className="text-xs text-text-secondary flex items-start gap-1.5 mb-3">
+                      <Lightbulb className="w-3.5 h-3.5 text-warning flex-shrink-0 mt-0.5" />
+                      {kit.tip}
+                    </p>
+                    <div className="grid sm:grid-cols-2 gap-1.5">
+                      {kit.links.map((l) => (
+                        <a
+                          key={l.url + l.label}
+                          href={l.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 rounded-lg border border-border-subtle bg-surface px-3 py-2 text-xs text-text-secondary hover:text-text-primary hover:border-[#6C3EF4]/40 transition-colors"
+                        >
+                          {linkIcon(l.kind)}
+                          <span className="truncate">{l.label}</span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           ))
         )}

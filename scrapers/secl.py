@@ -1,19 +1,22 @@
 """
 scrapers/secl.py — South Eastern Coalfields Limited (SECL) tender scraper.
 
-Source:  https://www.secl-cil.in/website/Tender/TenderList.aspx
-         (ASP.NET WebForms, no JS required for initial listing)
+Source:  https://secl-cil.in/tenders
+         (server-rendered DataTables; static HTTP is sufficient)
 
 SECL is a Coal India subsidiary operating in Chhattisgarh and Madhya Pradesh.
 Its tenders are highly relevant for coal transportation, dumper/truck hiring,
 mining operations, railway siding, and industrial services.
 
-DOM structure:
-  table#ctl00_ContentPlaceHolder1_GridView1  (or similar ContentPlaceHolder ID)
-  Columns:
-    Sr. No. | Tender Ref. | Tender Title / Description | Last Date | EMD | Download
-
-Fallback: if GridView not found, try any <table> with a "tender" header row.
+NOTE (2026 site rebuild): SECL retired the old ASP.NET GridView portal
+(/website/Tender/TenderList.aspx now 302-redirects to /index) and replaced it
+with a plain-HTML listing at /tenders. Tenders live in three tables:
+    table#example   — active e-Tenders / NITs  (the biddable notices)
+    table#example1  — work-order extensions / corrigenda (tender-related)
+    table#example2  — cancellations / debarments / LOA forfeitures (skipped;
+                      administrative notices, not biddable tenders)
+Each row is: Subject (title + embedded "dtd. DD.MM.YYYY") | download PDF link
+under /writereaddata/<hash-or-filename>.
 
 Standalone:  python -m scrapers.secl
 """
@@ -23,6 +26,7 @@ from __future__ import annotations
 import re
 import sys
 import warnings
+from datetime import date
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -32,8 +36,15 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import core  # noqa: E402
 
-_PORTAL   = "https://www.secl-cil.in/website/Tender/TenderList.aspx"
-_BASE_URL = "https://www.secl-cil.in"
+_PORTAL   = "https://secl-cil.in/tenders"
+_BASE_URL = "https://secl-cil.in"
+
+# Tables holding biddable notices. 'example2' (cancellations/debarments/LOA
+# forfeitures) is deliberately excluded — those are administrative, not tenders.
+_TENDER_TABLE_IDS = ("example", "example1")
+
+# Notice date embedded in the subject, e.g. "dtd. 19.06.2026" or "dated 8.5.2026".
+_DATE_RE = re.compile(r"(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})")
 
 _HEADERS = {
     "User-Agent": (
@@ -128,132 +139,71 @@ def _fetch_html() -> str | None:
         return None
 
 
-def _find_grid(soup: BeautifulSoup):
-    """Find the tender table in the page."""
-    # Primary: ASP.NET GridView with known partial ID
-    for table in soup.find_all("table"):
-        tid = table.get("id", "")
-        if "Grid" in tid or "GridView" in tid or "tender" in tid.lower():
-            return table
-
-    # Fallback: first table with a header containing "tender" or "description"
-    for table in soup.find_all("table"):
-        headers = [th.get_text(strip=True).lower() for th in table.find_all("th")]
-        if any(h in ("tender", "description", "title", "scope") for h in headers):
-            return table
-
-    # Last resort: largest table on the page
-    tables = soup.find_all("table")
-    return max(tables, key=lambda t: len(t.find_all("tr")), default=None) if tables else None
-
-
-def _doc_url(cell, base=_BASE_URL) -> str | None:
-    """Extract first download/PDF link from a table cell."""
-    for a in cell.find_all("a", href=True):
-        href = a["href"]
-        if href.lower().endswith((".pdf", ".doc", ".docx", ".zip", ".xls", ".xlsx")):
-            return urljoin(base, href)
-        if any(kw in href.lower() for kw in ("download", "document", "tender", "pdf")):
-            return urljoin(base, href)
-    return None
+def _notice_date(subject: str) -> date | None:
+    """Parse the notice date embedded in a subject line (dd.mm.yyyy)."""
+    m = _DATE_RE.search(subject or "")
+    if not m:
+        return None
+    dd, mm, yy = m.groups()
+    try:
+        return date(int(yy), int(mm), int(dd))
+    except ValueError:
+        return None
 
 
 def scrape() -> list[dict]:
-    """Return core.tender_record() dicts from SECL tender listing."""
+    """Return core.tender_record() dicts from the SECL /tenders listing."""
     html = _fetch_html()
     if not html:
         print("   secl: 0 records returned — portal may be down")
         return []
 
     soup = BeautifulSoup(html, "html.parser")
-    grid = _find_grid(soup)
-    if not grid:
-        print("   secl: tender table not found — portal may have restructured")
-        return []
-
-    # Determine column order from headers
-    headers = [th.get_text(strip=True).lower() for th in grid.find_all("th")]
-    col: dict[str, int] = {}
-    for i, h in enumerate(headers):
-        if any(x in h for x in ("sr", "s.no", "sno", "no.")):
-            col.setdefault("sr", i)
-        elif any(x in h for x in ("ref", "no", "number", "nit", "tender no")):
-            col.setdefault("ref", i)
-        elif any(x in h for x in ("title", "description", "scope", "work", "name")):
-            col.setdefault("title", i)
-        elif any(x in h for x in ("last", "closing", "deadline", "date")):
-            col.setdefault("deadline", i)
-        elif "emd" in h:
-            col.setdefault("emd", i)
-        elif any(x in h for x in ("download", "document", "pdf", "link")):
-            col.setdefault("doc", i)
-        elif any(x in h for x in ("division", "area", "location", "unit")):
-            col.setdefault("division", i)
-        elif any(x in h for x in ("value", "amount", "estimated", "cost")):
-            col.setdefault("value", i)
-
-    # Default positions if headers not matched (positional fallback)
-    if not col:
-        col = {"sr": 0, "ref": 1, "title": 2, "deadline": 3, "emd": 4, "doc": 5}
-
     records: list[dict] = []
-    tbody = grid.find("tbody") or grid
-    for row in tbody.find_all("tr"):
-        cells = row.find_all("td")
-        if len(cells) < 3:
+    seen: set[str] = set()
+
+    for tid in _TENDER_TABLE_IDS:
+        table = soup.find("table", id=tid)
+        if not table:
             continue
+        body = table.find("tbody") or table
+        for row in body.find_all("tr"):
+            cells = row.find_all("td")
+            if len(cells) < 2:
+                continue
 
-        def _c(key: str, default="") -> str:
-            idx = col.get(key)
-            if idx is None or idx >= len(cells):
-                return default
-            return cells[idx].get_text(" ", strip=True)
+            # Column 0 = subject (title + embedded date); last col = download link.
+            subject = cells[0].get_text(" ", strip=True)
+            if not subject or len(subject) < 8:
+                continue
 
-        sr = _c("sr")
-        if sr and not re.match(r"^\d+$", sr.strip()):
-            continue  # header repeat or non-data row
+            doc_url = None
+            for a in row.find_all("a", href=True):
+                doc_url = urljoin(_BASE_URL, a["href"])
+                break
 
-        ref      = _c("ref")
-        title    = _c("title")
-        deadline = _c("deadline")
-        emd      = _c("emd")
-        division = _c("division")
-        value    = _c("value")
-
-        if not title or len(title) < 5:
-            continue
-
-        # Get document URL from link cell or any cell
-        doc_url = None
-        doc_idx = col.get("doc")
-        if doc_idx is not None and doc_idx < len(cells):
-            doc_url = _doc_url(cells[doc_idx])
-        if not doc_url:
-            for cell in cells:
-                doc_url = _doc_url(cell)
-                if doc_url:
-                    break
-        if not doc_url:
-            doc_url = _PORTAL
-
-        combined = f"{title} {division}"
-        records.append(core.tender_record(
-            title=title,
-            state="Chhattisgarh",
-            organization=f"SECL — {division}" if division else "South Eastern Coalfields Ltd (SECL)",
-            category=_infer_category(combined),
-            district=_infer_district(combined),
-            value_text=value or None,
-            emd=emd or None,
-            deadline=deadline or None,
-            description=f"Tender Ref: {ref}" if ref else None,
-            document_url=doc_url,
-            source_portal="secl-cil.in",
-        ))
+            pub = _notice_date(subject)
+            rec = core.tender_record(
+                title=subject[:300],
+                state="Chhattisgarh",
+                organization="South Eastern Coalfields Ltd (SECL)",
+                category=_infer_category(subject),
+                district=_infer_district(subject),
+                deadline=None,
+                published_date=pub.isoformat() if pub else None,
+                description=(f"SECL tender notice dated {pub.isoformat()}"
+                             if pub else "SECL tender notice"),
+                document_url=doc_url or _PORTAL,
+                source_portal="secl-cil.in",
+            )
+            if rec["source_id"] not in seen:
+                seen.add(rec["source_id"])
+                records.append(rec)
 
     print(f"   secl: {len(records)} core.tender_record() objects ready")
     if not records:
-        print("   secl: WARNING — 0 records returned; portal may be down or restructured")
+        print("   secl: WARNING — 0 records returned; portal may be down or "
+              "restructured (expected tables #example / #example1 at /tenders)")
     return records
 
 

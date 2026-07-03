@@ -477,6 +477,7 @@ def tender_record(*, title, state, organization, category=None, district=None,
 CATEGORY_BUCKETS = [
     "Civil & Construction", "Water & Irrigation", "Electrical & Energy",
     "Medical & Healthcare", "IT & Technology", "Transport & Logistics",
+    "Supply & Procurement", "CA, Audit & Finance",
     "Manufacturing & Goods", "Municipal Projects", "Consultancy & Survey",
     "Police & Security", "Government & Administration", "Printing & Advertising",
     "Miscellaneous",
@@ -484,6 +485,9 @@ CATEGORY_BUCKETS = [
 
 # Checked in order — first keyword hit wins, so put narrower buckets first.
 _BUCKET_KEYWORDS = [
+    ("CA, Audit & Finance",   ["audit", "chartered account", "accounting",
+                               "taxation", "gst", "book keeping", "bookkeeping",
+                               "balance sheet", "financial services"]),
     ("Water & Irrigation",    ["water", "irrigation", "pipe", "drilling", "boring",
                                "canal", "marine", "dam", "sewer", "drainage", "borewell"]),
     ("Electrical & Energy",   ["electric", "solar", "energy", "power", "lighting",
@@ -496,10 +500,11 @@ _BUCKET_KEYWORDS = [
                                "logistic", "coal", "mining", "loading", "haul"]),
     ("Municipal Projects",    ["municipal", "nagar", "urban", "sanitation", "solid waste"]),
     ("Consultancy & Survey",  ["survey", "investigation", "consultanc", "design",
-                               "dpr", "audit", "advisory"]),
+                               "dpr", "advisory"]),
+    ("Supply & Procurement",  ["supply", "procurement", "goods", "material",
+                               "stationery", "furniture", "uniform"]),
     ("Manufacturing & Goods", ["manufactur", "abrasive", "mechanical", "equipment",
-                               "goods", "material", "memento", "medal", "dairy",
-                               "furniture", "supply", "stationery", "uniform"]),
+                               "memento", "medal", "dairy"]),
     ("Civil & Construction",  ["civil", "construction", "road", "bridge", "building",
                                "composite", "concrete", "rcc", "works", "structure"]),
 ]
@@ -522,6 +527,11 @@ def normalize_category(raw) -> str:
 # Keywords are kept specific to avoid false positives (e.g. "collectorate" not a
 # bare "collector", which would catch "dust collector").
 _SECTOR_OVERRIDES = [
+    ("CA, Audit & Finance", [
+        "chartered account", "internal audit", "statutory audit", "ca firm",
+        "audit of accounts", "concurrent audit", "लेखा परीक्ष", "अंकेक्षण",
+        "सनदी लेखाकार",
+    ]),
     ("Police & Security", [
         "police", "आरक्षी", "थाना", "thana ", "constab", "home guard", "homeguard",
         "jail", "prison", "जेल", "forensic", "superintendent of police", "sp office",

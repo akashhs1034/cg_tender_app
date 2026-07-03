@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getCurrentUser } from '@/lib/supabase/server'
+import { isCurrentUserAdmin } from '@/lib/admin'
 import { createAdminClient } from '@/lib/supabase/admin'
 
 export const runtime = 'nodejs'
@@ -16,12 +16,7 @@ export const dynamic = 'force-dynamic'
  * (comma-separated env var).
  */
 export async function POST(req: Request) {
-  const user = await getCurrentUser()
-  const admins = (process.env.ADMIN_EMAILS || 'akashhs1034@gmail.com')
-    .split(',')
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean)
-  if (!user?.email || !admins.includes(user.email.toLowerCase())) {
+  if (!(await isCurrentUserAdmin())) {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
   }
 

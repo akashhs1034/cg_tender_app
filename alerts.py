@@ -31,7 +31,7 @@ LOCAL_ALERT_LOG = DATA / "alert_log.json"
 
 SCORE_THRESHOLD = int(os.getenv("ALERT_SCORE_THRESHOLD", "55"))
 FROM_EMAIL      = os.getenv("FROM_EMAIL", "alerts@opporta.in")
-APP_URL         = os.getenv("APP_URL", "https://opporta.streamlit.app")
+APP_URL         = os.getenv("APP_URL", "https://opporta.vercel.app")
 
 
 # ---------------------------------------------------------------------------

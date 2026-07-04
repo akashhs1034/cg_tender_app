@@ -30,7 +30,10 @@ DATA = Path(__file__).parent / "data"
 LOCAL_ALERT_LOG = DATA / "alert_log.json"
 
 SCORE_THRESHOLD = int(os.getenv("ALERT_SCORE_THRESHOLD", "55"))
-FROM_EMAIL      = os.getenv("FROM_EMAIL", "alerts@opporta.in")
+# Resend only delivers from a verified domain; without one, their shared
+# onboarding sender works (delivers to the account owner's inbox — fine while
+# the founder is the only profile). Set FROM_EMAIL once a domain is verified.
+FROM_EMAIL      = os.getenv("FROM_EMAIL") or "Opporta <onboarding@resend.dev>"
 APP_URL         = os.getenv("APP_URL", "https://opporta.vercel.app")
 
 
@@ -38,7 +41,11 @@ APP_URL         = os.getenv("APP_URL", "https://opporta.vercel.app")
 # Supabase helpers
 # ---------------------------------------------------------------------------
 def _sb():
-    url, key = os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY")
+    """Service-role client. profiles/user_profiles/alert_log are all RLS
+    own-row or deny-all, so the anon key sees NOTHING here (the historical
+    '401 -> no contractor profiles' failure). The service key bypasses RLS."""
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
     if url and key:
         try:
             from supabase import create_client
@@ -87,15 +94,82 @@ def _save_alert_log(entries: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Profile loader
+# Profile loader — merges BOTH profile stores:
+#   * profiles       (legacy Streamlit table, email-keyed, scorer-shaped)
+#   * user_profiles  (Next.js app table, auth-user-keyed) — normalized to the
+#     scorer's shape and joined to emails via the auth admin API.
 # ---------------------------------------------------------------------------
+def _int_or_zero(v) -> int:
+    try:
+        return int(float(str(v).strip()))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _normalize_user_profile(row: dict, email: str | None) -> dict | None:
+    if not email:
+        return None
+    return {
+        "email": email,
+        "full_name": row.get("full_name"),
+        "company_name": row.get("company_name"),
+        "contractor_class": row.get("contractor_class"),
+        "turnover_lakhs": row.get("turnover_lakhs"),
+        "experience_years": _int_or_zero(row.get("experience_years")),
+        "sectors": list(row.get("sectors") or []),
+        "states": [row["state"]] if row.get("state") else [],
+        "districts": list(row.get("target_districts") or []),
+    }
+
+
+def _auth_emails_by_id(sb) -> dict[str, str]:
+    """user_id -> email via the auth admin API (service key required)."""
+    out: dict[str, str] = {}
+    try:
+        page = 1
+        while page <= 20:  # safety cap
+            res = sb.auth.admin.list_users(page=page, per_page=100)
+            users = getattr(res, "users", None) or (res if isinstance(res, list) else [])
+            if not users:
+                break
+            for u in users:
+                uid = str(getattr(u, "id", "") or "")
+                mail = (getattr(u, "email", "") or "").strip().lower()
+                if uid and mail:
+                    out[uid] = mail
+            if len(users) < 100:
+                break
+            page += 1
+    except Exception as exc:
+        logger.warning("alerts: could not list auth users -- %s", exc)
+    return out
+
+
 def _all_profiles() -> list[dict]:
+    merged: dict[str, dict] = {}
     sb = _sb()
     if sb:
+        # Next.js app profiles (user_profiles), joined to emails.
         try:
-            return sb.table("profiles").select("*").execute().data or []
-        except Exception:
-            pass
+            rows = sb.table("user_profiles").select("*").execute().data or []
+            if rows:
+                emails = _auth_emails_by_id(sb)
+                for r in rows:
+                    p = _normalize_user_profile(r, emails.get(str(r.get("user_id"))))
+                    if p:
+                        merged[p["email"]] = p
+        except Exception as exc:
+            logger.warning("alerts: user_profiles read failed -- %s", exc)
+        # Legacy Streamlit profiles win on conflict (richer scorer fields).
+        try:
+            for r in sb.table("profiles").select("*").execute().data or []:
+                mail = (r.get("email") or "").strip().lower()
+                if mail:
+                    merged[mail] = r
+        except Exception as exc:
+            logger.warning("alerts: profiles read failed -- %s", exc)
+    if merged:
+        return list(merged.values())
     if accounts.LOCAL_PROFILES.exists():
         try:
             store = json.loads(accounts.LOCAL_PROFILES.read_text())

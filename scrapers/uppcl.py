@@ -49,10 +49,19 @@ class _LegacyTLSAdapter(HTTPAdapter):
 
     def _ctx(self) -> ssl.SSLContext:
         ctx = create_urllib3_context()
-        # SECLEVEL=1 permits the older ciphers/keys these servers offer.
+        # SECLEVEL=0 + TLSv1 floor: the live run still failed with
+        # SSLV3_ALERT_HANDSHAKE_FAILURE at SECLEVEL=1, i.e. the server only
+        # speaks TLS 1.0/1.1 with ciphers SECLEVEL=1 still refuses.
         try:
-            ctx.set_ciphers("DEFAULT@SECLEVEL=1")
+            ctx.set_ciphers("ALL:@SECLEVEL=0")
         except ssl.SSLError:
+            try:
+                ctx.set_ciphers("DEFAULT@SECLEVEL=1")
+            except ssl.SSLError:
+                pass
+        try:
+            ctx.minimum_version = ssl.TLSVersion.TLSv1
+        except (AttributeError, ValueError):
             pass
         # 0x4 == OP_LEGACY_SERVER_CONNECT (not always exposed as a constant).
         ctx.options |= getattr(ssl, "OP_LEGACY_SERVER_CONNECT", 0x4)

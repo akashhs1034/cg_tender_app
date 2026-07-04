@@ -268,11 +268,30 @@ def collect() -> dict:
             "generic_ai": {"source_id": "generic_ai", "count": 0,
                            "status": "failed", "error": "no LLM API key"}}}
 
+    # Gemini's free tier allows only a handful of requests/minute; hitting all
+    # sources back-to-back after the pipeline has already used quota produced
+    # a solid wall of 429s. Pace the calls and give up for the run once we see
+    # repeated rate-limiting (tomorrow's run picks them up again).
+    import time as _time
+    pace_seconds = float(os.getenv("GENERIC_AI_PACE_SECONDS", "10"))
+    consecutive_429 = 0
+
     print(f"   generic_ai: extracting from {len(sources)} configured source(s)…")
-    for src in sources:
+    for i, src in enumerate(sources):
         name = src.get("name") or src["url"]
+        if consecutive_429 >= 3:
+            report[name] = {"source_id": name, "count": 0,
+                            "status": "no_records",
+                            "error": "skipped — Gemini quota exhausted this run"}
+            continue
+        if i:
+            _time.sleep(pace_seconds)
         try:
             parsed = _extract(src)
+            if parsed is None and core.last_ai_error_was_rate_limit():
+                consecutive_429 += 1
+            elif parsed is not None:
+                consecutive_429 = 0
             if not parsed or not isinstance(parsed, dict):
                 report[name] = {"source_id": name, "count": 0,
                                 "status": "no_records", "error": None}

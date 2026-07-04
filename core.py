@@ -66,6 +66,11 @@ def clear_ai_error() -> None:
     st["detail"] = ""
 
 
+def last_ai_error_was_rate_limit() -> bool:
+    """True when the most recent AI failure was a 429/quota exhaustion."""
+    return _ai_err_state().get("kind") == "quota"
+
+
 def ai_error_message():
     """Return (severity, text) for the last AI failure, or None if there was none.
 

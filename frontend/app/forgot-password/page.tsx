@@ -20,7 +20,9 @@ export default function ForgotPasswordPage() {
     try {
       const supabase = createClient()
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
+        // Recovery links can return either a PKCE code or an implicit-flow hash.
+        // Land on the client page so it can establish the session in both cases.
+        redirectTo: `${window.location.origin}/reset-password`,
       })
       if (error) {
         setError(error.message)

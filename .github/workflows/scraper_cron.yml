@@ -103,4 +103,9 @@ jobs:
           HTTPS_PROXY:          ${{ secrets.SCRAPER_HTTPS_PROXY }}
           HTTP_PROXY:           ${{ secrets.SCRAPER_HTTPS_PROXY }}
           NO_PROXY:             ${{ secrets.SCRAPER_NO_PROXY }}
+          # Free-tier OCR pacing. Defaults keep a FREE gemini key under its
+          # ~10 req/min limit with no config; override only to tune. Lower the
+          # RPM if you still see 429s, raise it if you move to a paid key.
+          NEWSPAPER_OCR_RPM:          ${{ vars.NEWSPAPER_OCR_RPM }}
+          NEWSPAPER_OCR_PACE_SECONDS: ${{ vars.NEWSPAPER_OCR_PACE_SECONDS }}
         run: python ingest.py

@@ -401,26 +401,61 @@ _MAX_ASSETS_PER_PAPER = 12       # accuracy/cost guard: cap Vision calls per pap
 # so the rest of the run stops calling Vision cleanly (tomorrow's run resumes).
 import threading
 _OCR_QUOTA_HIT = threading.Event()
-# Pace between Vision calls to avoid tripping the per-minute limit in the first
-# place. 0 = no pacing (fast, healthy quota). Set NEWSPAPER_OCR_PACE_SECONDS to
-# a few seconds if the run keeps hitting 429s.
-_OCR_PACE = float(os.getenv("NEWSPAPER_OCR_PACE_SECONDS", "0"))
-_OCR_MAX_BACKOFF_RETRIES = 2     # transient-429 retries before latching
+
+# ── Free-tier OCR throttle ────────────────────────────────────────────────────
+# gemini-2.5-flash's FREE tier allows only ~10 requests/minute. collect() runs
+# newspapers on 4 worker threads, so unthrottled Vision calls fire concurrently
+# and instantly trip 429s. A single PROCESS-WIDE gate spaces every Vision call
+# (across all threads) so a free key stays under the limit with zero config.
+#   NEWSPAPER_OCR_RPM           requests/minute ceiling (default 8 = 7.5s apart,
+#                               a safety margin under the ~10/min free cap)
+#   NEWSPAPER_OCR_PACE_SECONDS  optional extra floor on the gap (default 0)
+def _env_float(name: str, default: float) -> float:
+    """os.getenv as float, tolerant of unset/blank/garbage. GitHub Actions sets
+    an unconfigured ``vars.*`` to an empty string, so a bare float() would crash
+    the whole run — hence the guard."""
+    raw = (os.getenv(name) or "").strip()
+    try:
+        return float(raw) if raw else default
+    except ValueError:
+        return default
+
+
+_OCR_RPM = _env_float("NEWSPAPER_OCR_RPM", 8.0)
+_OCR_PACE = _env_float("NEWSPAPER_OCR_PACE_SECONDS", 0.0)
+_OCR_MIN_INTERVAL = max(60.0 / _OCR_RPM if _OCR_RPM > 0 else 0.0, _OCR_PACE)
+_OCR_GATE = threading.Lock()
+_OCR_LAST = [0.0]                # monotonic timestamp of the last Vision call
+_OCR_MAX_BACKOFF_RETRIES = 3     # transient-429 retries before latching
+
+
+def _ocr_throttle() -> None:
+    """Block until at least _OCR_MIN_INTERVAL has elapsed since the last Vision
+    call, process-wide. Holding the lock during the wait serializes call starts
+    across every worker thread, giving a true global requests/minute ceiling."""
+    if _OCR_MIN_INTERVAL <= 0:
+        return
+    with _OCR_GATE:
+        wait = _OCR_MIN_INTERVAL - (time.monotonic() - _OCR_LAST[0])
+        if wait > 0:
+            time.sleep(wait)
+        _OCR_LAST[0] = time.monotonic()
+
 
 _EPAPER_FNS = {"haribhoomi": _haribhoomi_epaper_pages}
 
 
 def _vision_extract_backoff(payload, mime, **kw):
-    """_vision_extract with bounded exponential backoff on 429/quota.
-
-    Returns (tenders, jobs, status). On sustained quota exhaustion it sets the
-    run-wide latch and returns status 'quota'."""
+    """_vision_extract, globally throttled, with bounded exponential backoff on
+    429/quota. Returns (tenders, jobs, status). On sustained quota exhaustion it
+    sets the run-wide latch and returns status 'quota'."""
     for attempt in range(_OCR_MAX_BACKOFF_RETRIES + 1):
+        _ocr_throttle()                        # stay under the free per-minute cap
         t, j, vstatus = _vision_extract(payload, mime, **kw)
         if not core.last_ai_error_was_rate_limit():
             return t, j, vstatus
         if attempt < _OCR_MAX_BACKOFF_RETRIES:
-            time.sleep(8 * (2 ** attempt))     # 8s, 16s
+            time.sleep(15 * (2 ** attempt))    # 15s, 30s, 60s — let the window reset
     _OCR_QUOTA_HIT.set()
     return t, j, "quota"
 
@@ -499,7 +534,7 @@ def _process_newspaper(paper: dict) -> tuple[list[dict], list[dict], str]:
         return [], [], "no_assets"
 
     # ── download + Vision each asset (capped), per-asset isolation ──
-    for i, (url, akind, district) in enumerate(asset_urls[:cap]):
+    for url, akind, district in asset_urls[:cap]:
         # Stop making Vision calls once the run has exhausted its OCR quota.
         if _OCR_QUOTA_HIT.is_set():
             vision_statuses.append("quota")
@@ -507,8 +542,6 @@ def _process_newspaper(paper: dict) -> tuple[list[dict], list[dict], str]:
         payload, ctype, status = _fetch(url, source=name, want="bytes")
         if not payload:
             continue
-        if _OCR_PACE and i:
-            time.sleep(_OCR_PACE)
         mime = ("application/pdf" if (akind == "pdf" or "pdf" in ctype)
                 else ("image/png" if url.lower().endswith(".png") else "image/jpeg"))
         t, j, vstatus = _vision_extract_backoff(payload, mime, newspaper=name,

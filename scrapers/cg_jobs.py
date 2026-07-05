@@ -53,8 +53,13 @@ def _scrape_cgpsc() -> list[dict]:
 
         title = _parse_title(text)
 
+        # The date in the advertisement link is the PUBLICATION date, not the
+        # application last-date. Storing it as `deadline` made the pipeline's
+        # expired-row cleanup delete valid notices the day after they appeared.
+        # Keep it as published_date; leave deadline unknown so nothing is
+        # dropped on a misread date.
         dm = re.search(r"\((\d{2}-\d{2}-\d{4})\)\s*$", text.strip())
-        deadline_raw = dm.group(1) if dm else None
+        published_raw = dm.group(1) if dm else None
 
         pdf_url = href if href.startswith("http") else "https://psc.cg.gov.in/" + href.lstrip("/")
 
@@ -62,7 +67,7 @@ def _scrape_cgpsc() -> list[dict]:
             title=title,
             department="Chhattisgarh Public Service Commission",
             state="Chhattisgarh",
-            deadline=deadline_raw,
+            published_date=published_raw,
             document_url=pdf_url,
             apply_link=pdf_url,
             source_portal="https://psc.cg.gov.in/Advertisement.php",

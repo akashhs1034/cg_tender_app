@@ -385,6 +385,44 @@ def lifecycle_status(deadline, confidence_score=None, requires_manual_review=Fal
     return "active"
 
 
+# Documents a department publishes that are NOT tenders but live next to them
+# on the same page and look like tenders to a naive PDF-link harvester (this
+# is why CG PWD was ingesting budgets / Schedule-of-Rates / RTI files). Matched
+# case-insensitively against the link text and the href.
+_NON_TENDER_DOC_RX = re.compile(
+    r"schedule\s*of\s*rate|\bsor\b|\bs\.?o\.?r\b|\bbudget\b|\brti\b|"
+    r"right\s*to\s*information|citizen'?s?\s*charter|annual\s*report|"
+    r"organi[sz]ation\s*chart|\bgradation\b|seniority|holiday\s*list|"
+    r"telephone\s*directory|phone\s*directory|\bmanual\b|recruitment\s*rules|"
+    r"vigilance\s*clearance|office\s*order|\bminutes\b|\bagenda\b|"
+    r"annual\s*plan|action\s*plan|monthly\s*progress|photo\s*gallery",
+    re.I,
+)
+
+# A positive signal that a harvested link really is a tender/NIT.
+_TENDER_SIGNAL_RX = re.compile(
+    r"tender|\bnit\b|e-?tender|e-?procure|quotation|\brfp\b|\brfq\b|"
+    r"corrigendum|bid\b|nib\b|expression\s*of\s*interest|\beoi\b|"
+    r"निविदा|ई-?निविदा|कोटेशन|work\s*order",
+    re.I,
+)
+
+
+def is_probable_tender_link(title: str, href: str = "") -> bool:
+    """Heuristic gate for PDF/notice-link harvesters.
+
+    Returns False for department documents that sit next to tenders but are not
+    tenders (SOR, budgets, RTI, charters, seniority lists, manuals, …). When a
+    positive tender signal is present we keep the item even if a denied word
+    also appears (e.g. "Tender for RTI cell furniture"), because the signal is
+    the stronger evidence.
+    """
+    blob = f"{title or ''} {href or ''}"
+    if _TENDER_SIGNAL_RX.search(blob):
+        return True
+    return not _NON_TENDER_DOC_RX.search(blob)
+
+
 def tender_record(*, title, state, organization, category=None, district=None,
                   value_text=None, value_lakhs=None, deadline=None, emd=None,
                   contractor_class=None, experience=None, eligibility=None,

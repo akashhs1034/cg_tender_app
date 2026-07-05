@@ -203,6 +203,9 @@ def _extract_tender_links(soup: BeautifulSoup, base: str) -> list[tuple[str, str
                                    "निविदा", "e-tender", "quotation"))
         if not (is_doc or is_notice):
             continue
+        # Drop budgets / SOR / RTI / charters that look like tender PDFs.
+        if not core.is_probable_tender_link(text, href):
+            continue
         full = urljoin(base, href)
         if full in seen:
             continue

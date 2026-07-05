@@ -153,9 +153,14 @@ def _extract_tender_links(soup: BeautifulSoup, base: str) -> list[str]:
     links = []
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        text = a.get_text(strip=True).lower()
+        text = a.get_text(strip=True)
+        low = text.lower()
         if (href.lower().endswith((".pdf", ".doc", ".docx"))
-                or any(kw in text for kw in ("tender", "nit", "notice", "bid"))):
+                or any(kw in low for kw in ("tender", "nit", "notice", "bid"))):
+            # Skip budgets / Schedule-of-Rates / RTI / charters that sit next to
+            # tenders on the PWD site and were being ingested as tenders.
+            if not core.is_probable_tender_link(text, href):
+                continue
             full = urljoin(base, href)
             if full not in links:
                 links.append(full)

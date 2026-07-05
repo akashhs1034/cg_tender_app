@@ -368,7 +368,34 @@ def _haribhoomi_epaper_pages(max_editions: int = 4,
 # ──────────────────────────────────────────────────────────────────────────────
 _MAX_ASSETS_PER_PAPER = 12       # accuracy/cost guard: cap Vision calls per paper
 
+# Run-wide OCR quota latch. Gemini's free tier rate-limits aggressively; once it
+# starts returning 429s, every further Vision call fails and used to mark every
+# newspaper "failed". When we detect sustained quota exhaustion we set this latch
+# so the rest of the run stops calling Vision cleanly (tomorrow's run resumes).
+import threading
+_OCR_QUOTA_HIT = threading.Event()
+# Pace between Vision calls to avoid tripping the per-minute limit in the first
+# place. 0 = no pacing (fast, healthy quota). Set NEWSPAPER_OCR_PACE_SECONDS to
+# a few seconds if the run keeps hitting 429s.
+_OCR_PACE = float(os.getenv("NEWSPAPER_OCR_PACE_SECONDS", "0"))
+_OCR_MAX_BACKOFF_RETRIES = 2     # transient-429 retries before latching
+
 _EPAPER_FNS = {"haribhoomi": _haribhoomi_epaper_pages}
+
+
+def _vision_extract_backoff(payload, mime, **kw):
+    """_vision_extract with bounded exponential backoff on 429/quota.
+
+    Returns (tenders, jobs, status). On sustained quota exhaustion it sets the
+    run-wide latch and returns status 'quota'."""
+    for attempt in range(_OCR_MAX_BACKOFF_RETRIES + 1):
+        t, j, vstatus = _vision_extract(payload, mime, **kw)
+        if not core.last_ai_error_was_rate_limit():
+            return t, j, vstatus
+        if attempt < _OCR_MAX_BACKOFF_RETRIES:
+            time.sleep(8 * (2 ** attempt))     # 8s, 16s
+    _OCR_QUOTA_HIT.set()
+    return t, j, "quota"
 
 
 def _process_newspaper(paper: dict) -> tuple[list[dict], list[dict], str]:
@@ -432,22 +459,34 @@ def _process_newspaper(paper: dict) -> tuple[list[dict], list[dict], str]:
         return [], [], "no_assets"
 
     # ── download + Vision each asset (capped), per-asset isolation ──
-    for url, akind, district in asset_urls[:cap]:
+    for i, (url, akind, district) in enumerate(asset_urls[:cap]):
+        # Stop making Vision calls once the run has exhausted its OCR quota.
+        if _OCR_QUOTA_HIT.is_set():
+            vision_statuses.append("quota")
+            break
         payload, ctype, status = _fetch(url, source=name, want="bytes")
         if not payload:
             continue
+        if _OCR_PACE and i:
+            time.sleep(_OCR_PACE)
         mime = ("application/pdf" if (akind == "pdf" or "pdf" in ctype)
                 else ("image/png" if url.lower().endswith(".png") else "image/jpeg"))
-        t, j, vstatus = _vision_extract(payload, mime, newspaper=name,
-                                        state_hint=state_hint, source_url=url,
-                                        district_hint=district,
-                                        source_type=kind)
+        t, j, vstatus = _vision_extract_backoff(payload, mime, newspaper=name,
+                                                state_hint=state_hint, source_url=url,
+                                                district_hint=district,
+                                                source_type=kind)
         vision_statuses.append(vstatus)
-        if str(vstatus).startswith("error"):
+        if vstatus == "quota":
+            _log_fail(name, url, "ocr", "Gemini OCR quota exhausted for this run")
+        elif str(vstatus).startswith("error"):
             _log_fail(name, url, "ocr", vstatus)
         tenders += t
         jobs += j
 
+    # Distinguish "quota ran out" from genuine extraction failure so the health
+    # dashboard shows the real reason instead of a misleading "failed".
+    if not tenders and not jobs and "quota" in vision_statuses:
+        return tenders, jobs, "quota_exhausted"
     if vision_statuses and all(str(status).startswith("error")
                                for status in vision_statuses):
         return tenders, jobs, "failed"

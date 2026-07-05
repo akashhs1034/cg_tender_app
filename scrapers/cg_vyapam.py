@@ -75,11 +75,15 @@ def scrape() -> list[dict]:
     out: list[dict] = []
     for it in items:
         title = it["title"][:295].strip() or f"CG Vyapam {it['examCode']} Recruitment"
+        # The date scraped off the listing is the notification/publication date,
+        # not the application last-date. Storing it as `deadline` made the
+        # pipeline delete live recruitment as "expired". Record it as
+        # published_date and leave deadline unknown.
         rec = core.job_record(
             title=title,
             department="CG Vyapam",
             state="Chhattisgarh",
-            deadline=it["date"],
+            published_date=it["date"],
             description=f"Exam Code: {it['examCode']}",
             document_url=it["detailUrl"],
             apply_link=_APPLY_PORTAL,

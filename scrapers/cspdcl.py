@@ -21,6 +21,7 @@ DOM structure (confirmed 2026-06-20):
 from __future__ import annotations
 
 import logging
+import os
 import re
 import warnings
 from urllib.parse import quote
@@ -32,8 +33,17 @@ import core
 
 logger = logging.getLogger(__name__)
 
-_PORTAL_URL = "https://cspdcl.co.in/cseb/frmViewTenderesNEW.aspx?paramflag=1"
 _BASE_URL   = "https://cspdcl.co.in/cseb"
+_PORTAL_TPL = _BASE_URL + "/frmViewTenderesNEW.aspx?paramflag={flag}"
+# paramflag selects the tender category/company view (works, supply, services,
+# and the separate CSPGCL/CSPTCL/CSEB feeds). Reading only flag 1 captured a
+# single slice; sweep several and dedup. Override with CSPDCL_PARAMFLAGS.
+_PARAMFLAGS = [
+    f.strip() for f in os.getenv("CSPDCL_PARAMFLAGS", "1,2,3,4,5").split(",")
+    if f.strip()
+]
+# Kept for backward-compat (docstring / standalone references).
+_PORTAL_URL = _PORTAL_TPL.format(flag=1)
 _HEADERS    = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -106,9 +116,9 @@ def _doc_url_from_postback(href: str) -> str | None:
     return _BASE_URL + quote(path, safe="/.")
 
 
-def _fetch_html() -> str | None:
+def _fetch_html(url: str) -> str | None:
     try:
-        r = requests.get(_PORTAL_URL, headers=_HEADERS, timeout=25, verify=True)
+        r = requests.get(url, headers=_HEADERS, timeout=25, verify=True)
         r.raise_for_status()
         return r.text
     except requests.exceptions.SSLError:
@@ -116,7 +126,7 @@ def _fetch_html() -> str | None:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                r = requests.get(_PORTAL_URL, headers=_HEADERS, timeout=25, verify=False)
+                r = requests.get(url, headers=_HEADERS, timeout=25, verify=False)
                 r.raise_for_status()
                 return r.text
             except Exception as exc:
@@ -127,23 +137,14 @@ def _fetch_html() -> str | None:
         return None
 
 
-def scrape() -> list[dict]:
-    """Return core.tender_record() dicts from the CSPDCL e-bidding portal."""
-    html = _fetch_html()
-    if not html:
-        logger.warning("cspdcl: 0 records returned — portal may be down or restructured")
-        return []
-
+def _parse_feed(html: str, portal_url: str) -> list[dict]:
+    """Parse one paramflag view into core.tender_record() dicts."""
     soup = BeautifulSoup(html, "html.parser")
     grid = soup.find("table", id="MainContent_GVTenderDetails")
     if not grid:
-        logger.warning(
-            "cspdcl: table#MainContent_GVTenderDetails not found — "
-            "portal may have restructured"
-        )
         return []
 
-    # Use recursive=False so nested doc-link rows inside cells don't get counted
+    # recursive=False so nested doc-link rows inside cells aren't counted.
     container = grid.find("tbody") or grid
     rows = container.find_all("tr", recursive=False)
 
@@ -183,14 +184,45 @@ def scrape() -> list[dict]:
             district=_infer_district(combined),
             value_text=value_raw or None,
             deadline=deadline,
+            tender_no=tender_no or None,
             description=f"Tender Notice No. {tender_no}",
-            document_url=doc_url or _PORTAL_URL,
-            source_portal=_PORTAL_URL,
+            document_url=doc_url or portal_url,
+            source_portal=portal_url,
         ))
+    return records
 
-    logger.info("cspdcl: %d tender records extracted", len(records))
-    if not records:
+
+def scrape() -> list[dict]:
+    """Sweep every paramflag view of the CSPDCL e-bidding portal and dedup."""
+    records: list[dict] = []
+    seen: set[str] = set()
+    any_html = False
+
+    for flag in _PARAMFLAGS:
+        url = _PORTAL_TPL.format(flag=flag)
+        html = _fetch_html(url)
+        if not html:
+            continue
+        any_html = True
+        feed = _parse_feed(html, url)
+        new = 0
+        for rec in feed:
+            key = (rec.get("tender_no") or "") + "|" + (rec.get("title") or "")
+            if key in seen:
+                continue
+            seen.add(key)
+            records.append(rec)
+            new += 1
+        logger.info("cspdcl: paramflag=%s → %d rows (%d new)", flag, len(feed), new)
+
+    if not any_html:
         logger.warning("cspdcl: 0 records returned — portal may be down or restructured")
+        return []
+    if not records:
+        logger.warning("cspdcl: grid not found on any paramflag — portal may have restructured")
+
+    logger.info("cspdcl: %d tender records extracted across %d feeds",
+                len(records), len(_PARAMFLAGS))
     return records
 
 

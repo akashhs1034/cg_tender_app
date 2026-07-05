@@ -21,7 +21,7 @@ import type { TenderMode, State, Tender } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-const modes: Array<TenderMode | 'All'> = ['All', 'Online', 'Offline', 'Newspaper']
+const modes: Array<TenderMode | 'All'> = ['All', 'Online', 'Offline']
 const states: Array<State | 'All'> = ['All', 'Chhattisgarh', 'Uttar Pradesh']
 const categories = [...TENDER_CATEGORIES]
 
@@ -81,13 +81,13 @@ export function TendersClient({ tenders, total, page, pageSize, q, state, catego
   }
 
   return (
-    <AppShell pageTitle="Tenders" pageSubtitle={`${total.toLocaleString()} active tenders across CG & UP`} bg="tenders">
+    <AppShell pageTitle={tr('tenders')} pageSubtitle={`${total.toLocaleString()} ${tr('active_tenders_across')}`} bg="tenders">
       <PageHero
         variant="tenders"
         eyebrow={tr('tender_portal')}
         icon={<FileText className="h-3.5 w-3.5" />}
         title={tr('government_tenders')}
-        subtitle={`${total.toLocaleString()} active tenders across Chhattisgarh & Uttar Pradesh — search and filter across the full database.`}
+        subtitle={`${total.toLocaleString()} ${tr('active_tenders_across')} — ${tr('search_filter_full')}`}
       />
       <PageTabs
         accent="blue"
@@ -150,7 +150,7 @@ export function TendersClient({ tenders, total, page, pageSize, q, state, catego
             <p className="text-xs text-text-muted mb-2 font-medium">Mode</p>
             <div className="flex gap-1.5 flex-wrap">
               {modes.map((m) => (
-                <button key={m} onClick={() => go({ mode: m })}
+                <button key={tr(m.toLowerCase())} onClick={() => go({ mode: m })}
                   className={cn('px-3 py-1 rounded-md text-xs font-medium border transition-colors',
                     mode === m ? 'bg-brand-blue/15 text-brand-blue border-brand-blue/30' : 'bg-surface-elevated text-text-secondary border-border-subtle hover:text-text-primary')}>
                   {m}
@@ -248,13 +248,13 @@ export function TendersClient({ tenders, total, page, pageSize, q, state, catego
           <Link href={buildUrl({ page: Math.max(1, page - 1) })} aria-disabled={page <= 1}
             className={cn('inline-flex items-center gap-1 rounded-lg border border-border-subtle px-3 py-2 text-xs font-semibold transition-colors',
               page <= 1 ? 'pointer-events-none opacity-40 text-text-muted' : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
-            <ChevronLeft className="w-3.5 h-3.5" /> Prev
+            <ChevronLeft className="w-3.5 h-3.5" /> {tr('prev')}
           </Link>
-          <span className="text-xs text-text-muted">Page {page} of {totalPages}</span>
+          <span className="text-xs text-text-muted">{tr('page')} {page} / {totalPages}</span>
           <Link href={buildUrl({ page: Math.min(totalPages, page + 1) })} aria-disabled={page >= totalPages}
             className={cn('inline-flex items-center gap-1 rounded-lg border border-border-subtle px-3 py-2 text-xs font-semibold transition-colors',
               page >= totalPages ? 'pointer-events-none opacity-40 text-text-muted' : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
-            Next <ChevronRight className="w-3.5 h-3.5" />
+            {tr('next')} <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       )}

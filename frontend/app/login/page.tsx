@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Sparkles, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { OpportaLogo } from '@/components/opporta-logo'
+import { GoogleSignInButton } from '@/components/google-signin-button'
 import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
@@ -16,7 +17,11 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => {
+    // surface errors handed back by /auth/callback (?error=…)
+    if (typeof window === 'undefined') return null
+    return new URLSearchParams(window.location.search).get('error')
+  })
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -177,8 +182,13 @@ export default function LoginPage() {
             {/* Divider */}
             <div className="flex items-center gap-3 my-6">
               <div className="flex-1 h-px bg-border-subtle" />
-              <span className="text-xs text-text-muted">or continue as</span>
+              <span className="text-xs text-text-muted">or continue with</span>
               <div className="flex-1 h-px bg-border-subtle" />
+            </div>
+
+            {/* Google */}
+            <div className="mb-3">
+              <GoogleSignInButton />
             </div>
 
             {/* Guest */}

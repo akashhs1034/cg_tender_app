@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { OpportaLogo } from '@/components/opporta-logo'
 import { createClient } from '@/lib/supabase/client'
+import { GoogleSignInButton } from '@/components/google-signin-button'
 import { cn } from '@/lib/utils'
 
 type Role = 'contractor' | 'jobseeker' | 'admin'
@@ -347,6 +348,14 @@ export default function SignupPage() {
                     </Button>
                   </div>
                 </form>
+
+                {/* Divider + Google */}
+                <div className="flex items-center gap-3 my-6">
+                  <div className="flex-1 h-px bg-border-subtle" />
+                  <span className="text-xs text-text-muted">or continue with</span>
+                  <div className="flex-1 h-px bg-border-subtle" />
+                </div>
+                <GoogleSignInButton label="Sign up with Google" />
               </>
             )}
           </div>

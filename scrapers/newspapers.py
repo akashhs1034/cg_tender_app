@@ -151,6 +151,33 @@ def _fetch(url: str, source: str = "", want: str = "text",
     return None, "", last
 
 
+def _fetch_rendered(url: str, source: str = "", wait_ms: int = 3000) -> str | None:
+    """Return fully rendered HTML using a headless browser, or None.
+
+    Many newspaper / e-paper homepages are JavaScript apps that inject their
+    PDF and page-image links after load, so a plain-HTTP fetch sees no assets.
+    Rendering the page first exposes those links to the discovery step. Silently
+    returns None when Playwright is unavailable so this stays an optional boost."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return None
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_context(
+                user_agent=_UA["User-Agent"], locale="en-IN",
+                ignore_https_errors=True).new_page()
+            page.goto(url, timeout=60000, wait_until="domcontentloaded")
+            page.wait_for_timeout(wait_ms)
+            html = page.content()
+            browser.close()
+            return html
+    except Exception as exc:
+        _log_fail(source, url, "render", exc)
+        return None
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Discovery — find directly-fetchable government-notice assets on a reachable page
 # ──────────────────────────────────────────────────────────────────────────────
@@ -437,6 +464,19 @@ def _process_newspaper(paper: dict) -> tuple[list[dict], list[dict], str]:
 
         _is_gov = ".gov.in" in (urlparse(base).netloc or "")
         assets = _discover_assets(html, base, grab_all_pdfs=_is_gov)
+        # JS-rendered newspaper / e-paper sites inject their PDF and page-image
+        # links via scripts, so plain-HTTP discovery finds nothing. When static
+        # discovery comes up empty (or the source opts in with "render": true),
+        # re-render in a headless browser and merge whatever that exposes.
+        if paper.get("render") or not (
+                assets["pdfs"] or assets["images"] or assets["notice_pages"]):
+            rendered = _fetch_rendered(base, source=name)
+            if rendered:
+                extra = _discover_assets(rendered, base, grab_all_pdfs=_is_gov)
+                assets = {
+                    k: list(dict.fromkeys(assets[k] + extra[k]))
+                    for k in ("pdfs", "images", "notice_pages")
+                }
         # one-level crawl into 'tender / recruitment / notice' sections
         for pg in assets["notice_pages"][:5]:
             if pg.rstrip("/") == base.rstrip("/"):

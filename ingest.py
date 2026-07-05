@@ -465,8 +465,21 @@ def push_supabase(tenders, jobs):
     if not using_service:
         print("   Note: using anon key — add SUPABASE_SERVICE_KEY to .env to bypass RLS.")
 
-    tenders = [r for r in tenders if not _is_junk_row(r)]
-    jobs = [r for r in jobs if not _is_junk_row(r)]
+    today_iso = date.today().isoformat()
+
+    def _fresh(row: dict) -> bool:
+        # Keep rows with no/unparseable deadline (may still be live); drop
+        # past-deadline ones so the CSV archive can't resurrect them.
+        d = row.get("deadline")
+        if not d:
+            return True
+        d = str(d)[:10]
+        if len(d) == 10 and d[4] == "-" and d[7] == "-":
+            return d >= today_iso
+        return True
+
+    tenders = [r for r in tenders if not _is_junk_row(r) and _fresh(r)]
+    jobs = [r for r in jobs if not _is_junk_row(r) and _fresh(r)]
 
     try:
         from supabase import create_client
@@ -559,8 +572,23 @@ def push_offline_tenders(offline):
 
 
 def _cleanup_expired(sb):
-    """Retain history; the public app filters expired deadlines by default."""
-    print("   expired records retained internally (public app filters them)")
+    """Delete past-deadline tenders/jobs so the app only shows fresh records.
+
+    deadline is TEXT holding ISO dates from the record builders, so a
+    lexicographic < today works; junk non-ISO strings sort above '2…' and are
+    left alone. NULL deadlines are kept (may still be live).
+    """
+    today = date.today().isoformat()
+    for table in ("tenders", "jobs"):
+        try:
+            resp = (sb.table(table).delete()
+                      .lt("deadline", today)
+                      .not_.is_("deadline", "null").execute())
+            n = len(resp.data) if resp.data else 0
+            if n:
+                print(f"   deleted {n} expired rows from {table}")
+        except Exception as exc:
+            print(f"   expired cleanup skipped for {table}: {exc}")
 
 
 def _print_scraper_summary(counts: dict, total_tenders: int, total_jobs: int) -> None:

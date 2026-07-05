@@ -115,3 +115,45 @@ systemctl list-timers opporta-scraper.timer           # confirm the schedule
 
 Once it's confirmed working here, you can (optionally) disable the GitHub
 Actions cron so the pipeline runs only from India.
+
+---
+
+## Part E — (Recommended) Run it as a GitHub self-hosted runner instead
+
+Part D runs the scraper on its own systemd timer with secrets copied onto the
+VM. A cleaner, fully-automated alternative is to make this VM a **GitHub Actions
+self-hosted runner**, so the existing *Daily Tender Ingestion* workflow runs
+here on GitHub's schedule — using your GitHub **Actions secrets** (nothing
+copied onto the box), visible in the Actions UI, code auto-refreshed each run.
+
+Use **either** Part D **or** Part E, not both (both would double-run).
+
+1. **Get a registration token.** On GitHub: repo → **Settings → Actions →
+   Runners → New self-hosted runner**. Copy the token it shows (valid ~1 hour).
+
+2. **Register the VM** (as the `ubuntu` user):
+
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/akashhs1034/cg_tender_app/main/deploy/india-vm/setup-runner.sh -o setup-runner.sh
+   RUNNER_TOKEN=<paste-token> bash setup-runner.sh
+   ```
+
+   It installs prerequisites + Playwright OS libs, downloads the runner (auto
+   ARM/x86), and installs it as an auto-starting service with the label `india`.
+   Confirm it shows **Idle** under Settings → Actions → Runners.
+
+3. **Point the workflow at it.** Repo → **Settings → Secrets and variables →
+   Actions → Variables → New repository variable**:
+   name `SCRAPER_RUNNER`, value `india`.
+
+   That's the switch. Until this variable is set the workflow stays on
+   `ubuntu-latest`, so the schedule never queues against a missing runner.
+   Once set, the daily run and the **Run workflow** button both execute on the
+   India VM. Unset the variable any time to fall back to GitHub's runners.
+
+Manage the runner:
+
+```bash
+cd ~/actions-runner && sudo ./svc.sh status      # running?
+sudo journalctl -u 'actions.runner.*' -f          # live logs
+```

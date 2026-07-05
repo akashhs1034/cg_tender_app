@@ -1,0 +1,61 @@
+{
+  "_comment": "Committed seed for scrapers/generic_ai.py. These portals are AI-extracted (page text -> Gemini) so they keep working even when their DOM changes. generic_ai merges this file with the runtime data/ai_sources.json that discovery.py appends. Add a new source with: name, url, state, kind (tender|job|auto), format (html|pdf|image), render (true for JS-heavy pages).",
+  "sources": [
+    {
+      "name": "CG Water Resources Department (WRD)",
+      "url": "https://cgwrd.in/tender",
+      "state": "Chhattisgarh",
+      "kind": "tender",
+      "format": "html",
+      "render": false
+    },
+    {
+      "name": "CG Water Resources Department (wrd.cg.gov.in)",
+      "url": "https://wrd.cg.gov.in/tender",
+      "state": "Chhattisgarh",
+      "kind": "tender",
+      "format": "html",
+      "render": false
+    },
+    {
+      "name": "res.cg.gov.in (CG Department Portal)",
+      "url": "https://res.cg.gov.in/tender",
+      "state": "Chhattisgarh",
+      "kind": "auto",
+      "format": "html",
+      "render": false
+    },
+    {
+      "name": "Balrampur District CG - Tenders",
+      "url": "https://balrampur.gov.in/en/notice_category/tenders/",
+      "state": "Chhattisgarh",
+      "kind": "auto",
+      "format": "html",
+      "render": false
+    },
+    {
+      "name": "Balrampur District CG - Recruitment",
+      "url": "https://balrampur.gov.in/en/notice_category/recruitment/",
+      "state": "Chhattisgarh",
+      "kind": "job",
+      "format": "html",
+      "render": false
+    },
+    {
+      "name": "CSPDCL / CSEB CG - Tenders",
+      "url": "https://cspdcl.co.in/cseb/frmViewTenderesNEW.aspx?paramflag=1",
+      "state": "Chhattisgarh",
+      "kind": "tender",
+      "format": "html",
+      "render": true
+    },
+    {
+      "name": "CG PWD - Tenders",
+      "url": "https://pwd.cg.nic.in/index.php/en/tender",
+      "state": "Chhattisgarh",
+      "kind": "tender",
+      "format": "html",
+      "render": false
+    }
+  ]
+}

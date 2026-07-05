@@ -53,8 +53,31 @@ _BASE_LIST = "https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata"
 _BASE_URL  = "https://eprocure.gov.in"
 
 _TARGET_STATE = os.getenv("CPPP_STATE", "Uttar Pradesh")
-_MAX_PAGES    = int(os.getenv("CPPP_MAX_PAGES", "100"))
+# The CPPP listing is an all-India feed sorted by date. A single state is a
+# small slice of it, so a low page cap starved CG/UP of most of their rows.
+# 300 pages x 10 rows = 30k rows scanned/run (matching detail pages are few, so
+# this stays well within the CI budget). Override with CPPP_MAX_PAGES.
+_MAX_PAGES    = int(os.getenv("CPPP_MAX_PAGES", "300"))
 _DELAY        = 0.3  # seconds between listing page fetches
+
+# Accept the state under any casing/spacing plus the common "Chattisgarh"
+# misspelling the portal itself sometimes emits. An exact `!=` match here used
+# to silently drop rows and was a major cause of "portal has more than we show".
+_STATE_ALIASES = {
+    "chhattisgarh": {"chhattisgarh", "chattisgarh", "chhatisgarh", "cg"},
+    "uttar pradesh": {"uttar pradesh", "uttarpradesh", "up", "u.p."},
+}
+
+
+def _state_matches(row_state: str, target_state: str) -> bool:
+    r = re.sub(r"\s+", " ", (row_state or "")).strip().lower()
+    t = (target_state or "").strip().lower()
+    if not r:
+        return False
+    if r == t:
+        return True
+    aliases = _STATE_ALIASES.get(t)
+    return bool(aliases and r in aliases)
 
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -157,7 +180,7 @@ def _parse_listing_page(html: str, target_state: str) -> list[dict]:
         if len(tds) < 6:
             continue
         state_name = tds[5].get_text(strip=True)
-        if state_name != target_state:
+        if not _state_matches(state_name, target_state):
             continue
         link_tag = tds[4].find("a")
         results.append({

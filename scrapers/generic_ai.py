@@ -35,7 +35,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import core  # noqa: E402
 
 _ROOT = Path(__file__).parent.parent
+# Runtime config, appended to by scrapers/discovery.py (git-ignored under data/).
 _CONFIG = _ROOT / "data" / "ai_sources.json"
+# Committed seed that ships with the repo, so a fresh CI checkout (where data/
+# does not exist yet) still has the hand-curated CG/UP portals to extract from.
+_SEED = _ROOT / "ai_sources_seed.json"
 
 _HEADERS = {
     "User-Agent": (
@@ -102,16 +106,28 @@ Rules:
 """
 
 
-def _load_config() -> list[dict]:
-    if not _CONFIG.exists():
+def _read_sources(path: Path) -> list[dict]:
+    if not path.exists():
         return []
     try:
-        data = json.loads(_CONFIG.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
-        print(f"   generic_ai: could not parse {_CONFIG.name} — {exc}")
+        print(f"   generic_ai: could not parse {path.name} — {exc}")
         return []
     sources = data.get("sources") if isinstance(data, dict) else data
     return [s for s in (sources or []) if isinstance(s, dict) and s.get("url")]
+
+
+def _load_config() -> list[dict]:
+    """Merge the committed seed with the runtime discovery config, deduped by
+    URL. The seed guarantees the curated CG/UP portals are always extracted;
+    the runtime file adds whatever discovery.py has since found."""
+    merged: dict[str, dict] = {}
+    for src in _read_sources(_SEED) + _read_sources(_CONFIG):
+        key = str(src.get("url", "")).strip().rstrip("/").lower()
+        if key and key not in merged:
+            merged[key] = src
+    return list(merged.values())
 
 
 def _fetch_html_text(url: str, render: bool) -> str | None:

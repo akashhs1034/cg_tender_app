@@ -282,6 +282,8 @@ def send_alerts(tenders: list[dict], dry_run: bool = False) -> int:
         email = (profile.get("email") or "").strip().lower()
         if not email:
             continue
+        if profile.get("email_alerts") is False:
+            continue   # user opted out on their profile page
 
         matches: list[tuple[int, dict]] = []
         for t in tenders:

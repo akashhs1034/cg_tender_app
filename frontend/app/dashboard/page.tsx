@@ -46,7 +46,7 @@ export default async function DashboardPage() {
   const totalRegions = dashboardStats.cgCount + dashboardStats.upCount || 1
 
   return (
-    <AppShell pageTitle="Dashboard" pageSubtitle="Your opportunity overview">
+    <AppShell pageTitle="dashboard" pageSubtitle="dashboard_sub">
       {/* 3D brand hero */}
       <PageHero
         variant="dashboard"

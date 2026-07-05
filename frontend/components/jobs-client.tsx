@@ -21,7 +21,7 @@ import type { TenderMode, State, Job } from '@/lib/mock-data'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 
-const modes: Array<TenderMode | 'All'> = ['All', 'Online', 'Offline', 'Newspaper']
+const modes: Array<TenderMode | 'All'> = ['All', 'Online', 'Offline']
 const states: Array<State | 'All'> = ['All', 'Chhattisgarh', 'Uttar Pradesh']
 const categories = [...JOB_CATEGORIES]
 
@@ -80,13 +80,13 @@ export function JobsClient({ jobs, total, page, pageSize, q, state, category, mo
   }
 
   return (
-    <AppShell pageTitle="Jobs" pageSubtitle={`${total.toLocaleString()} active jobs across CG & UP`} bg="jobs">
+    <AppShell pageTitle={t('jobs')} pageSubtitle={`${total.toLocaleString()} ${t('active_jobs_across')}`} bg="jobs">
       <PageHero
         variant="jobs"
         eyebrow={t('government_jobs')}
         icon={<Briefcase className="h-3.5 w-3.5" />}
         title={t('government_jobs')}
-        subtitle={`${total.toLocaleString()} active recruitments across Chhattisgarh & Uttar Pradesh — search and filter across the full database.`}
+        subtitle={`${total.toLocaleString()} ${t('active_jobs_across')} — ${t('search_filter_full')}`}
       />
       <PageTabs
         accent="purple"
@@ -148,7 +148,7 @@ export function JobsClient({ jobs, total, page, pageSize, q, state, category, mo
             <p className="text-xs text-text-muted mb-2 font-medium">Mode</p>
             <div className="flex gap-1.5 flex-wrap">
               {modes.map((m) => (
-                <button key={m} onClick={() => go({ mode: m })}
+                <button key={t(m.toLowerCase())} onClick={() => go({ mode: m })}
                   className={cn('px-3 py-1 rounded-md text-xs font-medium border transition-colors',
                     mode === m ? 'bg-[#6C3EF4]/15 text-[#6C3EF4] border-[#6C3EF4]/30' : 'bg-surface-elevated text-text-secondary border-border-subtle hover:text-text-primary')}>
                   {m}
@@ -246,13 +246,13 @@ export function JobsClient({ jobs, total, page, pageSize, q, state, category, mo
           <Link href={buildUrl({ page: Math.max(1, page - 1) })} aria-disabled={page <= 1}
             className={cn('inline-flex items-center gap-1 rounded-lg border border-border-subtle px-3 py-2 text-xs font-semibold transition-colors',
               page <= 1 ? 'pointer-events-none opacity-40 text-text-muted' : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
-            <ChevronLeft className="w-3.5 h-3.5" /> Prev
+            <ChevronLeft className="w-3.5 h-3.5" /> {t('prev')}
           </Link>
-          <span className="text-xs text-text-muted">Page {page} of {totalPages}</span>
+          <span className="text-xs text-text-muted">{t('page')} {page} / {totalPages}</span>
           <Link href={buildUrl({ page: Math.min(totalPages, page + 1) })} aria-disabled={page >= totalPages}
             className={cn('inline-flex items-center gap-1 rounded-lg border border-border-subtle px-3 py-2 text-xs font-semibold transition-colors',
               page >= totalPages ? 'pointer-events-none opacity-40 text-text-muted' : 'text-text-secondary hover:text-text-primary hover:bg-surface-elevated')}>
-            Next <ChevronRight className="w-3.5 h-3.5" />
+            {t('next')} <ChevronRight className="w-3.5 h-3.5" />
           </Link>
         </div>
       )}

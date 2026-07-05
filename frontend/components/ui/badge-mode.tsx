@@ -4,7 +4,7 @@ import type { TenderMode } from '@/lib/mock-data'
 const modeConfig: Record<TenderMode, { label: string; classes: string }> = {
   Online: { label: 'Online', classes: 'bg-brand-blue/15 text-brand-blue border-brand-blue/25' },
   Offline: { label: 'Offline', classes: 'bg-warning/15 text-warning border-warning/25' },
-  Newspaper: { label: 'Newspaper', classes: 'bg-success/15 text-success border-success/25' },
+  Newspaper: { label: 'Offline (Newspaper)', classes: 'bg-warning/15 text-warning border-warning/25' },
 }
 
 interface BadgeModeProps {

@@ -263,8 +263,7 @@ export async function getTendersPage(query: ListQuery = {}): Promise<PageResult<
   if (query.state && query.state !== 'All') q = q.eq('state', query.state)
   if (query.category && query.category !== 'All') q = applyCategoryFilter(q, query.category)
   if (query.district && query.district !== 'All') q = q.eq('district', query.district)
-  if (query.mode === 'Offline') q = q.eq('online_or_offline', 'offline')
-  else if (query.mode === 'Newspaper') q = q.ilike('source_portal', '%newspaper%')
+  if (query.mode === 'Offline') q = q.or('online_or_offline.eq.offline,source_portal.ilike.%newspaper%')
   else if (query.mode === 'Online') q = q.or('online_or_offline.is.null,online_or_offline.eq.online')
 
   const { data, count, error } = await q.order('ai_score', { ascending: false, nullsFirst: false }).range(from, to)
@@ -291,8 +290,7 @@ export async function getJobsPage(query: ListQuery = {}): Promise<PageResult<Job
   if (query.state && query.state !== 'All') q = q.eq('state', query.state)
   if (query.category && query.category !== 'All') q = applyJobCategoryFilter(q, query.category)
   if (query.district && query.district !== 'All') q = q.eq('district', query.district)
-  if (query.mode === 'Offline') q = q.eq('online_or_offline', 'offline')
-  else if (query.mode === 'Newspaper') q = q.ilike('source_portal', '%newspaper%')
+  if (query.mode === 'Offline') q = q.or('online_or_offline.eq.offline,source_portal.ilike.%newspaper%')
   else if (query.mode === 'Online') q = q.or('online_or_offline.is.null,online_or_offline.eq.online')
 
   const { data, count, error } = await q.order('ai_score', { ascending: false, nullsFirst: false }).range(from, to)

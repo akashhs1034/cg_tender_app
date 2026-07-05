@@ -41,6 +41,52 @@ jobs:
       - name: Install Playwright browser (chromium + headless shell)
         run: playwright install --with-deps chromium
 
+      # Surface silent data-loss causes loudly. Missing secrets don't crash the
+      # run (partial data is better than none), but they show up as warnings on
+      # the run and a banner in the job summary so a degraded run is never quiet.
+      - name: Preflight — check scraper secrets
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
+          GEMINI_API_KEY:       ${{ secrets.GEMINI_API_KEY }}
+          SCRAPER_HTTPS_PROXY:  ${{ secrets.SCRAPER_HTTPS_PROXY }}
+        run: |
+          echo "## Scraper preflight" >> "$GITHUB_STEP_SUMMARY"
+          degraded=0
+
+          if [ -z "$SCRAPER_HTTPS_PROXY" ]; then
+            echo "::warning title=No India proxy::SCRAPER_HTTPS_PROXY is unset. GitHub's Azure US IPs are geo-blocked by many NIC/gov.in portals, so several scrapers may return 0 rows. Set an India-based HTTPS proxy secret to get full portal data."
+            echo "- ⚠️ **SCRAPER_HTTPS_PROXY unset** — NIC/gov.in portals may geo-block Azure IPs; expect reduced portal data." >> "$GITHUB_STEP_SUMMARY"
+            degraded=1
+          else
+            echo "- ✅ SCRAPER_HTTPS_PROXY set" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "::warning title=No LLM key::GEMINI_API_KEY is unset. Newspaper OCR and AI-extracted portals (WRD, res.cg, Balrampur, etc.) will be skipped."
+            echo "- ⚠️ **GEMINI_API_KEY unset** — newspaper OCR and AI-extracted portals will be skipped." >> "$GITHUB_STEP_SUMMARY"
+            degraded=1
+          else
+            echo "- ✅ GEMINI_API_KEY set" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -z "$SUPABASE_URL" ] || { [ -z "$SUPABASE_SERVICE_KEY" ] && [ -z "$SUPABASE_KEY" ]; }; then
+            echo "::warning title=No Supabase target::SUPABASE_URL and a key are required to publish scraped data to the app; without them the run only writes local CSVs that are discarded when the job ends."
+            echo "- ⚠️ **Supabase secrets missing** — scraped data will not reach the app." >> "$GITHUB_STEP_SUMMARY"
+            degraded=1
+          else
+            echo "- ✅ Supabase target configured" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ "$degraded" = "1" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ℹ️ Running in a **degraded** mode — some sources will be skipped or reduced. See warnings above." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "> ✅ All scraper secrets present — running at full coverage." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Run ingestion pipeline
         env:
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}

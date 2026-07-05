@@ -46,7 +46,7 @@ const stats = [
 
 export default function LandingPage() {
   return (
-    <div className="bg-hero-3d min-h-screen text-text-primary font-sans">
+    <div className="bg-hero-3d min-h-screen text-text-primary font-sans overflow-x-hidden">
       {/* Navbar */}
       <header className="sticky top-0 z-50 border-b border-border-subtle bg-[#080E1D]/80 backdrop-blur-md">
         <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between">
@@ -58,7 +58,7 @@ export default function LandingPage() {
           </nav>
           <div className="flex items-center gap-2.5">
             <LanguageSwitcher />
-            <Link href="/login">
+            <Link href="/login" className="hidden sm:block">
               <Button size="sm" variant="outline" className="border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated font-semibold text-xs h-8">
                 Sign In
               </Button>

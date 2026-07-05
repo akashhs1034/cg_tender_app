@@ -47,11 +47,28 @@ export const metadata: Metadata = {
     title: 'Opporta — Government Tenders & Jobs (CG & UP)',
     description: 'Live CG & UP government tenders and jobs, with AI eligibility and bid help.',
   },
+  manifest: '/manifest.webmanifest',
+  applicationName: 'Opporta',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Opporta',
+  },
+  icons: {
+    icon: [
+      { url: '/favicon-32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-icon.png', sizes: '180x180', type: 'image/png' }],
+  },
 }
 
 export const viewport: Viewport = {
   colorScheme: 'dark',
-  themeColor: '#080E1D',
+  themeColor: '#0D1525',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
 }
 
 export default function RootLayout({

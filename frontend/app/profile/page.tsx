@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
 import { useAuth } from '@/lib/auth-context'
 import { createClient } from '@/lib/supabase/client'
-import { Building2, ShieldCheck, User, Save, LogIn, Loader2, MapPin } from 'lucide-react'
+import { Building2, ShieldCheck, User, Save, LogIn, Loader2, MapPin, Mail } from 'lucide-react'
 
 const STATES = ['Chhattisgarh', 'Uttar Pradesh'] as const
 
@@ -19,6 +19,7 @@ interface ProfileForm {
   experience_years: string
   states: string[]
   sectors: string
+  email_alerts: boolean
 }
 
 const EMPTY: ProfileForm = {
@@ -29,6 +30,7 @@ const EMPTY: ProfileForm = {
   experience_years: '',
   states: [],
   sectors: '',
+  email_alerts: true,
 }
 
 export default function ProfilePage() {
@@ -61,6 +63,7 @@ export default function ProfilePage() {
           experience_years: data.experience_years != null ? String(data.experience_years) : '',
           states: Array.isArray(data.states) ? data.states : [],
           sectors: Array.isArray(data.sectors) ? data.sectors.join(', ') : '',
+          email_alerts: data.email_alerts !== false,
         })
       })
       .then(() => {
@@ -93,6 +96,7 @@ export default function ProfilePage() {
       experience_years: form.experience_years ? Number(form.experience_years) : null,
       states: form.states,
       sectors: form.sectors ? form.sectors.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      email_alerts: form.email_alerts,
     })
     setSaving(false)
     if (error) toast('Could not save', 'error', { description: error.message })
@@ -179,6 +183,30 @@ export default function ProfilePage() {
                   )
                 })}
               </div>
+            </div>
+
+            {/* Email alerts opt-in/out */}
+            <div className="mt-5 flex items-center justify-between rounded-xl border border-border-subtle bg-surface-elevated px-4 py-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Mail className="w-4 h-4 text-brand-blue flex-shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-text-primary">Daily email alerts</p>
+                  <p className="text-xs text-text-muted">Get a digest of new tenders matching your profile.</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={form.email_alerts}
+                onClick={() => set('email_alerts', !form.email_alerts)}
+                className={form.email_alerts
+                  ? 'relative w-10 h-6 rounded-full bg-brand-blue transition-colors flex-shrink-0'
+                  : 'relative w-10 h-6 rounded-full bg-border-subtle transition-colors flex-shrink-0'}
+              >
+                <span className={form.email_alerts
+                  ? 'absolute top-0.5 left-[calc(100%-1.375rem)] w-5 h-5 rounded-full bg-white transition-all'
+                  : 'absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-all'} />
+              </button>
             </div>
 
             <div className="mt-6 flex justify-end">

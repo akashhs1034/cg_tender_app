@@ -28,7 +28,7 @@ import re
 import sys
 import warnings
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin
 
 import requests
 from bs4 import BeautifulSoup
@@ -267,7 +267,15 @@ def _parse_page(html: str, site: dict, source_url: str) -> list[dict]:
                     doc_url = _doc_link(cell, source_url)
                     if doc_url:
                         break
-            doc_url = doc_url or source_url
+            reference = _c("ref")
+            if not doc_url:
+                row_id = reference or core.make_source_id(
+                    site["source_id"], title, _c("deadline"))
+                separator = "&" if "?" in source_url else "?"
+                doc_url = (
+                    f"{source_url}{separator}opporta_tender="
+                    f"{quote(row_id, safe='')}"
+                )
 
             combined = f"{title} {site['org']}"
             records.append(core.tender_record(
@@ -278,11 +286,12 @@ def _parse_page(html: str, site: dict, source_url: str) -> list[dict]:
                 district=_infer_district(combined, default_district),
                 value_text=_c("value") or None,
                 deadline=_c("deadline") or None,
-                description=(f"NIT/Tender No: {_c('ref')}" if _c("ref") else None),
+                tender_no=reference or None,
+                description=(f"NIT/Tender No: {reference}"
+                             if reference else None),
                 document_url=doc_url,
                 source_portal=source_url,
                 source_name=site["name"],
-                source_url=source_url,
             ))
     else:
         for title, href in _extract_tender_links(soup, source_url)[:40]:
@@ -298,7 +307,6 @@ def _parse_page(html: str, site: dict, source_url: str) -> list[dict]:
                 document_url=href,
                 source_portal=source_url,
                 source_name=site["name"],
-                source_url=source_url,
             ))
 
     return records
@@ -320,10 +328,13 @@ def _scrape_site(site: dict) -> list[dict]:
     return []
 
 
-def scrape() -> list[dict]:
-    """Scrape every configured CG department site. Never raises."""
+def scrape_selected(*source_ids: str) -> list[dict]:
+    """Scrape selected configured CG department sites. Never raises."""
+    wanted = set(source_ids)
     records: list[dict] = []
     for site in _SITES:
+        if wanted and site["source_id"] not in wanted:
+            continue
         try:
             records += _scrape_site(site)
         except Exception as exc:  # per-site isolation
@@ -331,6 +342,16 @@ def scrape() -> list[dict]:
                   f"{type(exc).__name__}: {exc}")
     print(f"   cg_dept_sites: {len(records)} total core.tender_record() ready")
     return records
+
+
+def scrape_balrampur() -> list[dict]:
+    """Collect Balrampur district notices without duplicating WRD/RES scrapers."""
+    return scrape_selected("balrampur_cg")
+
+
+def scrape() -> list[dict]:
+    """Scrape every configured CG department site. Never raises."""
+    return scrape_selected()
 
 
 if __name__ == "__main__":

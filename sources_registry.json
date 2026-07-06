@@ -111,7 +111,7 @@
     "last_success_at": null,
     "last_error": null,
     "last_count": 0,
-    "notes": null
+    "notes": "Collects all CSPDCL regional paramflag feeds and ASP.NET GridView pages."
   },
   {
     "source_id": "secl",
@@ -149,7 +149,7 @@
     "last_success_at": null,
     "last_error": null,
     "last_count": 0,
-    "notes": null
+    "notes": "Departmental manual notices only; e-tenders are covered by CG e-Procurement."
   },
   {
     "source_id": "uppcl",
@@ -305,14 +305,14 @@
   },
   {
     "source_id": "cg_wrd",
-    "source_name": "CG Water Resources Department",
+    "source_name": "Chhattisgarh Water Resources Department",
     "state": "Chhattisgarh",
     "district": null,
     "source_type": "department_site",
     "category": "tender",
     "url": "https://cgwrd.in",
-    "discovery_url": "https://cgwrd.in/tender",
-    "scraper_module": "scrapers.cg_dept_sites",
+    "discovery_url": "https://cgwrd.in/announcement",
+    "scraper_module": "scrapers.cgwrd",
     "active": true,
     "requires_ocr": false,
     "requires_playwright": false,
@@ -320,18 +320,18 @@
     "last_success_at": null,
     "last_error": null,
     "last_count": 0,
-    "notes": "Water Resources / Jal Sansadhan Vibhag tenders (irrigation, dams, canals)."
+    "notes": "Departmental RFP/EOI/manual notices; WRD e-tenders are also covered by CG e-Procurement."
   },
   {
     "source_id": "res_cg",
-    "source_name": "res.cg.gov.in (CG Department Portal)",
+    "source_name": "Chhattisgarh Rural Engineering Services",
     "state": "Chhattisgarh",
     "district": null,
     "source_type": "department_site",
-    "category": "both",
+    "category": "tender",
     "url": "https://res.cg.gov.in",
-    "discovery_url": "https://res.cg.gov.in/tender",
-    "scraper_module": "scrapers.cg_dept_sites",
+    "discovery_url": "https://res.cg.gov.in/Tender_test_report.aspx",
+    "scraper_module": "scrapers.res_cg",
     "active": true,
     "requires_ocr": false,
     "requires_playwright": false,
@@ -339,7 +339,7 @@
     "last_success_at": null,
     "last_error": null,
     "last_count": 0,
-    "notes": "CG state department portal — tenders and notices."
+    "notes": "Official RES manual live-tender table; e-tenders are covered by CG e-Procurement."
   },
   {
     "source_id": "balrampur_cg",
@@ -347,7 +347,7 @@
     "state": "Chhattisgarh",
     "district": "Balrampur",
     "source_type": "district_site",
-    "category": "both",
+    "category": "tender",
     "url": "https://balrampur.gov.in",
     "discovery_url": "https://balrampur.gov.in/en/notice_category/tenders/",
     "scraper_module": "scrapers.cg_dept_sites",
@@ -358,7 +358,7 @@
     "last_success_at": null,
     "last_error": null,
     "last_count": 0,
-    "notes": "Balrampur district administration tenders and recruitment notices."
+    "notes": "Balrampur district administration tender notices."
   },
   {
     "source_id": "cppp_corrigendum",

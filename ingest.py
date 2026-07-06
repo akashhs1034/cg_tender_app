@@ -126,8 +126,8 @@ def run_live_scrapers():
     from scrapers import (
         cg_eproc, up_etender, cppp_state, cg_jobs, up_jobs,
         cg_vyapam, up_upsssc, cspdcl,
-        gem, secl, pwd_cg, uppcl, cppp_central, dprcg, samvad,
-        cg_dept_sites,
+        gem, secl, pwd_cg, res_cg, cgwrd, uppcl, cppp_central, dprcg,
+        samvad, cg_dept_sites,
     )
 
     # cppp_cg: reuse cppp_state module with CG env override
@@ -155,7 +155,10 @@ def run_live_scrapers():
         ("cspdcl       (cspdcl.co.in/cseb)         ", cspdcl.scrape),
         ("secl         (secl-cil.in)               ", secl.scrape),
         ("pwd_cg       (pwd.cg.nic.in)             ", pwd_cg.scrape),
-        ("cg_dept      (WRD/res.cg/balrampur)      ", cg_dept_sites.scrape),
+        ("res_cg       (res.cg.gov.in)             ", res_cg.scrape),
+        ("cg_wrd       (cgwrd.in)                  ", cgwrd.scrape),
+        ("balrampur_cg (balrampur.gov.in)          ",
+         cg_dept_sites.scrape_balrampur),
         ("uppcl        (uppclonline.com)            ", uppcl.scrape),
         ("gem          (gem.gov.in)                ", gem.scrape),
         ("cppp_central (eprocure.gov.in - central) ", cppp_central.scrape),

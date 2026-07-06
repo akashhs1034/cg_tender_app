@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import datetime as _dt
 import re as _re
+import threading as _threading
+import time as _time
 from typing import Callable, Iterable
 
 import core
@@ -53,7 +55,8 @@ def _safe_run(fn: Callable[[], list]) -> tuple[list, str]:
 
 def _tender_scrapers() -> list[tuple[str, Callable[[], list]]]:
     from scrapers import (cg_eproc, up_etender, cppp_state, cspdcl,
-                          secl, pwd_cg, uppcl, gem)
+                          secl, pwd_cg, res_cg, cgwrd, cg_dept_sites,
+                          uppcl, gem)
 
     import os as _os
 
@@ -79,6 +82,9 @@ def _tender_scrapers() -> list[tuple[str, Callable[[], list]]]:
         ("cspdcl",     cspdcl.scrape),
         ("secl",       secl.scrape),
         ("pwd_cg",     pwd_cg.scrape),
+        ("res_cg",     res_cg.scrape),
+        ("cg_wrd",     cgwrd.scrape),
+        ("balrampur_cg", cg_dept_sites.scrape_balrampur),
         ("uppcl",      uppcl.scrape),
         ("gem",        gem.scrape),
     ]
@@ -318,6 +324,23 @@ def scan_epapers() -> list[dict]:
 # Part D — Gemini-Vision e-paper extractor (page image / PDF -> offline tenders)
 # ──────────────────────────────────────────────────────────────────────────────
 _VISION_MODEL = "gemini-2.5-flash"
+_VISION_RATE_LOCK = _threading.Lock()
+_VISION_NEXT_CALL_AT = 0.0
+
+
+def _wait_for_vision_slot() -> None:
+    """Globally pace newspaper OCR calls across collector worker threads."""
+    import os
+
+    pace = max(0.0, float(os.getenv("GEMINI_VISION_PACE_SECONDS", "5")))
+    if pace <= 0:
+        return
+    global _VISION_NEXT_CALL_AT
+    with _VISION_RATE_LOCK:
+        wait = _VISION_NEXT_CALL_AT - _time.monotonic()
+        if wait > 0:
+            _time.sleep(wait)
+        _VISION_NEXT_CALL_AT = _time.monotonic() + pace
 
 _EPAPER_VISION_PROMPT = """You are reading a scanned PAGE of an Indian newspaper / e-paper from the state of Chhattisgarh or Uttar Pradesh. The text may be in Hindi (Devanagari) or English, printed in dense columns.
 
@@ -341,7 +364,9 @@ Use null for any field not printed. If there are NO government tender notices on
 Do NOT invent or guess tenders — extract only what is actually printed on the page."""
 
 
-def _gemini_vision_json(file_bytes: bytes, mime_type: str, prompt: str | None = None):
+def _gemini_vision_json(file_bytes: bytes, mime_type: str,
+                        prompt: str | None = None,
+                        max_attempts: int | None = None):
     """POST a page image / PDF to Gemini and return parsed JSON (list/dict).
 
     Returns (data, status). Mirrors bid_engine's REST call: direct endpoint +
@@ -362,29 +387,70 @@ def _gemini_vision_json(file_bytes: bytes, mime_type: str, prompt: str | None = 
     if "pdf" not in actual and "image" not in actual:
         actual = "image/jpeg"
 
-    try:
-        import requests
-        resp = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{_VISION_MODEL}:generateContent",
-            headers={"Content-Type": "application/json", "X-goog-api-key": key},
-            json={"contents": [{"parts": [
-                {"inline_data": {"mime_type": actual,
-                                 "data": base64.b64encode(file_bytes).decode()}},
-                {"text": prompt or _EPAPER_VISION_PROMPT},
-            ]}], "generationConfig": {"responseMimeType": "application/json",
-                                       "thinkingConfig": {"thinkingBudget": 0}}},
-            timeout=180,
-        )
-        resp.raise_for_status()
-        parts = resp.json()["candidates"][0]["content"]["parts"]
-        text = "".join(p.get("text", "") for p in parts).strip()
-        text = text.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        data = json.loads(text)
-        core.clear_ai_error()
-        return data, "ok"
-    except Exception as exc:
-        core.record_ai_error(exc)
-        return None, f"error:{type(exc).__name__}"
+    import requests
+
+    attempts = max(
+        1,
+        int(max_attempts) if max_attempts is not None
+        else int(os.getenv("GEMINI_VISION_MAX_ATTEMPTS", "4")),
+    )
+    endpoint = (
+        "https://generativelanguage.googleapis.com/v1beta/models/"
+        f"{_VISION_MODEL}:generateContent"
+    )
+    payload = {"contents": [{"parts": [
+        {"inline_data": {"mime_type": actual,
+                         "data": base64.b64encode(file_bytes).decode()}},
+        {"text": prompt or _EPAPER_VISION_PROMPT},
+    ]}], "generationConfig": {
+        "responseMimeType": "application/json",
+        "thinkingConfig": {"thinkingBudget": 0},
+    }}
+    last_error: Exception | None = None
+
+    for attempt in range(attempts):
+        _wait_for_vision_slot()
+        try:
+            resp = requests.post(
+                endpoint,
+                headers={"Content-Type": "application/json",
+                         "X-goog-api-key": key},
+                json=payload,
+                timeout=180,
+            )
+            retryable = resp.status_code == 429 or 500 <= resp.status_code < 600
+            if retryable and attempt + 1 < attempts:
+                retry_after = resp.headers.get("Retry-After")
+                try:
+                    delay = float(retry_after) if retry_after else 0.0
+                except (TypeError, ValueError):
+                    delay = 0.0
+                _time.sleep(max(delay, min(60.0, 8.0 * (2 ** attempt))))
+                continue
+            resp.raise_for_status()
+            parts = resp.json()["candidates"][0]["content"]["parts"]
+            text = "".join(p.get("text", "") for p in parts).strip()
+            text = (
+                text.removeprefix("```json")
+                .removeprefix("```")
+                .removesuffix("```")
+                .strip()
+            )
+            data = json.loads(text)
+            core.clear_ai_error()
+            return data, "ok"
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt + 1 < attempts:
+                _time.sleep(min(60.0, 8.0 * (2 ** attempt)))
+                continue
+            break
+        except Exception as exc:
+            last_error = exc
+            break
+
+    core.record_ai_error(last_error or "Gemini Vision failed")
+    return None, f"error:{type(last_error).__name__ if last_error else 'unknown'}"
 
 
 def offline_tender_record(*, title, organization=None, district=None, state=None,

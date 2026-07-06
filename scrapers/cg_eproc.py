@@ -24,7 +24,7 @@ Navigation sequence
 
 Env vars (optional)
 -------------------
-  CG_EPROC_MAX_ROWS  – cap on rows harvested (default 500, 0 = no limit)
+  CG_EPROC_MAX_ROWS  – optional cap on rows harvested (default 0 = no limit)
   CG_EPROC_HEADLESS  – set to "0" to watch the browser (default headless)
 
 Standalone:  python -m scrapers.cg_eproc
@@ -44,7 +44,7 @@ import core  # noqa: E402
 PORTAL_URL = "https://eproc.cgstate.gov.in/"
 BASE_URL = "https://eproc.cgstate.gov.in"
 
-_MAX_ROWS = int(os.getenv("CG_EPROC_MAX_ROWS", "500"))
+_MAX_ROWS = int(os.getenv("CG_EPROC_MAX_ROWS", "0"))
 _HEADLESS = os.getenv("CG_EPROC_HEADLESS", "1") != "0"
 _TIMEOUT = 60_000   # ms
 

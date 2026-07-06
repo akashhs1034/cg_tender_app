@@ -22,7 +22,7 @@ import re
 import sys
 import warnings
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -30,12 +30,15 @@ from bs4 import BeautifulSoup
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import core  # noqa: E402
 
-# pwd.cg.gov.in is dead (DNS NXDOMAIN); the live PWD portal is pwd.cg.nic.in.
+# The live departmental site is pwd.cg.nic.in. Its e-procurement link points to
+# CG e-Procurement (covered by cg_eproc); this scraper only keeps genuine manual
+# tender/RFP notices from the departmental notice board.
 _PORTALS = [
+    "https://pwd.cg.nic.in/TenderNIT/LiveTenders.aspx",
+    "https://pwd.cg.nic.in/",
     "https://pwd.cg.nic.in/index.php/en/tender",
     "https://pwd.cg.nic.in/tender",
     "https://pwd.cg.nic.in/index.php/tender",
-    "https://pwd.cg.nic.in/",
     "https://cgpwd.gov.in/tender",
 ]
 _BASE    = "https://pwd.cg.nic.in"
@@ -148,22 +151,51 @@ def _doc_link(cell, base: str) -> str | None:
     return None
 
 
-def _extract_tender_links(soup: BeautifulSoup, base: str) -> list[str]:
-    """Collect all tender notice / NIT PDF links from the page."""
-    links = []
+_TENDER_HINTS = (
+    "tender", "nit", "notice inviting", "rfp", "eoi", "quotation", "bid",
+    "निविदा", "ई-निविदा", "कोटेशन", "वास्तुविद्", "आर्किटेक्ट",
+    "परामर्शदाता", "नियुक्ति हेतु",
+)
+_NON_TENDER_HINTS = (
+    "rti", "report", "budget", "बजट", "sor", "schedule of rate", "manual",
+    "rule", "act", "road map", "allotment", "expenditure", "admin report",
+)
+
+
+def _extract_tender_links(soup: BeautifulSoup,
+                          base: str) -> list[tuple[str, str]]:
+    """Collect only notice-board links whose visible context is procurement."""
+    links: list[tuple[str, str]] = []
+    seen: set[str] = set()
     for a in soup.find_all("a", href=True):
-        href = a["href"]
-        text = a.get_text(strip=True)
-        low = text.lower()
-        if (href.lower().endswith((".pdf", ".doc", ".docx"))
-                or any(kw in low for kw in ("tender", "nit", "notice", "bid"))):
-            # Skip budgets / Schedule-of-Rates / RTI / charters that sit next to
-            # tenders on the PWD site and were being ingested as tenders.
-            if not core.is_probable_tender_link(text, href):
-                continue
-            full = urljoin(base, href)
-            if full not in links:
-                links.append(full)
+        label = a.get_text(" ", strip=True)
+        parent = a.find_parent(["li", "tr", "p", "div"])
+        parent_text = parent.get_text(" ", strip=True) if parent else ""
+        context = parent_text if 0 < len(parent_text) <= 600 else label
+        blob = f"{label} {context} {a['href']}".lower()
+        if not any(hint in blob or hint in f"{label} {context}"
+                   for hint in _TENDER_HINTS):
+            continue
+        if any(hint in blob or hint in f"{label} {context}"
+               for hint in _NON_TENDER_HINTS):
+            continue
+        if not core.is_probable_tender_link(f"{label} {context}", a["href"]):
+            continue
+        full = urljoin(base, a["href"])
+        low_url = full.lower()
+        if (
+            full in seen
+            or urlparse(full).scheme not in {"http", "https"}
+            or full.endswith("#")
+            or any(path in low_url for path in (
+                "/livetenders.aspx", "/openedtender.aspx",
+                "/completedtender.aspx",
+            ))
+        ):
+            continue
+        seen.add(full)
+        title = re.sub(r"\s+", " ", context or label).strip()
+        links.append((full, title[:300] or "CG PWD Tender Notice"))
     return links
 
 
@@ -225,7 +257,13 @@ def _parse_table(html: str, source_url: str) -> list[dict]:
                     if doc_url:
                         break
             if not doc_url:
-                doc_url = source_url
+                row_id = ref or core.make_source_id(
+                    division, title, deadline)
+                separator = "&" if "?" in source_url else "?"
+                doc_url = (
+                    f"{source_url}{separator}opporta_tender="
+                    f"{quote(row_id, safe='')}"
+                )
 
             combined = f"{title} {division}"
             records.append(core.tender_record(
@@ -236,19 +274,23 @@ def _parse_table(html: str, source_url: str) -> list[dict]:
                 district=_infer_district(combined),
                 value_text=value or None,
                 deadline=deadline or None,
+                tender_no=ref or None,
                 description=f"NIT/Tender No: {ref}" if ref else None,
                 document_url=doc_url,
+                source_name=_ORG,
                 source_portal=source_url,
+                source_type="department_site",
             ))
 
     else:
-        # Fallback: collect PDF/tender links from the page
+        # Fallback: collect only tender-like notice-board links. The old
+        # extension-only rule mislabelled RTI reports, budgets and SORs.
         links = _extract_tender_links(soup, source_url)
-        for href in links[:30]:
-            name = href.split("/")[-1].replace("%20", " ").replace("_", " ")
-            name = re.sub(r"\.pdf$|\.docx?$", "", name, flags=re.I).strip()
+        for href, contextual_title in links[:100]:
+            name = contextual_title
             if not name or len(name) < 5:
-                name = "CG PWD Tender Notice"
+                name = href.split("/")[-1].replace("%20", " ").replace("_", " ")
+                name = re.sub(r"\.pdf$|\.docx?$", "", name, flags=re.I).strip()
             records.append(core.tender_record(
                 title=name,
                 state="Chhattisgarh",
@@ -256,7 +298,9 @@ def _parse_table(html: str, source_url: str) -> list[dict]:
                 category="Civil Infrastructure",
                 district=_infer_district(name),
                 document_url=href,
+                source_name=_ORG,
                 source_portal=source_url,
+                source_type="department_site",
             ))
 
     return records

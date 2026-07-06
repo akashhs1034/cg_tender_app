@@ -33,17 +33,14 @@ import core
 
 logger = logging.getLogger(__name__)
 
+_PORTAL_TEMPLATE = "https://cspdcl.co.in/cseb/frmViewTenderesNEW.aspx?paramflag={flag}"
 _BASE_URL   = "https://cspdcl.co.in/cseb"
-_PORTAL_TPL = _BASE_URL + "/frmViewTenderesNEW.aspx?paramflag={flag}"
-# paramflag selects the tender category/company view (works, supply, services,
-# and the separate CSPGCL/CSPTCL/CSEB feeds). Reading only flag 1 captured a
-# single slice; sweep several and dedup. Override with CSPDCL_PARAMFLAGS.
-_PARAMFLAGS = [
-    f.strip() for f in os.getenv("CSPDCL_PARAMFLAGS", "1,2,3,4,5").split(",")
-    if f.strip()
-]
-# Kept for backward-compat (docstring / standalone references).
-_PORTAL_URL = _PORTAL_TPL.format(flag=1)
+_FLAGS = tuple(
+    int(value) for value in os.getenv(
+        "CSPDCL_PARAMFLAGS", "1,2,3,4,5,6,7,8,9,10,11,12"
+    ).split(",") if value.strip().isdigit()
+)
+_MAX_PAGES = max(1, int(os.getenv("CSPDCL_MAX_PAGES_PER_FLAG", "20")))
 _HEADERS    = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -116,19 +113,23 @@ def _doc_url_from_postback(href: str) -> str | None:
     return _BASE_URL + quote(path, safe="/.")
 
 
-def _fetch_html(url: str) -> str | None:
+def _request(session: requests.Session, method: str, url: str,
+             *, data: dict | None = None) -> requests.Response | None:
     try:
-        r = requests.get(url, headers=_HEADERS, timeout=25, verify=True)
+        r = session.request(
+            method, url, headers=_HEADERS, data=data, timeout=35, verify=True)
         r.raise_for_status()
-        return r.text
+        return r
     except requests.exceptions.SSLError:
         logger.warning("cspdcl: SSL verify failed — retrying without verify")
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             try:
-                r = requests.get(url, headers=_HEADERS, timeout=25, verify=False)
+                r = session.request(
+                    method, url, headers=_HEADERS, data=data,
+                    timeout=35, verify=False)
                 r.raise_for_status()
-                return r.text
+                return r
             except Exception as exc:
                 logger.warning("cspdcl: fetch failed (no-verify) — %s", exc)
                 return None
@@ -137,8 +138,8 @@ def _fetch_html(url: str) -> str | None:
         return None
 
 
-def _parse_feed(html: str, portal_url: str) -> list[dict]:
-    """Parse one paramflag view into core.tender_record() dicts."""
+def _parse_grid(html: str, source_url: str) -> list[dict]:
+    """Parse one page of a CSPDCL regional GridView."""
     soup = BeautifulSoup(html, "html.parser")
     grid = soup.find("table", id="MainContent_GVTenderDetails")
     if not grid:
@@ -176,53 +177,85 @@ def _parse_feed(html: str, portal_url: str) -> list[dict]:
                     break
 
         combined = f"{title} {org}"
+        fallback_id = tender_no or core.make_source_id(org, title, deadline)
+        fallback_url = (
+            f"{source_url}&opporta_tender={quote(fallback_id, safe='')}"
+        )
         records.append(core.tender_record(
             title=title,
             state="Chhattisgarh",
             organization=org or "CSPDCL / CG Power Companies",
             category=_infer_category(combined),
             district=_infer_district(combined),
+            tender_no=tender_no or None,
             value_text=value_raw or None,
             deadline=deadline,
-            tender_no=tender_no or None,
             description=f"Tender Notice No. {tender_no}",
-            document_url=doc_url or portal_url,
-            source_portal=portal_url,
+            # A shared feed URL would make the deduplicator collapse every row
+            # lacking a PDF into one tender. Preserve a stable row identity.
+            document_url=doc_url or fallback_url,
+            source_name="CSPDCL / Chhattisgarh State Power Companies",
+            source_portal=source_url,
+            source_type="department_site",
         ))
     return records
 
+def _postback_for_page(soup: BeautifulSoup,
+                       wanted_page: int) -> tuple[str, str] | None:
+    """Return (__EVENTTARGET, __EVENTARGUMENT) for the next GridView page."""
+    for anchor in soup.find_all("a", href=True):
+        match = re.search(
+            r"__doPostBack\('([^']+)','Page\$(\d+)'\)", anchor["href"])
+        if match and int(match.group(2)) == wanted_page:
+            return match.group(1), f"Page${wanted_page}"
+    return None
+
+
+def _hidden_form_fields(soup: BeautifulSoup) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    for element in soup.select("form input[type=hidden][name]"):
+        fields[element["name"]] = element.get("value", "")
+    return fields
+
 
 def scrape() -> list[dict]:
-    """Sweep every paramflag view of the CSPDCL e-bidding portal and dedup."""
-    records: list[dict] = []
-    seen: set[str] = set()
-    any_html = False
+    """Collect every configured CSPDCL region and all GridView pages."""
+    session = requests.Session()
+    all_records: list[dict] = []
+    successful_feeds = 0
 
-    for flag in _PARAMFLAGS:
-        url = _PORTAL_TPL.format(flag=flag)
-        html = _fetch_html(url)
-        if not html:
+    for flag in _FLAGS:
+        source_url = _PORTAL_TEMPLATE.format(flag=flag)
+        response = _request(session, "GET", source_url)
+        if response is None:
             continue
-        any_html = True
-        feed = _parse_feed(html, url)
-        new = 0
-        for rec in feed:
-            key = (rec.get("tender_no") or "") + "|" + (rec.get("title") or "")
-            if key in seen:
-                continue
-            seen.add(key)
-            records.append(rec)
-            new += 1
-        logger.info("cspdcl: paramflag=%s → %d rows (%d new)", flag, len(feed), new)
+        successful_feeds += 1
+        page_number = 1
 
-    if not any_html:
-        logger.warning("cspdcl: 0 records returned — portal may be down or restructured")
-        return []
+        while response is not None and page_number <= _MAX_PAGES:
+            page_records = _parse_grid(response.text, source_url)
+            all_records.extend(page_records)
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            postback = _postback_for_page(soup, page_number + 1)
+            if postback is None:
+                break
+            target, argument = postback
+            payload = _hidden_form_fields(soup)
+            payload["__EVENTTARGET"] = target
+            payload["__EVENTARGUMENT"] = argument
+            response = _request(
+                session, "POST", response.url, data=payload)
+            page_number += 1
+
+    records = core.merge_duplicate_records(all_records, "tender")
+    logger.info(
+        "cspdcl: %d unique records from %d/%d regional feeds",
+        len(records), successful_feeds, len(_FLAGS),
+    )
     if not records:
-        logger.warning("cspdcl: grid not found on any paramflag — portal may have restructured")
-
-    logger.info("cspdcl: %d tender records extracted across %d feeds",
-                len(records), len(_PARAMFLAGS))
+        logger.warning(
+            "cspdcl: 0 records returned — portal may be down or restructured")
     return records
 
 

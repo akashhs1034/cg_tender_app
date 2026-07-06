@@ -80,7 +80,7 @@ NEWSPAPERS: list[dict] = [
      "kind": "html_notices"},
     {"name": "Haribhoomi e-paper", "state": "Chhattisgarh",
      "urls": ["https://epaper.haribhoomi.com"],
-     "kind": "epaper_portal", "epaper_fn": "haribhoomi", "max_assets": 28},
+     "kind": "epaper_portal", "epaper_fn": "haribhoomi", "max_assets": 240},
     {"name": "Akashvani",       "state": None,
      "urls": ["https://akashvani.gov.in", "https://www.akashvani.gov.in"],
      "kind": "pdf_index"},
@@ -282,7 +282,15 @@ def _vision_extract(file_bytes: bytes, mime_type: str, *, newspaper: str,
     if not (os.getenv("GEMINI_API_KEY")):
         return [], [], "no_key"
     try:
-        data, status = data_engine._gemini_vision_json(file_bytes, mime_type, prompt=_COMBINED_PROMPT)
+        # This layer coordinates rate-limit backoff across every newspaper.
+        # Keep the lower-level request to one attempt to avoid nested retries
+        # (up to 16 calls for one page under sustained quota exhaustion).
+        data, status = data_engine._gemini_vision_json(
+            file_bytes,
+            mime_type,
+            prompt=_COMBINED_PROMPT,
+            max_attempts=1,
+        )
         if not isinstance(data, dict):
             return [], [], status
         tenders, jobs = [], []
@@ -368,9 +376,13 @@ _HB_CG_KEYS = ("raipur", "bilaspur", "durg", "korba", "raigarh", "rajnandgaon",
                "mahasamund", "kanker", "chhattisgarh")
 
 
-def _haribhoomi_epaper_pages(max_editions: int = 4,
-                             max_pages: int = 14) -> list[tuple[str, str]]:
+def _haribhoomi_epaper_pages(max_editions: int | None = None,
+                             max_pages: int | None = None) -> list[tuple[str, str]]:
     """Return [(full_res_image_url, city_district)] for Haribhoomi CG editions."""
+    max_editions = max_editions or int(os.getenv(
+        "HARIBHOOMI_MAX_CG_EDITIONS", "12"))
+    max_pages = max_pages or int(os.getenv(
+        "HARIBHOOMI_MAX_PAGES_PER_EDITION", "20"))
     out: list[tuple[str, str]] = []
     body, _ct, _s = _fetch(_HB_EPAPER, source="Haribhoomi e-paper", want="text")
     if not body:

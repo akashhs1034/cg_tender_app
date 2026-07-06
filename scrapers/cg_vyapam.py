@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 _LISTING_URL  = "https://vyapamcg.cgstate.gov.in/Posts?tag=ONLINE%20APPLICATION"
 _APPLY_PORTAL = "https://vyapamprofile.cgstate.gov.in/online/"
 _HEADLESS     = os.getenv("CG_VYAPAM_HEADLESS", "1") != "0"
+_RECRUITMENT_HINTS = ("भर्ती", "पदों", "पद हेतु", "recruitment", "vacancy")
+_ADMISSION_HINTS = ("प्रवेश परीक्षा", "entrance exam", "admission")
 
 # Walk up from each <a PostID=*ONLINE> to find the parent that also contains
 # a DD/MM/YYYY date — that gives us (title, date, detailUrl) in one pass.
@@ -79,11 +81,17 @@ def scrape() -> list[dict]:
         # not the application last-date. Storing it as `deadline` made the
         # pipeline delete live recruitment as "expired". Record it as
         # published_date and leave deadline unknown.
+        low = title.lower()
+        if any(hint in low or hint in title for hint in _ADMISSION_HINTS):
+            continue
+        if not any(hint in low or hint in title for hint in _RECRUITMENT_HINTS):
+            continue
         rec = core.job_record(
             title=title,
             department="CG Vyapam",
             state="Chhattisgarh",
             published_date=it["date"],
+            deadline=None,
             description=f"Exam Code: {it['examCode']}",
             document_url=it["detailUrl"],
             apply_link=_APPLY_PORTAL,

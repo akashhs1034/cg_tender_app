@@ -6,8 +6,10 @@ Sources:
 """
 from __future__ import annotations
 
+import os
 import re
 import logging
+from datetime import date
 
 import requests
 from bs4 import BeautifulSoup
@@ -18,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _CGPSC_URL = "https://psc.cg.gov.in/Advertisement.php"
 _HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+_MAX_AGE_DAYS = int(os.getenv("CGPSC_MAX_AGE_DAYS", "180"))
 
 
 def _parse_title(link_text: str) -> str:
@@ -28,15 +31,8 @@ def _parse_title(link_text: str) -> str:
     return title.title()
 
 
-def _scrape_cgpsc() -> list[dict]:
-    try:
-        resp = requests.get(_CGPSC_URL, timeout=20, headers=_HEADERS)
-        resp.raise_for_status()
-    except Exception as exc:
-        logger.warning("cgpsc: failed to fetch page — %s", exc)
-        return []
-
-    soup = BeautifulSoup(resp.text, "html.parser")
+def _parse_advertisements(html: str) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
     out: list[dict] = []
     seen: set[str] = set()
 
@@ -60,6 +56,9 @@ def _scrape_cgpsc() -> list[dict]:
         # dropped on a misread date.
         dm = re.search(r"\((\d{2}-\d{2}-\d{4})\)\s*$", text.strip())
         published_raw = dm.group(1) if dm else None
+        published = core.parse_date(published_raw)
+        if published and (date.today() - published).days > _MAX_AGE_DAYS:
+            continue
 
         pdf_url = href if href.startswith("http") else "https://psc.cg.gov.in/" + href.lstrip("/")
 
@@ -68,6 +67,7 @@ def _scrape_cgpsc() -> list[dict]:
             department="Chhattisgarh Public Service Commission",
             state="Chhattisgarh",
             published_date=published_raw,
+            deadline=None,
             document_url=pdf_url,
             apply_link=pdf_url,
             source_portal="https://psc.cg.gov.in/Advertisement.php",
@@ -78,6 +78,16 @@ def _scrape_cgpsc() -> list[dict]:
 
     logger.info("cgpsc: %d advertisements found", len(out))
     return out
+
+
+def _scrape_cgpsc() -> list[dict]:
+    try:
+        resp = requests.get(_CGPSC_URL, timeout=20, headers=_HEADERS)
+        resp.raise_for_status()
+    except Exception as exc:
+        logger.warning("cgpsc: failed to fetch page — %s", exc)
+        return []
+    return _parse_advertisements(resp.text)
 
 
 def scrape() -> list[dict]:

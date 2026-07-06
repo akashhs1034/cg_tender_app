@@ -19,7 +19,9 @@ jobs:
     # Until the variable is set, this keeps working on ubuntu-latest, so the
     # schedule never queues against a missing runner.
     runs-on: ${{ vars.SCRAPER_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 60
+    # Full Haribhoomi coverage can process up to 240 pages at the free-tier
+    # OCR pace, so allow enough time for the remaining portal scrapers too.
+    timeout-minutes: 120
 
     # Run every shell step in bash on ALL runners. GitHub-hosted Linux uses bash
     # already, but a self-hosted WINDOWS runner defaults to PowerShell, which

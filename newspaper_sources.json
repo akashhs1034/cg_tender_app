@@ -131,7 +131,7 @@
     "urls": ["https://epaper.haribhoomi.com"],
     "kind": "epaper_portal",
     "epaper_fn": "haribhoomi",
-    "max_assets": 28
+    "max_assets": 240
   },
   {
     "source_id": "newspaper-akashvani",

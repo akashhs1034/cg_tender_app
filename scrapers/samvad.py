@@ -41,6 +41,7 @@ _BASE  = "https://samvad.cg.nic.in/"
 _HOME  = _BASE + "Default.aspx"
 _TENDERS = _BASE + "SamvadTenderNotification.aspx"
 _MAX_AGE_DAYS = int(os.getenv("SAMVAD_MAX_AGE_DAYS", "120"))
+_MAX_ADS = max(1, int(os.getenv("SAMVAD_MAX_ADS", "250")))
 _HEADERS = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                            "AppleWebKit/537.36 (KHTML, like Gecko) "
                            "Chrome/124.0.0.0 Safari/537.36")}
@@ -132,7 +133,9 @@ def scrape_published_ads() -> list[dict]:
         ctx = (par.get_text(" ", strip=True) if par else a.get_text(" ", strip=True))
         links.append((a.get_text(" ", strip=True), a["href"], ctx))
 
-    for title_raw, href, ctx in links[:30]:
+    # The former hard cap of 30 silently omitted daily advertisements whenever
+    # Samvad published a busy batch. Keep a generous configurable safety bound.
+    for title_raw, href, ctx in links[:_MAX_ADS]:
         low = f"{title_raw} {ctx}".lower()
         if not any(kw in low or kw in f"{title_raw} {ctx}" for kw in _TENDER_KW):
             continue   # skip recruitment / result / plain-notice adverts

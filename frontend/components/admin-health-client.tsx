@@ -71,13 +71,11 @@ export function AdminHealthClient({
       const n = mode === 'purge'
         ? `${data.tendersDeleted ?? 0} tenders + ${data.jobsDeleted ?? 0} jobs deleted`
         : `${data.tendersArchived ?? 0} tenders + ${data.jobsArchived ?? 0} jobs archived`
-      toast({ title: mode === 'purge' ? 'Expired data deleted' : 'Expired data archived', description: n })
+      toast(mode === 'purge' ? 'Expired data deleted' : 'Expired data archived', 'success', { description: n })
       router.refresh()
     } catch (e) {
-      toast({
-        title: 'Cleanup failed',
+      toast('Cleanup failed', 'error', {
         description: e instanceof Error ? e.message : 'Unknown error',
-        variant: 'destructive',
       })
     } finally {
       setBusy(null)

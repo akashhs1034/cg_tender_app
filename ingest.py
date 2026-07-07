@@ -644,6 +644,49 @@ def _merge_health(report: dict[str, dict], source_id: str, result: dict) -> None
         existing["status"] = "failed"
 
 
+_CRITICAL_DAILY_SOURCES = {
+    "cg_eproc", "up_etender", "cppp_up", "cspdcl", "secl", "pwd_cg",
+    "gem", "samvad", "cg_jobs", "cg_vyapam", "up_jobs", "up_upsssc",
+}
+_ANCHOR_SOURCES = {"cg_eproc", "cspdcl", "gem"}
+_BROKEN_HEALTH_STATUSES = {
+    "failed", "unreachable", "error", "quota_exhausted",
+}
+
+
+def strict_health_problems(report: dict[str, dict]) -> list[str]:
+    """Return run-level data-loss problems that must block publication.
+
+    Individual zero-result sources can be legitimate. A daily run is considered
+    structurally degraded only when at least two high-volume anchor portals are
+    empty/broken, or four critical sources fail together. That pattern is a
+    runner/network outage, not a quiet day in procurement.
+    """
+    bad: list[str] = []
+    for source_id in sorted(_CRITICAL_DAILY_SOURCES):
+        result = report.get(source_id)
+        if not result:
+            bad.append(f"{source_id}:not_run")
+            continue
+        status = str(result.get("status") or "").lower()
+        count = int(result.get(
+            "count", result.get("record_count", 0)) or 0)
+        if status in _BROKEN_HEALTH_STATUSES or count <= 0:
+            bad.append(f"{source_id}:{status or 'zero'}")
+
+    bad_ids = {item.split(":", 1)[0] for item in bad}
+    anchor_bad = sorted(_ANCHOR_SOURCES & bad_ids)
+    problems: list[str] = []
+    if len(anchor_bad) >= 2:
+        problems.append(
+            "high-volume anchors unavailable: " + ", ".join(anchor_bad))
+    if len(bad) >= 4:
+        problems.append(
+            f"{len(bad)} critical sources returned no usable data: "
+            + ", ".join(bad))
+    return problems
+
+
 def main():
     ap = argparse.ArgumentParser(description="Opporta ingestion pipeline")
     ap.add_argument(
@@ -657,6 +700,10 @@ def main():
     ap.add_argument(
         "--skip-live", action="store_true",
         help="Use seed/archive data only (fast local smoke test; daily runs omit this).",
+    )
+    ap.add_argument(
+        "--strict-health", action="store_true",
+        help="Abort before writing/publishing when several critical live sources fail together.",
     )
     args = ap.parse_args()
 
@@ -746,7 +793,7 @@ def main():
     if not args.skip_live:
         try:
             from scrapers import generic_ai
-            ai_result = generic_ai.collect()
+            ai_result = generic_ai.collect(primary_report=source_report)
             ai_tenders = ai_result.get("tenders") or []
             ai_jobs = ai_result.get("jobs") or []
             source_report.update(ai_result.get("report") or {})
@@ -770,6 +817,18 @@ def main():
                        "healthy" if samvad_offline else "no_records"),
             "error": samvad_error,
         })
+
+    if args.strict_health and not args.skip_live:
+        health_problems = strict_health_problems(source_report)
+        if health_problems:
+            print("\n=== PUBLICATION BLOCKED: degraded source coverage ===")
+            for problem in health_problems:
+                print(f"::error title=Ingestion health gate::{problem}")
+                print(f"   - {problem}")
+            print(
+                "   Existing Supabase/CSV data was left untouched. "
+                "Run from an India network or configure SCRAPER_HTTPS_PROXY.")
+            raise SystemExit(2)
 
     online_tenders = _canonical_records(t1 + t2 + t3, "tender", "online")
     online_jobs = _canonical_records(j1 + j3, "job", "online")

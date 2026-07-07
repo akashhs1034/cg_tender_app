@@ -12,11 +12,14 @@ import requests
 
 import core
 import data_engine
+import ingest
 from scrapers import (
     cg_dept_sites,
     cg_jobs,
     cgwrd,
     cspdcl,
+    generic_ai,
+    newspapers,
     pwd_cg,
     res_cg,
 )
@@ -200,6 +203,51 @@ class SourceCoverageTests(unittest.TestCase):
         )
         self.assertEqual(haribhoomi["max_assets"], 240)
 
+    def test_newspaper_registry_uses_live_and_honest_sources(self):
+        path = Path(__file__).with_name("newspaper_sources.json")
+        sources = {
+            source["source_id"]: source
+            for source in json.loads(path.read_text(encoding="utf-8"))
+        }
+
+        rihand = sources["newspaper-rihand-times"]
+        self.assertEqual(rihand["state"], "Chhattisgarh")
+        self.assertEqual(rihand["epaper_fn"], "rihand")
+        self.assertIn("rihandtimes.in", rihand["url"])
+        self.assertFalse(sources["newspaper-navbharat-times"]["active"])
+        self.assertFalse(sources["newspaper-ghatti-ghatna"]["active"])
+        self.assertFalse(sources["newspaper-haribhoomi"]["active"])
+        self.assertEqual(
+            sources["newspaper-cg-frontline"]["collector"],
+            "generic_ai",
+        )
+
+    def test_rihand_discovers_public_drive_pdf(self):
+        home = """
+        <a href="/e-paper/rihand-times/">Rihand Times</a>
+        <a href="/e-paper/rihand-times-04-07-2026/">Older issue</a>
+        """
+        current = """
+        <iframe src="https://drive.google.com/file/d/1234567890ABCDEFGHIJK/preview"></iframe>
+        """
+
+        def fetch(url, **_kwargs):
+            if url == newspapers._RIHAND_HOME:
+                return home, "text/html", "ok"
+            if url.endswith("/e-paper/rihand-times/"):
+                return current, "text/html", "ok"
+            return "", "text/html", "ok"
+
+        with mock.patch.object(newspapers, "_fetch", side_effect=fetch):
+            assets = newspapers._rihand_epaper_assets()
+
+        self.assertEqual(len(assets), 1)
+        self.assertEqual(assets[0][2], "pdf")
+        self.assertIn(
+            "id=1234567890ABCDEFGHIJK",
+            assets[0][0],
+        )
+
     def test_newspaper_retry_coordinator_can_limit_inner_attempts(self):
         response = mock.Mock(status_code=429, headers={})
         response.raise_for_status.side_effect = requests.HTTPError("429")
@@ -218,6 +266,59 @@ class SourceCoverageTests(unittest.TestCase):
         self.assertIsNone(payload)
         self.assertEqual(status, "error:HTTPError")
         self.assertEqual(post.call_count, 1)
+
+    def test_generic_ai_rows_keep_unique_listing_identity(self):
+        source = {
+            "source_id": "test-ai-source",
+            "name": "Test AI source",
+            "url": "https://example.gov.in/tenders",
+            "state": "Chhattisgarh",
+        }
+        rows = generic_ai._to_tenders([
+            {"title": "Construction of district hospital", "tender_no": "NIT-1"},
+            {"title": "Supply of laboratory equipment", "tender_no": "NIT-2"},
+        ], source)
+
+        self.assertEqual(
+            len(core.merge_duplicate_records(rows, "tender")),
+            2,
+        )
+        self.assertNotEqual(rows[0]["source_url"], rows[1]["source_url"])
+
+    def test_generic_ai_skips_fallback_when_primary_is_healthy(self):
+        source = {
+            "source_id": "generic-ai-cspdcl",
+            "fallback_for": "cspdcl",
+            "name": "CSPDCL fallback",
+            "url": "https://example.gov.in/tenders",
+        }
+        with (
+            mock.patch.object(generic_ai, "_load_config", return_value=[source]),
+            mock.patch.object(generic_ai, "_extract") as extract,
+            mock.patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}),
+        ):
+            result = generic_ai.collect(primary_report={
+                "cspdcl": {"count": 10, "status": "healthy"},
+            })
+
+        extract.assert_not_called()
+        self.assertEqual(
+            result["report"]["generic-ai-cspdcl"]["status"],
+            "skipped_primary_healthy",
+        )
+
+    def test_strict_health_blocks_multi_source_outage(self):
+        healthy = {
+            source_id: {"count": 1, "status": "healthy"}
+            for source_id in ingest._CRITICAL_DAILY_SOURCES
+        }
+        self.assertEqual(ingest.strict_health_problems(healthy), [])
+
+        for source_id in ("cg_eproc", "cspdcl", "gem", "pwd_cg"):
+            healthy[source_id] = {"count": 0, "status": "no_records"}
+        problems = ingest.strict_health_problems(healthy)
+        self.assertEqual(len(problems), 2)
+        self.assertIn("high-volume anchors unavailable", problems[0])
 
 
 if __name__ == "__main__":

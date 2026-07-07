@@ -41,7 +41,7 @@ def _normalise(source: dict) -> dict:
                      if key in source})
     # Keep acquisition configuration used by newspaper_sources.json.
     for key in ("urls", "kind", "epaper_fn", "max_assets", "page_images",
-                "base_url"):
+                "base_url", "collector"):
         if key in source:
             defaults[key] = source[key]
     return defaults

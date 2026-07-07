@@ -76,11 +76,14 @@ jobs:
           SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
           GEMINI_API_KEY:       ${{ secrets.GEMINI_API_KEY }}
           SCRAPER_HTTPS_PROXY:  ${{ secrets.SCRAPER_HTTPS_PROXY }}
+          RUNNER_ENVIRONMENT:   ${{ runner.environment }}
         run: |
           echo "## Scraper preflight" >> "$GITHUB_STEP_SUMMARY"
           degraded=0
 
-          if [ -z "$SCRAPER_HTTPS_PROXY" ]; then
+          if [ "$RUNNER_ENVIRONMENT" = "self-hosted" ]; then
+            echo "- ✅ Running on a self-hosted India runner" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -z "$SCRAPER_HTTPS_PROXY" ]; then
             echo "::warning title=No India proxy::SCRAPER_HTTPS_PROXY is unset. GitHub's Azure US IPs are geo-blocked by many NIC/gov.in portals, so several scrapers may return 0 rows. Set an India-based HTTPS proxy secret to get full portal data."
             echo "- ⚠️ **SCRAPER_HTTPS_PROXY unset** — NIC/gov.in portals may geo-block Azure IPs; expect reduced portal data." >> "$GITHUB_STEP_SUMMARY"
             degraded=1
@@ -89,8 +92,8 @@ jobs:
           fi
 
           if [ -z "$GEMINI_API_KEY" ]; then
-            echo "::warning title=No LLM key::GEMINI_API_KEY is unset. Newspaper OCR and AI-extracted portals (WRD, res.cg, Balrampur, etc.) will be skipped."
-            echo "- ⚠️ **GEMINI_API_KEY unset** — newspaper OCR and AI-extracted portals will be skipped." >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=No LLM key::GEMINI_API_KEY is unset. Newspaper OCR and configured AI fallback sources will be skipped."
+            echo "- ⚠️ **GEMINI_API_KEY unset** — newspaper OCR and AI fallback sources will be skipped." >> "$GITHUB_STEP_SUMMARY"
             degraded=1
           else
             echo "- ✅ GEMINI_API_KEY set" >> "$GITHUB_STEP_SUMMARY"
@@ -133,4 +136,6 @@ jobs:
           # RPM if you still see 429s, raise it if you move to a paid key.
           NEWSPAPER_OCR_RPM:          ${{ vars.NEWSPAPER_OCR_RPM }}
           NEWSPAPER_OCR_PACE_SECONDS: ${{ vars.NEWSPAPER_OCR_PACE_SECONDS }}
-        run: python ingest.py
+        # Never replace production data with a run where multiple high-volume
+        # sources were simultaneously geo-blocked or otherwise unavailable.
+        run: python ingest.py --strict-health

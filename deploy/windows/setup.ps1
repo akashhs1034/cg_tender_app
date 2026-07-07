@@ -2,7 +2,7 @@
 #
 # Creates a Python virtualenv, installs dependencies + Playwright Chromium,
 # registers a daily scheduled task ("OpportaScraper", 07:30 local), and does
-# one test run.
+# one test run without email alerts.
 #
 # HOW TO RUN:
 #   1) Install Python 3.11+ from https://www.python.org/downloads/windows/
@@ -57,19 +57,20 @@ $action  = New-ScheduledTaskAction -Execute "powershell.exe" `
     -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$RunPs1`""
 $trigger = New-ScheduledTaskTrigger -Daily -At 7:30am
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
-    -DontStopOnIdleEnd -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+    -DontStopOnIdleEnd -ExecutionTimeLimit (New-TimeSpan -Hours 3)
 Register-ScheduledTask -TaskName "OpportaScraper" -Action $action -Trigger $trigger `
     -Settings $settings -Description "Opporta daily tender/job ingestion" -Force | Out-Null
 Write-Host "   Scheduled. It runs daily at 07:30; if the PC is off then, it runs at next power-on."
 
 # --- 4. Test run now ---
-Say "Doing a test run now (~15-25 min). Watch the SCRAPER SUMMARY at the end..."
-& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $RunPs1
+Say "Doing a test run now (~30-120 min with full newspaper OCR). Watch the SCRAPER SUMMARY at the end..."
+& powershell.exe -NoProfile -ExecutionPolicy Bypass -File $RunPs1 --no-alerts
 $code = $LASTEXITCODE
 
 if ($code -eq 0) {
     Say "DONE. The India-blocked portals should now show record counts."
     Write-Host "   Run on demand:  powershell -ExecutionPolicy Bypass -File deploy\windows\run.ps1"
+    Write-Host "   Dry/no-alert run: powershell -ExecutionPolicy Bypass -File deploy\windows\run.ps1 --dry-run --no-alerts"
     Write-Host "   See the task:   open 'Task Scheduler' -> Task Scheduler Library -> OpportaScraper"
 } else {
     Write-Error "Test run exited with code $code. Usually a missing/blank value in opporta.env."

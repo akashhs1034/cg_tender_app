@@ -51,8 +51,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import core            # noqa: E402
 import data_engine     # noqa: E402
 
-_UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                      "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")}
+_UA = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/pdf,*/*;q=0.8",
+    "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
+}
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Target-newspaper registry. `reachable` reflects a live connectivity probe; the
@@ -63,21 +69,9 @@ _UA = {"User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537
 #                             via `page_images` (none wired = honest 0, logged)
 # ──────────────────────────────────────────────────────────────────────────────
 NEWSPAPERS: list[dict] = [
-    {"name": "Rihand Times",    "state": "Uttar Pradesh",
-     "urls": ["https://rihandtimes.com", "https://www.rihandtimes.com"],
-     "kind": "html_notices"},
-    {"name": "Navbharat Times", "state": None,
-     "urls": ["https://navbharattimes.indiatimes.com"],
-     "kind": "epaper_portal"},
-    {"name": "Ghatti Ghatna",   "state": "Chhattisgarh",
-     "urls": ["https://ghattighatna.com", "https://www.ghattighatna.com"],
-     "kind": "html_notices"},
-    {"name": "CG Frontline",    "state": "Chhattisgarh",
-     "urls": ["https://cgfrontline.com", "https://www.cgfrontline.com"],
-     "kind": "html_notices"},
-    {"name": "Haribhoomi",      "state": "Chhattisgarh",
-     "urls": ["https://www.haribhoomi.com"],
-     "kind": "html_notices"},
+    {"source_id": "newspaper-rihand-times", "name": "Rihand Times",
+     "state": "Chhattisgarh", "urls": ["https://www.rihandtimes.in"],
+     "kind": "epaper_portal", "epaper_fn": "rihand", "max_assets": 2},
     {"name": "Haribhoomi e-paper", "state": "Chhattisgarh",
      "urls": ["https://epaper.haribhoomi.com"],
      "kind": "epaper_portal", "epaper_fn": "haribhoomi", "max_assets": 240},
@@ -95,6 +89,7 @@ def _load_newspaper_sources() -> list[dict]:
         valid = [
             item for item in configured
             if isinstance(item, dict) and item.get("active", True)
+            and item.get("collector", "newspapers") == "newspapers"
             and item.get("name") and item.get("urls")
         ]
         return valid or NEWSPAPERS
@@ -365,6 +360,55 @@ def _vision_extract(file_bytes: bytes, mime_type: str, *, newspaper: str,
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Rihand Times — current public e-paper PDF.
+# The publisher's rolling /e-paper/rihand-times/ post embeds a public Google
+# Drive preview. Convert that preview URL to Drive's public download endpoint;
+# no login, paywall, token, or viewer protection is bypassed.
+# ──────────────────────────────────────────────────────────────────────────────
+_RIHAND_HOME = "https://www.rihandtimes.in"
+_DRIVE_FILE_RE = re.compile(
+    r"(?:/file/d/|[?&]id=)([A-Za-z0-9_-]{20,})", re.I)
+
+
+def _rihand_epaper_assets(max_posts: int = 4) -> list[tuple[str, None, str]]:
+    """Return public Rihand Times e-paper PDF URLs as (url, district, kind)."""
+    home, _ctype, _status = _fetch(
+        _RIHAND_HOME, source="Rihand Times", want="text")
+    if not home:
+        return []
+
+    soup = BeautifulSoup(home, "html.parser")
+    posts: list[str] = []
+    for anchor in soup.select("a[href]"):
+        href = urljoin(_RIHAND_HOME, anchor.get("href", ""))
+        if "/e-paper/rihand-times" in href:
+            posts.append(href.replace("http://", "https://"))
+    posts = list(dict.fromkeys(posts))[:max_posts]
+
+    out: list[tuple[str, None, str]] = []
+    seen_ids: set[str] = set()
+    for post_url in posts:
+        page, _ct, _st = _fetch(
+            post_url, source="Rihand Times", want="text")
+        if not page:
+            continue
+        post = BeautifulSoup(page, "html.parser")
+        for frame in post.select("iframe[src]"):
+            src = frame.get("src", "")
+            match = _DRIVE_FILE_RE.search(src)
+            if not match or match.group(1) in seen_ids:
+                continue
+            file_id = match.group(1)
+            seen_ids.add(file_id)
+            out.append((
+                f"https://drive.google.com/uc?export=download&id={file_id}",
+                None,
+                "pdf",
+            ))
+    return out
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Haribhoomi e-paper — reverse-engineered full-resolution page reader.
 # Editions are /category/<id>/<city>-main-edition; opening /epaper/default/open?id=<id>
 # embeds every page as {"f_folder":"YYYY-MM","f_filename":"page-NN-<id>.jpg"}, and
@@ -454,7 +498,10 @@ def _ocr_throttle() -> None:
         _OCR_LAST[0] = time.monotonic()
 
 
-_EPAPER_FNS = {"haribhoomi": _haribhoomi_epaper_pages}
+_EPAPER_FNS = {
+    "rihand": _rihand_epaper_assets,
+    "haribhoomi": _haribhoomi_epaper_pages,
+}
 
 
 def _vision_extract_backoff(payload, mime, **kw):
@@ -494,10 +541,15 @@ def _process_newspaper(paper: dict) -> tuple[list[dict], list[dict], str]:
     epaper_fn = _EPAPER_FNS.get(paper.get("epaper_fn", ""))
     if epaper_fn:
         try:
-            for img_url, district in epaper_fn():
-                asset_urls.append((img_url, "image", district))
+            for asset in epaper_fn():
+                if len(asset) == 3:
+                    asset_url, district, asset_kind = asset
+                else:
+                    asset_url, district = asset
+                    asset_kind = "image"
+                asset_urls.append((asset_url, asset_kind, district))
         except Exception as exc:
-            _log_fail(name, _HB_EPAPER, "epaper_discover", exc)
+            _log_fail(name, paper["urls"][0], "epaper_discover", exc)
     else:
         # ── B) generic: reach homepage, discover directly-fetchable assets ──
         html, base = None, None

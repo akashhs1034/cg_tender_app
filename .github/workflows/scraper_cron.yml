@@ -2,7 +2,13 @@ name: Daily Tender Ingestion
 
 on:
   schedule:
-    - cron: '0 2 * * *'   # 07:30 IST = 02:00 UTC
+    # Fire several times a day so a home-PC self-hosted runner (which is only
+    # online when the PC is on) catches at least one window. The health gate
+    # protects existing data, so extra runs are harmless: whichever run reaches
+    # the India-hosted portals publishes fresh data; the rest no-op or block.
+    - cron: '0 3 * * *'    # 08:30 IST (morning)
+    - cron: '30 8 * * *'   # 14:00 IST (afternoon)
+    - cron: '30 14 * * *'  # 20:00 IST (evening)
   workflow_dispatch:        # allow manual trigger from GitHub UI
 
 # Never run two ingestions at once (schedule + manual). A self-hosted runner

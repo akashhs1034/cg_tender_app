@@ -3,8 +3,9 @@
 Several Indian government portals (CG e-Proc, SECL, PWD-CG, DPR-CG, Samvad,
 CG PSC, Vyapam, UPSSSC, …) **block foreign IP addresses**, so they return 0
 when the scraper runs on GitHub's US servers. Running the **same pipeline on
-your own Windows PC** — which has an Indian home-internet IP — fixes this for
-**every source except GeM** (GeM needs its seller API separately).
+your own Windows PC** — which has an Indian home-internet IP — fixes the
+geo-blocked portals. Sources that require login/licensing or whose publisher
+domain is offline remain intentionally unavailable.
 
 Cost: **₹0**. No credit card. Your PC just needs to be on around the scheduled
 time each day (it catches up at next power-on if it was off).
@@ -21,7 +22,7 @@ time each day (it catches up at next power-on if it was off).
 ## Step 2 — Get the project onto your PC (~2 min)
 **Easiest (no Git):**
 1. Go to **https://github.com/akashhs1034/cg_tender_app**
-2. Branch selector → pick **`claude/project-review-optimize-9x3z45`**
+2. Keep the branch selector on **`main`**
 3. Green **Code** button → **Download ZIP**.
 4. Right-click the ZIP → **Extract All…** → extract to somewhere simple like `C:\opporta`.
    You should end up with a folder like `C:\opporta\cg_tender_app` containing `ingest.py`.
@@ -38,14 +39,16 @@ time each day (it catches up at next power-on if it was off).
    (These are the same values you set as GitHub Actions secrets. RESEND/FROM_EMAIL/APP_URL are optional.)
 3. Save and close.
 
-## Step 4 — Run the setup (~15–25 min for the first run)
+## Step 4 — Run the setup (~30–120 min for the first full OCR run)
 1. Open the repo folder in File Explorer.
 2. Click the address bar, type `powershell`, press Enter — a PowerShell window opens in that folder.
 3. Paste this and press Enter:
    ```powershell
    powershell -ExecutionPolicy Bypass -File deploy\windows\setup.ps1
    ```
-It installs everything, schedules a **daily 07:30** run, and does one test run.
+It installs everything, schedules a **daily 07:30** run, and does one full
+test run. The strict health gate refuses to publish when several major portals
+fail together, so a geo-blocked or broken run cannot replace healthy data.
 At the end you’ll see the **SCRAPER SUMMARY** — the India-blocked sources should now show record counts instead of `0 RESULTS`.
 
 ---
@@ -64,7 +67,7 @@ At the end you’ll see the **SCRAPER SUMMARY** — the India-blocked sources sh
 | `Python not found on PATH` | Reinstall Python and tick “Add python.exe to PATH”. |
 | `opporta.env is missing SUPABASE_URL` | You didn’t fill in the secrets file. Redo Step 3. |
 | `running scripts is disabled` | Use the exact command with `-ExecutionPolicy Bypass` as shown. |
-| Some portals still show 0 | A few change their page layout over time — send me the SCRAPER SUMMARY and I’ll patch them. GeM stays 0 until its seller API is wired. |
+| Some portals still show 0 | A source may genuinely have no current notices. Check `data/source_health.json`; simultaneous zeros across major portals cause a safe failed run instead of publishing partial data. |
 
 Once it’s confirmed working here, the GitHub daily cron can stay on as a backup
 (the reachable sources) or be turned off — your call.

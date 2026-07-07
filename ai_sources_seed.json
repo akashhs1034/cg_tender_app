@@ -1,7 +1,9 @@
 {
-  "_comment": "Committed seed for scrapers/generic_ai.py. These portals are AI-extracted (page text -> Gemini) so they keep working even when their DOM changes. generic_ai merges this file with the runtime data/ai_sources.json that discovery.py appends. Add a new source with: name, url, state, kind (tender|job|auto), format (html|pdf|image), render (true for JS-heavy pages).",
+  "_comment": "Committed seed for scrapers/generic_ai.py. These portals are AI-extracted (page text -> Gemini) so they keep working even when their DOM changes. generic_ai merges this file with runtime data/ai_sources.json. Optional fallback_for skips an AI call whenever that primary scraper is healthy. Add a source with: source_id, name, url, state, kind, format, render, and optional fallback_for.",
   "sources": [
     {
+      "source_id": "generic-ai-cg-wrd-primary",
+      "fallback_for": "cg_wrd",
       "name": "CG Water Resources Department (WRD)",
       "url": "https://cgwrd.in/tender",
       "state": "Chhattisgarh",
@@ -10,6 +12,8 @@
       "render": false
     },
     {
+      "source_id": "generic-ai-cg-wrd-legacy",
+      "fallback_for": "cg_wrd",
       "name": "CG Water Resources Department (wrd.cg.gov.in)",
       "url": "https://wrd.cg.gov.in/tender",
       "state": "Chhattisgarh",
@@ -18,6 +22,8 @@
       "render": false
     },
     {
+      "source_id": "generic-ai-res-cg",
+      "fallback_for": "res_cg",
       "name": "res.cg.gov.in (CG Department Portal)",
       "url": "https://res.cg.gov.in/tender",
       "state": "Chhattisgarh",
@@ -26,6 +32,8 @@
       "render": false
     },
     {
+      "source_id": "generic-ai-balrampur-tenders",
+      "fallback_for": "balrampur_cg",
       "name": "Balrampur District CG - Tenders",
       "url": "https://balrampur.gov.in/en/notice_category/tenders/",
       "state": "Chhattisgarh",
@@ -34,6 +42,7 @@
       "render": false
     },
     {
+      "source_id": "generic-ai-balrampur-recruitment",
       "name": "Balrampur District CG - Recruitment",
       "url": "https://balrampur.gov.in/en/notice_category/recruitment/",
       "state": "Chhattisgarh",
@@ -42,6 +51,8 @@
       "render": false
     },
     {
+      "source_id": "generic-ai-cspdcl",
+      "fallback_for": "cspdcl",
       "name": "CSPDCL / CSEB CG - Tenders",
       "url": "https://cspdcl.co.in/cseb/frmViewTenderesNEW.aspx?paramflag=1",
       "state": "Chhattisgarh",
@@ -50,12 +61,24 @@
       "render": true
     },
     {
+      "source_id": "generic-ai-pwd-cg",
+      "fallback_for": "pwd_cg",
       "name": "CG PWD - Tenders",
       "url": "https://pwd.cg.nic.in/index.php/en/tender",
       "state": "Chhattisgarh",
       "kind": "tender",
       "format": "html",
       "render": false
+    },
+    {
+      "source_id": "newspaper-cg-frontline",
+      "name": "CG Frontline Hindi Tender Search",
+      "url": "https://cgfrontline.com/wp-json/wp/v2/search?search=%E0%A4%A8%E0%A4%BF%E0%A4%B5%E0%A4%BF%E0%A4%A6%E0%A4%BE&per_page=10",
+      "state": "Chhattisgarh",
+      "kind": "tender",
+      "format": "wordpress_search",
+      "render": false,
+      "require_actionable": true
     }
   ]
 }

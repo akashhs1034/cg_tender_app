@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from urllib.parse import quote, urlparse
 
 import requests
 
@@ -101,6 +102,9 @@ Return STRICT JSON with exactly this shape:
 Rules:
 - Only include items relevant to Chhattisgarh, Uttar Pradesh, or central/all-India postings.
 - If the content clearly has only tenders (or only jobs), return the other array empty.
+- Ignore news reports about a tender process, sanction, award, completion, or
+  cancellation unless the page contains an actionable open invitation with a
+  submission deadline, tender/NIT number, or official bid document.
 - Never invent data. Omit a field (use "") when it is not present in the content.
 - Return raw JSON only — no markdown, no commentary.
 """
@@ -176,6 +180,38 @@ def _fetch_bytes(url: str) -> bytes | None:
         return None
 
 
+def _fetch_wordpress_search_text(url: str, max_articles: int = 8) -> str | None:
+    """Fetch a WordPress search result and the linked article bodies."""
+    try:
+        response = requests.get(url, headers=_HEADERS, timeout=30)
+        response.raise_for_status()
+        results = response.json()
+    except Exception as exc:
+        print(f"   generic_ai: WordPress search failed {url} — {exc}")
+        return None
+    if not isinstance(results, list):
+        return None
+
+    chunks: list[str] = []
+    for item in results[:max_articles]:
+        if not isinstance(item, dict):
+            continue
+        article_url = str(item.get("url") or item.get("link") or "").strip()
+        title = str(item.get("title") or "").strip()
+        if not article_url.startswith("http"):
+            continue
+        body = _fetch_html_text(article_url, False)
+        if not body:
+            continue
+        chunks.append(
+            f"ARTICLE TITLE: {title}\nARTICLE URL: {article_url}\n"
+            f"{body[:3500]}")
+        if sum(len(chunk) for chunk in chunks) >= _MAX_TEXT_CHARS:
+            break
+    text = "\n\n".join(chunks)
+    return text[:_MAX_TEXT_CHARS] if text else None
+
+
 def _extract(source: dict) -> dict | None:
     """Call the shared LLM helper and return the parsed {tenders,jobs} dict."""
     from evaluator import _llm_extract  # reuse Gemini REST + Claude fallback
@@ -191,7 +227,10 @@ def _extract(source: dict) -> dict | None:
         prompt = _EXTRACT_INSTRUCTIONS + f"\n\nSOURCE: {source.get('name') or url}"
         return _llm_extract(prompt, document_bytes=blob, mime_type=mime)
 
-    text = _fetch_html_text(url, bool(source.get("render")))
+    if fmt == "wordpress_search":
+        text = _fetch_wordpress_search_text(url)
+    else:
+        text = _fetch_html_text(url, bool(source.get("render")))
     if not text:
         return None
     prompt = (_EXTRACT_INSTRUCTIONS
@@ -206,6 +245,24 @@ def _state_ok(state: str | None, hint: str | None) -> bool:
     return any(a in s for a in _ALLOWED_STATES)
 
 
+def _stable_record_url(source: dict, candidate: str | None,
+                       *identity_parts) -> str:
+    """Return a per-record URL so dedup never collapses one listing page's rows."""
+    listing_url = str(source["url"]).strip()
+    candidate_url = str(candidate or "").strip()
+    if candidate_url.startswith("http") and (
+            candidate_url.rstrip("/").lower()
+            != listing_url.rstrip("/").lower()):
+        return candidate_url
+    record_id = core.make_source_id(
+        source.get("source_id"), *identity_parts)
+    separator = "&" if "?" in listing_url else "?"
+    return (
+        f"{listing_url}{separator}opporta_record="
+        f"{quote(record_id, safe='')}"
+    )
+
+
 def _to_tenders(items: list, source: dict) -> list[dict]:
     out = []
     for it in items or []:
@@ -216,6 +273,18 @@ def _to_tenders(items: list, source: dict) -> list[dict]:
             continue
         if not _state_ok(it.get("state"), source.get("state")):
             continue
+        if source.get("require_actionable") and not any((
+                it.get("tender_no"), it.get("deadline"), it.get("value_text"),
+                it.get("emd"))):
+            continue
+        document_url = _stable_record_url(
+            source,
+            it.get("document_url"),
+            it.get("tender_no"),
+            title,
+            it.get("organization") or it.get("department"),
+            it.get("deadline"),
+        )
         out.append(core.tender_record(
             title=title,
             state=(it.get("state") or source.get("state") or "").strip() or None,
@@ -229,10 +298,11 @@ def _to_tenders(items: list, source: dict) -> list[dict]:
             deadline=(it.get("deadline") or "").strip() or None,
             district=(it.get("district") or "").strip() or None,
             description=(it.get("description") or "").strip() or None,
-            document_url=(it.get("document_url") or "").strip() or source["url"],
+            document_url=document_url,
             source_type="ai_extracted",
             source_name=source.get("name") or source["url"],
-            source_url=source["url"],
+            source_url=document_url,
+            source_portal=source["url"],
         ))
     return out
 
@@ -247,6 +317,14 @@ def _to_jobs(items: list, source: dict) -> list[dict]:
             continue
         if not _state_ok(it.get("state"), source.get("state")):
             continue
+        apply_link = _stable_record_url(
+            source,
+            it.get("apply_link"),
+            it.get("advertisement_no"),
+            title,
+            it.get("department"),
+            it.get("deadline"),
+        )
         out.append(core.job_record(
             title=title,
             state=(it.get("state") or source.get("state") or "").strip() or None,
@@ -258,15 +336,48 @@ def _to_jobs(items: list, source: dict) -> list[dict]:
             deadline=(it.get("deadline") or "").strip() or None,
             district=(it.get("district") or "").strip() or None,
             description=(it.get("description") or "").strip() or None,
-            apply_link=(it.get("apply_link") or "").strip() or source["url"],
+            apply_link=apply_link,
+            document_url=apply_link,
             source_type="ai_extracted",
             source_name=source.get("name") or source["url"],
-            source_url=source["url"],
+            source_url=apply_link,
+            source_portal=source["url"],
         ))
     return out
 
 
-def collect() -> dict:
+def _primary_has_records(primary_report: dict | None,
+                         source_id: str | None) -> bool:
+    if not primary_report or not source_id:
+        return False
+    result = primary_report.get(source_id) or {}
+    status = str(result.get("status") or "").lower()
+    count = int(result.get("count", result.get("record_count", 0)) or 0)
+    return count > 0 and status not in {
+        "failed", "unreachable", "quota_exhausted", "error",
+    }
+
+
+def _fallback_for(source: dict) -> str | None:
+    """Map auto-discovered duplicates to their cheaper primary scraper."""
+    explicit = source.get("fallback_for")
+    if explicit:
+        return str(explicit)
+    host = (urlparse(str(source.get("url") or "")).hostname or "").lower()
+    if host in {"eproc.cgstate.gov.in", "cgeproc.cgstate.gov.in"}:
+        return "cg_eproc"
+    if host == "res.cg.gov.in":
+        return "res_cg"
+    if host == "vyapamcg.cgstate.gov.in":
+        return "cg_vyapam"
+    if host in {"eprocure.gov.in", "etenders.gov.in"}:
+        return "cppp_central"
+    if host == "raipur.gov.in":
+        return "district-cg-raipur"
+    return None
+
+
+def collect(primary_report: dict | None = None) -> dict:
     """Run every configured AI source. Returns {tenders, jobs, report}."""
     import os
     sources = _load_config()
@@ -289,16 +400,33 @@ def collect() -> dict:
     # a solid wall of 429s. Pace the calls and give up for the run once we see
     # repeated rate-limiting (tomorrow's run picks them up again).
     import time as _time
-    pace_seconds = float(os.getenv("GENERIC_AI_PACE_SECONDS", "10"))
+    try:
+        pace_seconds = max(
+            0.0, float(os.getenv("GENERIC_AI_PACE_SECONDS", "10") or "10"))
+    except ValueError:
+        pace_seconds = 10.0
     consecutive_429 = 0
 
     print(f"   generic_ai: extracting from {len(sources)} configured source(s)…")
     for i, src in enumerate(sources):
         name = src.get("name") or src["url"]
+        report_id = src.get("source_id") or name
+        fallback_for = _fallback_for(src)
+        if _primary_has_records(primary_report, fallback_for):
+            report[report_id] = {
+                "source_id": report_id,
+                "count": 0,
+                "status": "skipped_primary_healthy",
+                "error": None,
+            }
+            continue
         if consecutive_429 >= 3:
-            report[name] = {"source_id": name, "count": 0,
-                            "status": "no_records",
-                            "error": "skipped — Gemini quota exhausted this run"}
+            report[report_id] = {
+                "source_id": report_id,
+                "count": 0,
+                "status": "quota_exhausted",
+                "error": "skipped — Gemini quota exhausted this run",
+            }
             continue
         if i:
             _time.sleep(pace_seconds)
@@ -309,8 +437,16 @@ def collect() -> dict:
             elif parsed is not None:
                 consecutive_429 = 0
             if not parsed or not isinstance(parsed, dict):
-                report[name] = {"source_id": name, "count": 0,
-                                "status": "no_records", "error": None}
+                limited = core.last_ai_error_was_rate_limit()
+                report[report_id] = {
+                    "source_id": report_id,
+                    "count": 0,
+                    "status": (
+                        "quota_exhausted" if limited else "no_records"),
+                    "error": (
+                        "Gemini quota exhausted this run"
+                        if limited else None),
+                }
                 continue
             kind = (src.get("kind") or "auto").lower()
             t = _to_tenders(parsed.get("tenders"), src) if kind in ("tender", "auto") else []
@@ -318,14 +454,21 @@ def collect() -> dict:
             tenders += t
             jobs += j
             print(f"   generic_ai: {name} → {len(t)} tenders, {len(j)} jobs")
-            report[name] = {"source_id": name, "count": len(t) + len(j),
-                            "status": "healthy" if (t or j) else "no_records",
-                            "error": None}
+            report[report_id] = {
+                "source_id": report_id,
+                "count": len(t) + len(j),
+                "status": "healthy" if (t or j) else "no_records",
+                "error": None,
+            }
         except Exception as exc:
             err = f"{type(exc).__name__}: {exc}"[:500]
             print(f"   generic_ai: {name} failed safely — {err}")
-            report[name] = {"source_id": name, "count": 0,
-                            "status": "failed", "error": err}
+            report[report_id] = {
+                "source_id": report_id,
+                "count": 0,
+                "status": "failed",
+                "error": err,
+            }
 
     print(f"   generic_ai: total {len(tenders)} tenders, {len(jobs)} jobs")
     return {"tenders": tenders, "jobs": jobs, "report": report}

@@ -2,6 +2,11 @@
 # Loads secrets from opporta.env, then runs ingest.py in the repo's venv.
 # Called by the "OpportaScraper" scheduled task and can be run by hand.
 
+param(
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$IngestArgs = @()
+)
+
 $ErrorActionPreference = "Stop"
 
 # Repo root = two levels up from deploy\windows\
@@ -34,5 +39,6 @@ if (Test-Path (Join-Path $RepoRoot ".git")) {
 
 Set-Location $RepoRoot
 Write-Host "Running Opporta ingestion from $RepoRoot ..."
-& $VenvPy (Join-Path $RepoRoot "ingest.py")
+$argsForIngest = @("--strict-health") + $IngestArgs
+& $VenvPy (Join-Path $RepoRoot "ingest.py") @argsForIngest
 exit $LASTEXITCODE

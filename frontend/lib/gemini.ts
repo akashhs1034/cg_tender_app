@@ -23,7 +23,9 @@ export async function generateWithGemini(prompt: string): Promise<GeminiResult> 
   const key = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY
   if (!key) return { ok: false, reason: 'no_key' }
 
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash'
+  // Match the Python backend (evaluator.py): 2.0-flash returns frequent 429s,
+  // so default to 2.5-flash. Override with GEMINI_MODEL if needed.
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash'
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`
 
   try {

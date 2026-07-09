@@ -142,6 +142,13 @@ jobs:
           # RPM if you still see 429s, raise it if you move to a paid key.
           NEWSPAPER_OCR_RPM:          ${{ vars.NEWSPAPER_OCR_RPM }}
           NEWSPAPER_OCR_PACE_SECONDS: ${{ vars.NEWSPAPER_OCR_PACE_SECONDS }}
+          # Keep the run short enough to finish over a flaky home-hotspot
+          # connection — a mid-run disconnect loses the final Supabase push.
+          # These trim the two slowest scrapers (CPPP pagination + GeM sweep)
+          # to ~half runtime. Raise the repo VARIABLES once on stable broadband
+          # for fuller coverage (e.g. CPPP_MAX_PAGES=300, GEM_PAGES_PER_TERM=3).
+          CPPP_MAX_PAGES:       ${{ vars.CPPP_MAX_PAGES || '100' }}
+          GEM_PAGES_PER_TERM:   ${{ vars.GEM_PAGES_PER_TERM || '2' }}
         # Never replace production data with a run where multiple high-volume
         # sources were simultaneously geo-blocked or otherwise unavailable.
         run: python ingest.py --strict-health

@@ -151,6 +151,6 @@ jobs:
           GEM_PAGES_PER_TERM:   ${{ vars.GEM_PAGES_PER_TERM || '2' }}
         # Never replace production data with a run where multiple high-volume
         # sources were simultaneously geo-blocked or otherwise unavailable.
-        # Government portals often return zero temporarily. Publish usable results
+      # Government portals often return zero temporarily. Publish usable results
 # and keep source-health warnings instead of failing the complete run.
 run: python ingest.py

@@ -495,6 +495,13 @@ def sync_findings_to_supabase(
             )
         return "synced", len(rows), f"using {key_label}"
     except Exception as exc:
+        if _missing_table_error(exc):
+            return (
+                "missing_table",
+                0,
+                "public.discovered_files is unavailable; apply the "
+                "phase4b_discovered_files.sql migration",
+            )
         return "failed", 0, f"{type(exc).__name__}: {str(exc)[:200]}"
 
 
@@ -634,6 +641,12 @@ def main() -> int:
             f"Supabase: upserted {sync_count} finding(s) into "
             f"public.discovered_files ({sync_detail})."
         )
+    elif sync_status == "missing_table":
+        print(
+            "Supabase: public.discovered_files is not migrated yet; "
+            "the local review artifact contains this run's findings."
+        )
+        print(f"Migration required: {sync_detail}.")
     else:
         print("Supabase: not configured; local review fallback remains active.")
     print(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from approved_source_scanner import load_approved_sources
+from approved_source_scanner import load_approved_sources, sync_findings_to_supabase
 
 
 class _Response:
@@ -47,6 +47,11 @@ class _Client:
     def table(self, name: str):
         self.requested_tables.append(name)
         return _Query(name, self.rows)
+
+
+class _MissingDiscoveredFilesClient:
+    def table(self, name: str):
+        return _Query("approved_sources", [])
 
 
 class ApprovedSourceCompatibilityTests(unittest.TestCase):
@@ -92,6 +97,15 @@ class ApprovedSourceCompatibilityTests(unittest.TestCase):
 
         self.assertTrue(first[0]["source_id"].startswith("approved-"))
         self.assertEqual(first[0]["source_id"], second[0]["source_id"])
+
+    def test_missing_discovered_files_table_uses_artifact_fallback(self):
+        status, count, detail = sync_findings_to_supabase(
+            [], client=_MissingDiscoveredFilesClient()
+        )
+
+        self.assertEqual(status, "missing_table")
+        self.assertEqual(count, 0)
+        self.assertIn("phase4b_discovered_files.sql", detail)
 
 
 if __name__ == "__main__":

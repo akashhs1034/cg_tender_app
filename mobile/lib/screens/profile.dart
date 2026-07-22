@@ -50,7 +50,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _uploadDoc() async {
-    final res = await FilePicker.platform.pickFiles(
+    final res = await FilePicker.pickFiles(
       withData: true,
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png', 'txt', 'docx'],

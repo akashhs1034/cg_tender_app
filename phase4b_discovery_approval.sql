@@ -68,3 +68,10 @@ ALTER TABLE IF EXISTS public.approved_sources
     ADD COLUMN IF NOT EXISTS notes text;
 
 ALTER TABLE IF EXISTS public.approved_sources ENABLE ROW LEVEL SECURITY;
+
+-- These review records are private. New Supabase projects no longer expose
+-- public-schema tables automatically, so grant only the server-side role used
+-- by the admin review UI and scheduled scanner.
+REVOKE ALL ON TABLE public.approved_sources FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.approved_sources TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.approved_sources_id_seq TO service_role;

@@ -19,14 +19,13 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// Some plugins (file_picker → flutter_plugin_android_lifecycle) now require
-// compileSdk 36. Plugin modules don't inherit the app's compileSdk, so force
-// every Android subproject to 36 — otherwise their AAR-metadata check fails.
+// Some plugins (file_picker → flutter_plugin_android_lifecycle) require
+// compileSdk 36. Configure Android library projects when their plugin is
+// applied; afterEvaluate is too late when :app has already evaluated them.
 subprojects {
-    afterEvaluate {
-        val androidExt = extensions.findByName("android")
-        if (androidExt is com.android.build.gradle.BaseExtension) {
-            androidExt.compileSdkVersion(36)
+    pluginManager.withPlugin("com.android.library") {
+        extensions.configure<com.android.build.api.dsl.LibraryExtension> {
+            compileSdk = 36
         }
     }
 }

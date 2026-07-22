@@ -90,6 +90,67 @@ def _active_source(source: dict[str, Any]) -> bool:
     )
 
 
+def _missing_table_error(exc: Exception) -> bool:
+    """Return whether PostgREST could not find the requested table."""
+    code = getattr(exc, "code", None)
+    if code == "PGRST205":
+        return True
+    for argument in getattr(exc, "args", ()):
+        if isinstance(argument, dict) and argument.get("code") == "PGRST205":
+            return True
+    return "PGRST205" in str(exc)
+
+
+def _approved_source_from_discovery(source: dict[str, Any]) -> dict[str, Any]:
+    """Adapt a reviewed discovery row to the approved-source scanner shape."""
+    url = normalize_url(str(source.get("url", "")))
+    source_id = str(source.get("approved_source_id") or "").strip()
+    if not source_id and url:
+        digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:20]
+        source_id = "approved-" + digest
+    return {
+        "source_id": source_id,
+        "url": url,
+        "title": source.get("title") or url,
+        "domain": source.get("domain") or "",
+        "state": source.get("state") or "",
+        "district": source.get("district") or "",
+        "source_type": source.get("source_type") or "web",
+        "category": source.get("category") or "unknown",
+        "confidence_score": int(source.get("confidence_score") or 0),
+        "status": "active",
+        "requires_ocr": bool(source.get("requires_ocr")),
+        "requires_playwright": bool(source.get("requires_playwright")),
+        "requires_captcha": bool(source.get("requires_captcha")),
+    }
+
+
+def _load_reviewed_discovery_sources(client: Any) -> list[dict[str, Any]]:
+    """Compatibility path for databases awaiting the approved_sources table."""
+    sources: list[dict[str, Any]] = []
+    offset, batch_size = 0, 1_000
+    while True:
+        rows = (
+            client.table("discovered_sources")
+            .select("*")
+            .eq("status", "approved")
+            .order("url")
+            .range(offset, offset + batch_size - 1)
+            .execute()
+            .data
+            or []
+        )
+        sources.extend(
+            _approved_source_from_discovery(item)
+            for item in rows
+            if isinstance(item, dict)
+        )
+        if len(rows) < batch_size:
+            break
+        offset += batch_size
+    return [item for item in sources if _active_source(item)]
+
+
 def load_approved_sources(
     *,
     fallback_path: Path = APPROVED_FALLBACK,
@@ -133,7 +194,17 @@ def load_approved_sources(
             offset += batch_size
         return [item for item in sources if _active_source(item)], backend, None
     except Exception as exc:
-        return [], backend, f"{type(exc).__name__}: {str(exc)[:200]}"
+        if not _missing_table_error(exc):
+            return [], backend, f"{type(exc).__name__}: {str(exc)[:200]}"
+        try:
+            sources = _load_reviewed_discovery_sources(client)
+            return sources, "supabase discovery compatibility", None
+        except Exception as fallback_exc:
+            return [], backend, (
+                "approved_sources is unavailable and the reviewed-discovery "
+                f"fallback failed: {type(fallback_exc).__name__}: "
+                f"{str(fallback_exc)[:140]}"
+            )
 
 
 def _same_site(first_url: str, second_url: str) -> bool:

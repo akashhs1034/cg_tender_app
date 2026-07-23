@@ -41,3 +41,12 @@ jobs:
           OPPORTA_APPROVED_MAX_SOURCES: '25'
           OPPORTA_APPROVED_MAX_FILES: '300'
         run: python approved_source_scanner.py
+
+      - name: Upload local review fallback
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: approved-source-scan-findings
+          path: data/discovered_files.json
+          if-no-files-found: warn
+          retention-days: 14

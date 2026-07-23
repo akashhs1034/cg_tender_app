@@ -1,9 +1,9 @@
 name: Build Release AAB
 
-# Manual trigger from the GitHub UI (Actions tab → Build Release AAB → Run workflow).
-# Builds the signed Play Store .aab on GitHub's runners (ample RAM + fast network),
-# so it never depends on a low-spec local machine. Download the .aab from the run's
-# Artifacts when it finishes.
+# Runs for mobile pull requests and can also be started manually from the
+# GitHub Actions tab. Builds the Play Store .aab on GitHub's runners (ample RAM
+# + fast network), so it never depends on a low-spec local machine. Download the
+# .aab from the run's Artifacts when it finishes.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
 #   KEYSTORE_BASE64    base64 of mobile/android/app/upload-keystore.jks
@@ -12,12 +12,20 @@ name: Build Release AAB
 #   KEY_ALIAS          upload
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "mobile/**"
+      - ".github/workflows/build_release.yml"
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      HAS_RELEASE_SIGNING: ${{ secrets.KEYSTORE_BASE64 != '' && secrets.KEYSTORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' && secrets.KEY_ALIAS != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,10 +41,12 @@ jobs:
           cache: true
 
       - name: Recreate upload keystore from secret
+        if: env.HAS_RELEASE_SIGNING == 'true'
         working-directory: mobile/android/app
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > upload-keystore.jks
 
-      - name: Write key.properties
+      - name: Write release key.properties
+        if: env.HAS_RELEASE_SIGNING == 'true'
         working-directory: mobile/android
         run: |
           {
@@ -45,6 +55,28 @@ jobs:
             echo "keyAlias=${{ secrets.KEY_ALIAS }}"
             echo "storeFile=upload-keystore.jks"
           } > key.properties
+
+      - name: Create temporary CI test signing
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        working-directory: mobile/android
+        run: |
+          keytool -genkeypair -noprompt \
+            -keystore app/ci-test-keystore.jks \
+            -storetype JKS \
+            -storepass android \
+            -keypass android \
+            -alias ci-test \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 1 \
+            -dname "CN=OPPORTA CI, OU=CI, O=OPPORTA, L=Balrampur, ST=Chhattisgarh, C=IN"
+          {
+            echo "storePassword=android"
+            echo "keyPassword=android"
+            echo "keyAlias=ci-test"
+            echo "storeFile=ci-test-keystore.jks"
+          } > key.properties
+          echo "::warning::Play Store signing secrets are incomplete. This CI artifact uses a disposable one-day test key and must not be published."
 
       - name: Flutter pub get
         working-directory: mobile

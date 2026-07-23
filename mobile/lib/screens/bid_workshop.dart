@@ -28,7 +28,7 @@ class _BidWorkshopScreenState extends State<BidWorkshopScreen> {
   }
 
   Future<void> _pickAndDraft() async {
-    final res = await FilePicker.platform.pickFiles(
+    final res = await FilePicker.pickFiles(
       withData: true,
       type: FileType.custom,
       allowedExtensions: ['pdf', 'jpg', 'jpeg', 'png'],

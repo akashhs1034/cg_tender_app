@@ -55,3 +55,8 @@ ALTER TABLE IF EXISTS public.discovered_files
     ADD COLUMN IF NOT EXISTS last_seen_at timestamptz;
 
 ALTER TABLE IF EXISTS public.discovered_files ENABLE ROW LEVEL SECURITY;
+
+-- Findings remain private until an administrator reviews them.
+REVOKE ALL ON TABLE public.discovered_files FROM anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE public.discovered_files TO service_role;
+GRANT USAGE, SELECT ON SEQUENCE public.discovered_files_id_seq TO service_role;

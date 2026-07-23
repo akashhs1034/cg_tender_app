@@ -45,7 +45,7 @@ jobs:
         working-directory: mobile/android/app
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > upload-keystore.jks
 
-      - name: Write key.properties
+      - name: Write release key.properties
         if: env.HAS_RELEASE_SIGNING == 'true'
         working-directory: mobile/android
         run: |
@@ -56,10 +56,27 @@ jobs:
             echo "storeFile=upload-keystore.jks"
           } > key.properties
 
-      - name: Explain test-signing fallback
+      - name: Create temporary CI test signing
         if: env.HAS_RELEASE_SIGNING != 'true'
+        working-directory: mobile/android
         run: |
-          echo "::warning::Play Store signing secrets are incomplete. Building the release bundle with the debug key for CI verification; configure all four documented secrets before publishing."
+          keytool -genkeypair -noprompt \
+            -keystore app/ci-test-keystore.jks \
+            -storetype JKS \
+            -storepass android \
+            -keypass android \
+            -alias ci-test \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 1 \
+            -dname "CN=OPPORTA CI, OU=CI, O=OPPORTA, L=Balrampur, ST=Chhattisgarh, C=IN"
+          {
+            echo "storePassword=android"
+            echo "keyPassword=android"
+            echo "keyAlias=ci-test"
+            echo "storeFile=ci-test-keystore.jks"
+          } > key.properties
+          echo "::warning::Play Store signing secrets are incomplete. This CI artifact uses a disposable one-day test key and must not be published."
 
       - name: Flutter pub get
         working-directory: mobile

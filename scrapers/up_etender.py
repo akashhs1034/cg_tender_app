@@ -46,7 +46,18 @@ BASE_URL = "https://etender.up.nic.in"
 HOME_URL = f"{BASE_URL}/nicgep/app"
 
 _HEADLESS = os.getenv("UP_ETENDER_HEADLESS", "1") != "0"
-_TIMEOUT = 45_000
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default)) or default))
+    except ValueError:
+        return default
+
+
+_TIMEOUT = _env_int("UP_ETENDER_TIMEOUT_MS", 15_000)
+_DETAIL_TIMEOUT = _env_int("UP_ETENDER_DETAIL_TIMEOUT_MS", 12_000)
+_MAX_DETAIL_LINKS = _env_int("UP_ETENDER_MAX_DETAIL_LINKS", 12)
 
 _UP_DISTRICTS = [
     "lucknow", "kanpur", "agra", "varanasi", "prayagraj", "allahabad",
@@ -155,9 +166,14 @@ def scrape() -> list[dict]:
                 ),
                 locale="en-IN",
             ).new_page()
+            page.set_default_timeout(_TIMEOUT)
 
             # Step 1 — load homepage (shows the latest ~10 tenders as DirectLinks)
-            page.goto(HOME_URL, wait_until="networkidle", timeout=_TIMEOUT)
+            page.goto(HOME_URL, wait_until="domcontentloaded", timeout=_TIMEOUT)
+            try:
+                page.wait_for_selector('a[id^="DirectLink"]', timeout=8_000)
+            except Exception:
+                pass
 
             # Step 2 — collect all DirectLink hrefs pointing to tender detail pages
             links: list[str] = page.evaluate(r"""
@@ -165,13 +181,18 @@ def scrape() -> list[dict]:
                        .map(a => a.getAttribute('href'))
                        .filter(h => h && h.includes('sp='))
             """)
+            links = list(dict.fromkeys(links))[:_MAX_DETAIL_LINKS]
             print(f"   up_etender: {len(links)} tender links on homepage")
 
             # Step 3 — visit each detail page and extract structured fields
             for href in links:
                 try:
                     detail_url = BASE_URL + href if href.startswith("/") else href
-                    page.goto(detail_url, wait_until="networkidle", timeout=_TIMEOUT)
+                    page.goto(detail_url, wait_until="domcontentloaded", timeout=_DETAIL_TIMEOUT)
+                    try:
+                        page.wait_for_selector("td", timeout=5_000)
+                    except Exception:
+                        pass
                     d = page.evaluate(_DETAIL_JS)
 
                     title = d.get("title", "").strip()

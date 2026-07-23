@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/client'
+import { normalizeUserRole, type UserRole } from '@/lib/user-role'
 
 interface AuthState {
   user: User | null
@@ -10,6 +11,7 @@ interface AuthState {
   /** Convenience: best-available display name for the current user. */
   displayName: string | null
   email: string | null
+  role: UserRole | null
   signOut: () => Promise<void>
 }
 
@@ -18,6 +20,7 @@ const AuthContext = createContext<AuthState>({
   loading: true,
   displayName: null,
   email: null,
+  role: null,
   signOut: async () => {},
 })
 
@@ -59,11 +62,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (typeof meta.name === 'string' && meta.name) ||
       user?.email?.split('@')[0] ||
       null
+
     return {
       user,
       loading,
       displayName,
       email: user?.email ?? null,
+      role: normalizeUserRole(meta.role),
       signOut: async () => {
         await supabase.auth.signOut()
         setUser(null)

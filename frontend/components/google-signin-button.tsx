@@ -14,17 +14,16 @@ export function GoogleSignInButton({ label = 'Continue with Google' }: { label?:
     setError(null)
     try {
       const supabase = createClient()
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { error: signInError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=/dashboard`,
+          redirectTo: `${window.location.origin}/auth/callback`,
         },
       })
-      if (error) {
-        setError(error.message)
+      if (signInError) {
+        setError(signInError.message)
         setLoading(false)
       }
-      // on success the browser navigates away to Google
     } catch {
       setError('Could not start Google sign-in. Please try again.')
       setLoading(false)
@@ -40,7 +39,6 @@ export function GoogleSignInButton({ label = 'Continue with Google' }: { label?:
         disabled={loading}
         className="w-full h-10 text-sm border-border-subtle text-text-secondary hover:text-text-primary hover:bg-surface-elevated gap-2"
       >
-        {/* Google "G" mark */}
         <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true">
           <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
           <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.9 1.2 8 3l5.7-5.7C34.2 6 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>

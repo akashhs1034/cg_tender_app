@@ -1,9 +1,9 @@
 name: Build Release AAB
 
-# Manual trigger from the GitHub UI (Actions tab → Build Release AAB → Run workflow).
-# Builds the signed Play Store .aab on GitHub's runners (ample RAM + fast network),
-# so it never depends on a low-spec local machine. Download the .aab from the run's
-# Artifacts when it finishes.
+# Runs for mobile pull requests and can also be started manually from the
+# GitHub Actions tab. Builds the Play Store .aab on GitHub's runners (ample RAM
+# + fast network), so it never depends on a low-spec local machine. Download the
+# .aab from the run's Artifacts when it finishes.
 #
 # Required repo secrets (Settings → Secrets and variables → Actions):
 #   KEYSTORE_BASE64    base64 of mobile/android/app/upload-keystore.jks
@@ -12,12 +12,20 @@ name: Build Release AAB
 #   KEY_ALIAS          upload
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "mobile/**"
+      - ".github/workflows/build_release.yml"
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      HAS_RELEASE_SIGNING: ${{ secrets.KEYSTORE_BASE64 != '' && secrets.KEYSTORE_PASSWORD != '' && secrets.KEY_PASSWORD != '' && secrets.KEY_ALIAS != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -33,10 +41,12 @@ jobs:
           cache: true
 
       - name: Recreate upload keystore from secret
+        if: env.HAS_RELEASE_SIGNING == 'true'
         working-directory: mobile/android/app
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > upload-keystore.jks
 
       - name: Write key.properties
+        if: env.HAS_RELEASE_SIGNING == 'true'
         working-directory: mobile/android
         run: |
           {
@@ -45,6 +55,11 @@ jobs:
             echo "keyAlias=${{ secrets.KEY_ALIAS }}"
             echo "storeFile=upload-keystore.jks"
           } > key.properties
+
+      - name: Explain test-signing fallback
+        if: env.HAS_RELEASE_SIGNING != 'true'
+        run: |
+          echo "::warning::Play Store signing secrets are incomplete. Building the release bundle with the debug key for CI verification; configure all four documented secrets before publishing."
 
       - name: Flutter pub get
         working-directory: mobile

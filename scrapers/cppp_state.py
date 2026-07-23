@@ -53,12 +53,24 @@ _BASE_LIST = "https://eprocure.gov.in/cppp/latestactivetendersnew/mmpdata"
 _BASE_URL  = "https://eprocure.gov.in"
 
 _TARGET_STATE = os.getenv("CPPP_STATE", "Uttar Pradesh")
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.getenv(name, str(default)) or default))
+    except ValueError:
+        return default
+
+
 # The CPPP listing is an all-India feed sorted by date. A single state is a
 # small slice of it, so a low page cap starved CG/UP of most of their rows.
-# 300 pages x 10 rows = 30k rows scanned/run (matching detail pages are few, so
+# 300 pages x 10 rows = 3k rows scanned/run (matching detail pages are few, so
 # this stays well within the CI budget). Override with CPPP_MAX_PAGES.
-_MAX_PAGES    = int(os.getenv("CPPP_MAX_PAGES", "300"))
+_MAX_PAGES    = _env_int("CPPP_MAX_PAGES", 300)
 _DELAY        = 0.3  # seconds between listing page fetches
+_TIMEOUT      = _env_int("CPPP_TIMEOUT_SECONDS", 15)
+_DETAIL_TIMEOUT = _env_int("CPPP_DETAIL_TIMEOUT_SECONDS", 15)
+_PROGRESS_EVERY = _env_int("CPPP_PROGRESS_EVERY", 50)
 
 # Accept the state under any casing/spacing plus the common "Chattisgarh"
 # misspelling the portal itself sometimes emits. An exact `!=` match here used
@@ -216,12 +228,17 @@ def scrape() -> list[dict]:
     for page_num in range(_MAX_PAGES):
         url = _BASE_LIST if page_num == 0 else f"{_BASE_LIST}?page={page_num}"
         try:
-            resp = sess.get(url, timeout=30)
+            resp = sess.get(url, timeout=_TIMEOUT)
             resp.raise_for_status()
             page_rows = _parse_listing_page(resp.text, _TARGET_STATE)
             raw.extend(page_rows)
         except Exception as e:
             print(f"   cppp_state: page {page_num} failed — {e}")
+        if (page_num + 1) % _PROGRESS_EVERY == 0:
+            print(
+                f"   cppp_state: scanned {page_num + 1}/{_MAX_PAGES} pages, "
+                f"{len(raw)} {_TARGET_STATE} rows so far"
+            )
         time.sleep(_DELAY)
 
     print(f"   cppp_state: {len(raw)} {_TARGET_STATE} rows found across {_MAX_PAGES} pages")
@@ -236,7 +253,7 @@ def scrape() -> list[dict]:
         seen_hrefs.add(href)
 
         try:
-            det_resp = sess.get(href, timeout=30)
+            det_resp = sess.get(href, timeout=_DETAIL_TIMEOUT)
             det_resp.raise_for_status()
             f = _parse_detail(det_resp.text)
 

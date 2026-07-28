@@ -141,7 +141,7 @@ available.
 | Redacted policy current-tree scan | Zero findings. The current Supabase publishable key is narrowly allowed by public key class, not by value or whole-file exclusion. | PASS |
 | Redacted policy full-history scan | Three unresolved private historical records remain visible to the scanner. Expected non-zero exit; matched values were fully redacted and reports remain outside the repository. | EXPECTED INCIDENT EVIDENCE |
 | Native GitHub repository setting | `security_and_analysis.secret_scanning.status` changed from `disabled` to `enabled`; push protection was not changed. Alert contents were not requested. | PASS |
-| Pull-request scanner | `Secret scan` job uses the official Gitleaks action, full history, repository policy, and disables comments, summaries, and artifacts. Upstream action source was verified to pass `--redact`. | PREPARED — remote run pending |
+| Pull-request scanner | `Secret scan` job uses the official Gitleaks action, full history, repository policy, and disables comments, summaries, and artifacts. Upstream action source was verified to pass `--redact`; PR #52 run 30376707271 passed. | PASS |
 
 Private credential rotation/revocation remains **unconfirmed**. See
 [HISTORICAL_CREDENTIAL_RESPONSE.md](../security/HISTORICAL_CREDENTIAL_RESPONSE.md).
@@ -149,11 +149,24 @@ No history rewrite was attempted.
 
 ### Remote enforcement
 
-- Draft M0.1 pull request: pending.
-- First `Launch gates` workflow run: pending.
-- Exact remote check names: expected locally but not yet treated as branch
-  protection inputs.
-- `main` protection: pending the first run; no nonexistent check has been
-  required.
-- Deployment and production functional validation: not performed.
+- Draft M0.1 pull request:
+  `https://github.com/akashhs1034/cg_tender_app/pull/52`
+- Pushed head:
+  `34f2d09f0d8ea1008b317f8428eb153edc7a4471` for the first run; the
+  documentation-only remote-evidence follow-up triggers a second run.
+- First `Launch gates` workflow:
+  `https://github.com/akashhs1034/cg_tender_app/actions/runs/30376707271`
+- Exact successful check names: `Frontend gates`, `Python gates`,
+  `Secret scan`, and `Audit tooling`.
+- Vercel preview and Vercel Preview Comments passed.
+- `main` protection API re-read: protected; strict/up-to-date checks enabled;
+  the four exact launch contexts required; pull-request reviews configured with
+  zero required approvals; conversation resolution required; force pushes and
+  deletion disabled; administrator enforcement disabled for recovery; branch
+  lock disabled.
+- PR #52 remains open, draft, mergeable, and has `autoMergeRequest: null`.
+  Repository-level auto-merge availability was pre-existing and was not changed.
+- `origin/main` remains the M0 merge commit
+  `5ccc113f7b16c0f30819565921bb773e24bad2a1`; M0.1 was not merged.
+- Production deployment and production functional validation: not performed.
 - M1 ingestion work: not started.

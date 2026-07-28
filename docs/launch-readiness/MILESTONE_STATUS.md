@@ -5,7 +5,7 @@ Last updated: 2026-07-28 (Asia/Kolkata)
 | Milestone | Status | Branch | Commits | Tests | Remaining blockers | Deployment | Production validation |
 |---|---|---|---|---|---|---|---|
 | M0 Production Baseline | MERGED | `agent/launch-readiness` | `5ccc113` squash merge | See `VALIDATION_LOG.md` | Baseline risks transferred to focused milestones | Existing `main` deployment evidence only; M0 itself was documentation/audit tooling | Limited public landing check only |
-| M0.1 Launch Engineering Gates | VALIDATED LOCALLY — remote CI/protection evidence pending | `agent/m0-launch-gates` | `b274e4d`, `1be9c22`, `a545532`, `4bf4483` plus evidence update | Frontend and Python gates pass; see `VALIDATION_LOG.md` | Historical private-key revocation is unconfirmed; draft PR, CI run, and `main` protection pending | Not deployed | Not production-validated |
+| M0.1 Launch Engineering Gates | COMPLETE — DRAFT PR OPENED; review required | `agent/m0-launch-gates` | Five focused implementation/evidence commits plus remote-evidence follow-up | Four launch checks and Vercel preview pass; see `VALIDATION_LOG.md` | Historical private-key revocation remains unconfirmed; M0.1 PR must be reviewed and is not merged | Preview only; not production-deployed | Not production-validated |
 | M1 Reliable Ingestion | NOT STARTED | — | — | — | Requires M0.1 review | — | — |
 | M2 Reproducible Database | NOT STARTED | — | — | — | Requires M1 and production-schema access/backup plan | — | — |
 | M3 Security and AI Abuse Protection | NOT STARTED | — | — | — | Requires reproducible schema and threat-model review | — | — |
@@ -50,8 +50,16 @@ Flutter source was changed in M0.
   [M0_1_LAUNCH_GATES.md](milestones/M0_1_LAUNCH_GATES.md)
 - Local frontend, Python, audit-tooling, and current-tree secret gates pass.
 - GitHub native secret scanning: enabled on 2026-07-28.
-- Draft pull request and remote workflow evidence: pending.
-- `main` protection: pending the first workflow run and exact check names.
+- Draft pull request:
+  `https://github.com/akashhs1034/cg_tender_app/pull/52`
+- First `Launch gates` run:
+  `https://github.com/akashhs1034/cg_tender_app/actions/runs/30376707271`
+- Passed checks: `Frontend gates`, `Python gates`, `Secret scan`, and
+  `Audit tooling`; Vercel preview also passed.
+- `main` protection: enabled with those four exact checks, strict up-to-date
+  enforcement, pull requests with zero approvals, conversation resolution,
+  blocked force pushes/deletion, and administrator recovery.
+- PR #52 is draft with no auto-merge request.
 - Deployment: not performed.
 - M1: not started.
 

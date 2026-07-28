@@ -1,7 +1,6 @@
 # M0.1 — Launch Engineering Gates
 
-Status: **IN PROGRESS — local gates implemented; remote CI and branch
-protection evidence pending.**
+Status: **COMPLETE — draft PR open; review required; not deployed.**
 
 Branch: `agent/m0-launch-gates`
 
@@ -72,14 +71,22 @@ because it broke ESLint; no unsafe suppression or forced upgrade remains.
 - [x] Next.js build runs TypeScript and passes.
 - [x] Production npm audit has zero high and zero critical findings.
 - [x] Historical credential types and locations are documented without values.
-- [ ] Secret-scanning CI has run and passed.
-- [ ] All pull-request launch jobs have run automatically.
-- [ ] `main` protection is configured, or an external blocker is recorded.
-- [ ] Draft M0.1 pull request is open.
+- [x] Secret-scanning CI has run and passed.
+- [x] All pull-request launch jobs have run automatically.
+- [x] `main` protection is configured with the four verified check names.
+- [x] Draft M0.1 pull request is open.
 - [x] Milestone 1 has not started.
 
 ## Validation evidence
 
-See [VALIDATION_LOG.md](../VALIDATION_LOG.md). Remote run URLs, exact commit
-SHAs, final status, and protection evidence will be added after the draft pull
-request workflow completes.
+See [VALIDATION_LOG.md](../VALIDATION_LOG.md).
+
+- Draft PR: `https://github.com/akashhs1034/cg_tender_app/pull/52`
+- First `Launch gates` run:
+  `https://github.com/akashhs1034/cg_tender_app/actions/runs/30376707271`
+- Verified successful checks: `Frontend gates`, `Python gates`, `Secret scan`,
+  and `Audit tooling`.
+- Vercel preview: passed; this is not a production deployment or production
+  functional validation.
+- PR remains draft, mergeable, and has no auto-merge request.
+- `main` remains at the M0 merge commit; M0.1 was not merged.

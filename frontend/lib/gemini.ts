@@ -43,7 +43,6 @@ export async function generateWithGemini(prompt: string): Promise<GeminiResult> 
       return { ok: false, reason: `api_error_${res.status}` }
     }
     const data = await res.json()
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const text: string = (data?.candidates?.[0]?.content?.parts ?? [])
       .map((p: { text?: string }) => p.text ?? '')
       .join('')

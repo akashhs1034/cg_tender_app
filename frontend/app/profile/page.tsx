@@ -81,41 +81,48 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (authLoading) return
-    if (!user || !email || !role) {
-      setLoading(false)
-      return
-    }
-
     let active = true
 
-    if (role === 'jobseeker') {
-      const meta = (user.user_metadata ?? {}) as Record<string, unknown>
-      setJobSeeker({
-        full_name: typeof meta.full_name === 'string' ? meta.full_name : '',
-        qualification: typeof meta.qualification === 'string' ? meta.qualification : '',
-        degree_type: typeof meta.degree_type === 'string' ? meta.degree_type : '',
-        job_experience_years: typeof meta.job_experience_years === 'number' || typeof meta.job_experience_years === 'string' ? String(meta.job_experience_years) : '',
-        job_skills: toStringList(meta.job_skills).join(', '),
-        job_category: typeof meta.job_category === 'string' ? meta.job_category : '',
-        languages: toStringList(meta.languages).join(', '),
-        states: toStringList(meta.states_of_interest),
-        email_alerts: meta.email_alerts !== false,
-      })
-      setLoading(false)
-      return
-    }
+    async function loadProfile() {
+      if (authLoading) return
+      if (!user || !email || !role) {
+        if (active) setLoading(false)
+        return
+      }
 
-    const supabase = createClient()
-    supabase
-      .from('profiles')
-      .select('*')
-      .eq('email', email)
-      .maybeSingle()
-      .then(({ data }) => {
+      if (role === 'jobseeker') {
+        const meta = (user.user_metadata ?? {}) as Record<string, unknown>
+        if (!active) return
+        setJobSeeker({
+          full_name: typeof meta.full_name === 'string' ? meta.full_name : '',
+          qualification: typeof meta.qualification === 'string' ? meta.qualification : '',
+          degree_type: typeof meta.degree_type === 'string' ? meta.degree_type : '',
+          job_experience_years: typeof meta.job_experience_years === 'number' || typeof meta.job_experience_years === 'string' ? String(meta.job_experience_years) : '',
+          job_skills: toStringList(meta.job_skills).join(', '),
+          job_category: typeof meta.job_category === 'string' ? meta.job_category : '',
+          languages: toStringList(meta.languages).join(', '),
+          states: toStringList(meta.states_of_interest),
+          email_alerts: meta.email_alerts !== false,
+        })
+        setLoading(false)
+        return
+      }
+
+      const fallbackFullName =
+        typeof user.user_metadata?.full_name === 'string'
+          ? user.user_metadata.full_name
+          : ''
+      const supabase = createClient()
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', email)
+          .maybeSingle()
+
         if (!active) return
         setContractor({
-          full_name: data?.full_name ?? (typeof user.user_metadata?.full_name === 'string' ? user.user_metadata.full_name : ''),
+          full_name: data?.full_name ?? fallbackFullName,
           company_name: data?.company_name ?? '',
           contractor_class: data?.contractor_class ?? '',
           turnover_lakhs: data?.turnover_lakhs != null ? String(data.turnover_lakhs) : '',
@@ -124,10 +131,12 @@ export default function ProfilePage() {
           sectors: Array.isArray(data?.sectors) ? data.sectors.join(', ') : '',
           email_alerts: data?.email_alerts !== false,
         })
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false)
-      })
+      }
+    }
+
+    void loadProfile()
 
     return () => {
       active = false

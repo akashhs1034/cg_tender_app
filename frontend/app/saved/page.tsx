@@ -40,31 +40,33 @@ export default function SavedPage() {
   const jobKey = [...savedJobs.savedIds].sort().join(',')
 
   useEffect(() => {
-    if (!role) {
-      setLoading(false)
-      return
-    }
-
     let active = true
-    setLoading(true)
 
-    if (role === 'contractor') {
-      if (!saved.ready) return () => { active = false }
-      getTendersByIds([...saved.savedIds]).then((rows) => {
+    async function loadSavedItems() {
+      if (!role) {
+        if (active) setLoading(false)
+        return
+      }
+
+      setLoading(true)
+      if (role === 'contractor') {
+        if (!saved.ready) return
+        const rows = await getTendersByIds([...saved.savedIds])
         if (active) {
           setTenders(rows)
           setLoading(false)
         }
-      })
-    } else {
-      if (!savedJobs.ready) return () => { active = false }
-      getJobsByIds([...savedJobs.savedIds]).then((rows) => {
+      } else {
+        if (!savedJobs.ready) return
+        const rows = await getJobsByIds([...savedJobs.savedIds])
         if (active) {
           setJobs(rows)
           setLoading(false)
         }
-      })
+      }
     }
+
+    void loadSavedItems()
 
     return () => {
       active = false

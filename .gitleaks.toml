@@ -1,0 +1,10 @@
+title = "OPPORTA secret-scanning policy"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Supabase publishable keys are public client configuration; RLS remains mandatory."
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^sb_publishable_[A-Za-z0-9_-]+$''']

@@ -1,10 +1,27 @@
 # Secrets — NEVER commit these
 .env
+.env.*
+!.env.example
+!.env.*.example
 opporta.env
 .streamlit/secrets.toml
-client_secret.json
+client_secret*.json
+*service-account*.json
+service_account*.json
+key.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
 *.key
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
 *_secret*.json
+credentials*.json
+local-credentials/
 
 # Generated data & caches
 data/

@@ -2,9 +2,11 @@
 
 ## Status
 
-**VALIDATED LOCALLY — baseline complete with launch blockers.**
+**PR OPENED — baseline complete with launch blockers; review required.**
 Branch: `agent/launch-readiness`
 Baseline commit: `7190213351562a431d1bbe86ad00ae7e6d3c6466`
+Audit commit: `17c5f75`
+Draft PR: `https://github.com/akashhs1034/cg_tender_app/pull/51`
 Application deployment: existing `main` deployment only
 Production validation: public landing HTTP check only
 

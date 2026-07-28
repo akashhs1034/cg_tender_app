@@ -4,7 +4,7 @@ Last updated: 2026-07-28 (Asia/Kolkata)
 
 | Milestone | Status | Branch | Commits | Tests | Remaining blockers | Deployment | Production validation |
 |---|---|---|---|---|---|---|---|
-| M0 Production Baseline | VALIDATED LOCALLY — audit complete with failed gates | `agent/launch-readiness` | Pending milestone commit | See `VALIDATION_LOG.md` | Frontend lint/typecheck, dependency findings, database reproducibility, security and operations risks | Existing `main` deployment only; M0 branch not deployed | Limited public landing check only |
+| M0 Production Baseline | PR OPENED — review required; local product gates still fail | `agent/launch-readiness` | `17c5f75` plus publication-status follow-up | See `VALIDATION_LOG.md` | Frontend lint/typecheck, dependency findings, database reproducibility, security and operations risks | Existing `main` deployment only; M0 branch not deployed | Limited public landing check only |
 | M1 Reliable Ingestion | NOT STARTED | — | — | — | Requires M0 review | — | — |
 | M2 Reproducible Database | NOT STARTED | — | — | — | Requires M1 and production-schema access/backup plan | — | — |
 | M3 Security and AI Abuse Protection | NOT STARTED | — | — | — | Requires reproducible schema and threat-model review | — | — |
@@ -31,6 +31,15 @@ Last updated: 2026-07-28 (Asia/Kolkata)
 
 No application behaviour, database schema, workflow, scraper, Streamlit, or
 Flutter source was changed in M0.
+
+## M0 publication
+
+- Baseline audit commit: `17c5f75 Document M0 production baseline`
+- Remote branch: `origin/agent/launch-readiness`
+- Draft pull request:
+  `https://github.com/akashhs1034/cg_tender_app/pull/51`
+- Merge: not performed
+- M1: not started
 
 ## M0 validation summary
 

@@ -5,6 +5,11 @@ configuration extends the upstream rules and has one narrow category allowance:
 Supabase publishable keys. Those keys are designed for public clients; their
 safety still depends on grants and row-level security.
 
+GitHub native secret scanning was enabled through the repository API on
+2026-07-28. Pull requests targeting `main` also run the redacted `Secret scan`
+job in `.github/workflows/launch_gates.yml`; CI summaries, comments, and finding
+artifacts are disabled so matched values are not republished.
+
 ## Before committing
 
 Install Gitleaks from its official release channel and verify the published

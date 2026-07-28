@@ -46,8 +46,8 @@ export function SavedJobsProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true
-    setReady(false)
     async function load() {
+      setReady(false)
       if (user && email) {
         const { data, error } = await supabase.from('saved_jobs').select('source_id').eq('email', email)
         if (!active) return
@@ -58,7 +58,7 @@ export function SavedJobsProvider({ children }: { children: React.ReactNode }) {
       }
       if (active) setReady(true)
     }
-    load()
+    void load()
     return () => {
       active = false
     }

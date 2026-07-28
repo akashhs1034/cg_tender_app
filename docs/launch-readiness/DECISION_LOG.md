@@ -74,3 +74,47 @@
   launch checks pass.
 - Rationale: Lint, typecheck, dependency, security, schema, and operational
   failures are baseline findings that later milestones must resolve.
+
+## D-0009 — M0.1 is a focused engineering-gates milestone
+
+- Date: 2026-07-28
+- Status: Accepted
+- Decision: Merge the evidence-only M0 PR, then repair build, lint, dependency,
+  secret-scanning, and pull-request gates in the isolated
+  `agent/m0-launch-gates` worktree before starting M1.
+- Rationale: Reliable enforcement is a prerequisite for reviewing ingestion
+  changes, and the original checkout contains an unrelated generated edit that
+  must remain untouched.
+
+## D-0010 — Classify public client configuration separately
+
+- Date: 2026-07-28
+- Status: Accepted
+- Decision: Treat Supabase anon/publishable keys and public mobile
+  configuration as public client configuration, not automatically as private
+  secrets. Treat Supabase secret/service-role keys and private provider keys as
+  incidents requiring independent revocation evidence.
+- Rationale: Accurate classification avoids false incident claims while
+  preserving the requirement for least-privilege grants and tested RLS.
+
+## D-0011 — Patch vulnerable dependency chains without a major upgrade
+
+- Date: 2026-07-28
+- Status: Accepted
+- Decision: Upgrade within Next.js 16 and current shadcn/PostCSS releases, then
+  use narrowly versioned npm/pnpm overrides for affected transitive packages.
+  Do not use `npm audit fix --force`.
+- Rationale: This produces a zero-finding production audit while keeping the
+  application framework and behaviour stable. Every override is exercised by
+  clean install, lint, typecheck, and production build.
+
+## D-0012 — Solo-founder pull-request enforcement
+
+- Date: 2026-07-28
+- Status: Accepted
+- Decision: Run four read-only PR checks and, after their exact names have run,
+  require them on `main` with pull requests, up-to-date branches, force-push
+  blocking, deletion blocking, zero mandatory human approvals, and
+  administrator recovery.
+- Rationale: The repository needs blocking automation without creating an
+  impossible second-reviewer requirement or requiring production credentials.

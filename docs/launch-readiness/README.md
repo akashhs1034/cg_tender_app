@@ -15,11 +15,11 @@ the product is launch-ready.
 - Frozen legacy clients: root Streamlit application and `mobile/` Flutter
   application. Preserve them; make only security, data-loss, or build-critical
   changes.
-- Baseline commit: `7190213351562a431d1bbe86ad00ae7e6d3c6466`.
-- Working branch: `agent/launch-readiness`.
-- Current milestone: M0 Production Baseline.
+- M0 merge commit: `5ccc113f7b16c0f30819565921bb773e24bad2a1`.
+- Working branch: `agent/m0-launch-gates`.
+- Current milestone: M0.1 Launch Engineering Gates.
 - Launch status: **not ready**. See
-  [M0 baseline](milestones/M0_BASELINE.md) and
+  [M0.1 launch gates](milestones/M0_1_LAUNCH_GATES.md) and
   [risk register](RISK_REGISTER.md).
 
 ## Source of truth
@@ -54,7 +54,7 @@ Each state is independent. A successful build is not a deployment, and an HTTP
 
 ## Updating this ledger
 
-1. Work on `agent/launch-readiness`, never directly on `main`.
+1. Work in an isolated milestone branch/worktree, never directly on `main`.
 2. Update the milestone file, risk register, decision log, and validation log
    with every material change.
 3. Record exact commands and failures. Do not erase failed evidence after a fix;

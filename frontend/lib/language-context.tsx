@@ -211,6 +211,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? window.localStorage.getItem('opporta:lang') : null
     if (saved === 'hi' || saved === 'en') {
+      // Local storage can only be read after hydration without changing server output.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLangState(saved)
       document.documentElement.lang = saved
     }

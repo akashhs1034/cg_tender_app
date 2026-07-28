@@ -78,3 +78,95 @@ and `pip check` passed.
 - Flutter/Android and Streamlit feature development is frozen. M0 only ran the
   existing Streamlit card smoke; no Flutter build was required for the primary
   launch baseline.
+
+## M0.1 launch engineering gates
+
+Audit date: 2026-07-28 (Asia/Kolkata)
+
+Branch: `agent/m0-launch-gates`
+
+M0 merge: `5ccc113f7b16c0f30819565921bb773e24bad2a1`
+
+The original checkout's unrelated `frontend/next-env.d.ts` edit had the same
+SHA-256 hash before and after the fast-forward to M0 `main`. All M0.1 edits and
+tests ran in `C:\cg_tender_app-main\agent-m0-launch-gates`.
+
+### M0 merge and isolation
+
+| Command/check | Result | Status |
+|---|---|---|
+| Strict PR #51 metadata, head SHA, changed-path, mergeability, and check verification | Open documentation/audit-only PR matched expected head `8fda1b11624314eafc4e0754bdc122dfe6af4783`; two existing checks passed. | PASS |
+| `gh pr ready 51` and reviewed squash merge | PR #51 merged as `5ccc113f7b16c0f30819565921bb773e24bad2a1`. | PASS |
+| `git ls-remote origin main` | Remote `main` resolved to the same merge SHA. | PASS |
+| New worktree checks | `agent/m0-launch-gates` started clean from the M0 merge. | PASS |
+
+### Frontend gates
+
+| Command/check | Result | Status |
+|---|---|---|
+| `npm ci` | Exact npm lockfile installed 604 packages. The unscoped install summary reports nine dev-only high findings in legacy `brace-expansion` paths used by ESLint plugins; these packages are not in the production graph. npm also reports non-fatal optional WASM peer warnings. | PASS with documented dev-tool limitation |
+| `npm run lint` | Official Next.js 16 flat ESLint configuration checked TypeScript/React source with zero errors or warnings. Three hydration effects have narrow line-level exceptions with rationale; no relevant rule is disabled globally. | PASS |
+| `npx tsc --noEmit` | Independent strict typecheck completed with no errors. | PASS |
+| `npm audit --omit=dev --audit-level=high` | Zero production vulnerabilities: 0 critical, 0 high, 0 moderate, 0 low. | PASS |
+| `npm run build` | Next.js 16.2.12 compiled, ran TypeScript, and generated 16 static pages. Missing local Supabase public configuration produced expected fetch warnings; no credentials were provided. | PASS |
+| Package review | Updated Next.js `16.2.6` to `16.2.12`, PostCSS to `8.5.24`, and shadcn to `4.16.0`; narrowly versioned npm/pnpm overrides patch the reviewed Hono/MCP, brace-expansion, fast-uri, nested PostCSS, and Sharp paths. No forced or major framework upgrade was used. | PASS |
+
+The dev-only `brace-expansion` advisory is not silently suppressed: old
+ESLint-plugin consumers require an incompatible API, and a global override
+breaks lint at runtime. The production audit excludes dev dependencies by
+design, matching the release gate. Mitigation is to run lint only on reviewed
+repository input and adopt patched upstream plugin dependency ranges when
+available.
+
+### Python and audit tooling
+
+| Command/check | Result | Status |
+|---|---|---|
+| `python -m pip check` in isolated `.venv` | No broken requirements. | PASS |
+| `python -m compileall -q -x "(.venv|frontend|mobile|.git)" .` | Scoped Python sources compiled. | PASS |
+| `python -m unittest discover -v` | 25 tests passed, including five new launch-validator tests. | PASS |
+| `python test_card_smoke.py` | Tender Portal and Government Jobs card rendering passed; existing Streamlit deprecation/CORS warnings remain. | PASS with warnings |
+| `python -m pip_audit -r requirements-dev.txt` | No known vulnerabilities in the resolved set. Lower-bounded production requirements remain non-reproducible risk R-014. | PASS with limitation |
+| `python scripts/baseline_inventory.py` | Secret-safe deterministic inventory completed. | PASS |
+| `python test_baseline_inventory.py` | Two inventory tests passed. | PASS |
+| `python scripts/validate_workflows.py` | Five workflow YAML files parsed with `yaml.safe_load`. | PASS |
+| `python scripts/validate_launch_docs.py` | Ten required documents and 22 local links validated. | PASS |
+
+### Credential and secret-scanning controls
+
+| Command/check | Result | Status |
+|---|---|---|
+| Gitleaks 8.30.1 installation | Official Windows release archive matched the publisher's SHA-256 checksum. | PASS |
+| Redacted default history scan | Seven records were classified without displaying values: four public Supabase client configurations and three private/server credentials. | PASS as incident inventory |
+| Redacted policy current-tree scan | Zero findings. The current Supabase publishable key is narrowly allowed by public key class, not by value or whole-file exclusion. | PASS |
+| Redacted policy full-history scan | Three unresolved private historical records remain visible to the scanner. Expected non-zero exit; matched values were fully redacted and reports remain outside the repository. | EXPECTED INCIDENT EVIDENCE |
+| Native GitHub repository setting | `security_and_analysis.secret_scanning.status` changed from `disabled` to `enabled`; push protection was not changed. Alert contents were not requested. | PASS |
+| Pull-request scanner | `Secret scan` job uses the official Gitleaks action, full history, repository policy, and disables comments, summaries, and artifacts. Upstream action source was verified to pass `--redact`; PR #52 run 30376707271 passed. | PASS |
+
+Private credential rotation/revocation remains **unconfirmed**. See
+[HISTORICAL_CREDENTIAL_RESPONSE.md](../security/HISTORICAL_CREDENTIAL_RESPONSE.md).
+No history rewrite was attempted.
+
+### Remote enforcement
+
+- Draft M0.1 pull request:
+  `https://github.com/akashhs1034/cg_tender_app/pull/52`
+- Pushed head:
+  `34f2d09f0d8ea1008b317f8428eb153edc7a4471` for the first run; the
+  documentation-only remote-evidence follow-up triggers a second run.
+- First `Launch gates` workflow:
+  `https://github.com/akashhs1034/cg_tender_app/actions/runs/30376707271`
+- Exact successful check names: `Frontend gates`, `Python gates`,
+  `Secret scan`, and `Audit tooling`.
+- Vercel preview and Vercel Preview Comments passed.
+- `main` protection API re-read: protected; strict/up-to-date checks enabled;
+  the four exact launch contexts required; pull-request reviews configured with
+  zero required approvals; conversation resolution required; force pushes and
+  deletion disabled; administrator enforcement disabled for recovery; branch
+  lock disabled.
+- PR #52 remains open, draft, mergeable, and has `autoMergeRequest: null`.
+  Repository-level auto-merge availability was pre-existing and was not changed.
+- `origin/main` remains the M0 merge commit
+  `5ccc113f7b16c0f30819565921bb773e24bad2a1`; M0.1 was not merged.
+- Production deployment and production functional validation: not performed.
+- M1 ingestion work: not started.

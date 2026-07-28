@@ -29,7 +29,11 @@ export function BidDocumentsClient({ tenders }: { tenders: Tender[] }) {
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('tenderId')
-    if (id && tenders.some((t) => t.id === id)) setFocusId(id)
+    if (id && tenders.some((t) => t.id === id)) {
+      // URL state is hydrated after mount to keep the server and client render aligned.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFocusId(id)
+    }
   }, [tenders])
 
   const focusedTender = focusId ? tenders.find((t) => t.id === focusId) ?? null : null

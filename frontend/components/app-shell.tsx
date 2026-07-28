@@ -3,7 +3,7 @@
 import { AppNav } from '@/components/app-nav'
 import { useLanguage } from '@/lib/language-context'
 import { BackgroundShell, type BackgroundVariant } from '@/components/background-shell'
-import { Bell, Search } from 'lucide-react'
+import { Bell } from 'lucide-react'
 
 interface AppShellProps {
   children: React.ReactNode

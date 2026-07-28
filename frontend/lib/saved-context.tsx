@@ -59,9 +59,9 @@ export function SavedProvider({ children }: { children: React.ReactNode }) {
   // Load saved set whenever auth state changes.
   useEffect(() => {
     let active = true
-    setReady(false)
 
     async function load() {
+      setReady(false)
       if (user && email) {
         const { data, error } = await supabase
           .from('saved_tenders')
@@ -80,7 +80,7 @@ export function SavedProvider({ children }: { children: React.ReactNode }) {
       if (active) setReady(true)
     }
 
-    load()
+    void load()
     return () => {
       active = false
     }

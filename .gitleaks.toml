@@ -1,0 +1,17 @@
+title = "OPPORTA secret-scanning policy"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Supabase publishable keys are public client configuration; RLS remains mandatory."
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^sb_publishable_[A-Za-z0-9_-]+$''']
+
+[[allowlists]]
+description = "Verified historical Supabase anon-role JWT in the frozen mobile client."
+targetRules = ["jwt"]
+condition = "AND"
+commits = ["5f6b19fdcc5b6a8b047411824e3808192008df66"]
+paths = ['''^mobile/lib/config\.dart$''']

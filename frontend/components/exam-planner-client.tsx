@@ -39,7 +39,11 @@ export function ExamPlannerClient({ jobs }: { jobs: Job[] }) {
 
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get('jobId')
-    if (id && jobs.some((j) => j.id === id)) setFocusId(id)
+    if (id && jobs.some((j) => j.id === id)) {
+      // URL state is hydrated after mount to keep the server and client render aligned.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setFocusId(id)
+    }
   }, [jobs])
 
   const focusedJob = focusId ? jobs.find((j) => j.id === focusId) ?? null : null
